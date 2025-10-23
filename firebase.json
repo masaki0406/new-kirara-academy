@@ -1,0 +1,31 @@
+{
+  "functions": {
+    "source": "functions",
+    "ignore": [
+      "node_modules",
+      ".firebase",
+      "firebase-debug.log"
+    ]
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "nam5",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 5002
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8085
+    },
+    "ui": {
+      "enabled": true,
+      "host": "127.0.0.1",
+      "port": 4001
+    }
+  }
+}

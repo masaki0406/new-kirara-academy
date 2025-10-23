@@ -1,0 +1,24 @@
+{
+  "name": "boardgame",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest",
+    "build:functions": "tsc --project functions/tsconfig.json",
+    "test:integration": "firebase emulators:exec --config firebase.test.json --only functions,firestore \"VITEST_INCLUDE_INTEGRATION=true FUNCTIONS_EMULATOR_ORIGIN=http://127.0.0.1:5003 vitest run tests/integration/roomFlow.test.ts\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.19.19",
+    "firebase-functions": "^6.4.0",
+    "firebase-tools": "^14.19.1",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}

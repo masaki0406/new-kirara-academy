@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "baseUrl": "./",
+    "module": "CommonJS",
+    "paths": {
+      "@domain/*": ["../packages/domain/src/*"]
+    }
+  },
+  "include": [
+    "src"
+  ]
+}

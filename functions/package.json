@@ -1,0 +1,20 @@
+{
+  "name": "boardgame-functions",
+  "version": "1.0.0",
+  "description": "Firebase Cloud Functions for Kirara Academy boardgame project",
+  "main": "lib/functions/src/index.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "clean": "rm -rf lib"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
