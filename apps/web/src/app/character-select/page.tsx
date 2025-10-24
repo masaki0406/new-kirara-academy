@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
@@ -195,7 +196,9 @@ export default function CharacterSelectPage(): JSX.Element {
             <button
               type="button"
               className={styles.button}
-              onClick={refresh}
+              onClick={() => {
+                void refresh();
+              }}
               disabled={!isConnected || isBusy}
             >
               最新状態を取得

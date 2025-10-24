@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
+import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { GameState, PlayerId } from "@domain/types";
@@ -33,6 +34,14 @@ function deriveServerOrder(state: GameState): PlayerId[] {
 }
 
 export default function TurnOrderPage(): JSX.Element {
+  return (
+    <Suspense fallback={null}>
+      <TurnOrderContent />
+    </Suspense>
+  );
+}
+
+function TurnOrderContent(): JSX.Element {
   const searchParams = useSearchParams();
   const {
     baseUrl,
@@ -301,7 +310,9 @@ export default function TurnOrderPage(): JSX.Element {
             <button
               type="button"
               className={styles.button}
-              onClick={refresh}
+              onClick={() => {
+                void refresh();
+              }}
               disabled={!isConnected || isBusy}
             >
               最新状態を取得
@@ -309,7 +320,9 @@ export default function TurnOrderPage(): JSX.Element {
             <button
               type="button"
               className={styles.button}
-              onClick={handleDisconnect}
+              onClick={() => {
+                void handleDisconnect();
+              }}
               disabled={!isConnected || isBusy}
             >
               切断
@@ -414,7 +427,9 @@ export default function TurnOrderPage(): JSX.Element {
           <button
             type="button"
             className={styles.button}
-            onClick={handleReset}
+            onClick={() => {
+              void handleReset();
+            }}
             disabled={!isConnected || isBusy || !isDirty}
           >
             サーバー順へ戻す
@@ -422,7 +437,9 @@ export default function TurnOrderPage(): JSX.Element {
           <button
             type="button"
             className={styles.button}
-            onClick={handleRandomize}
+            onClick={() => {
+              void handleRandomize();
+            }}
             disabled={!isConnected || !localPlayerIsHost || isBusy}
           >
             ランダムに決定
@@ -430,7 +447,9 @@ export default function TurnOrderPage(): JSX.Element {
           <button
             type="button"
             className={`${styles.button} ${styles.primary}`}
-            onClick={handleConfirm}
+            onClick={() => {
+              void handleConfirm();
+            }}
             disabled={
               !isConnected ||
               !localPlayerIsHost ||
@@ -461,7 +480,9 @@ export default function TurnOrderPage(): JSX.Element {
           <button
             type="button"
             className={styles.navLink}
-            onClick={handleBeginCharacterSelection}
+            onClick={() => {
+              void handleBeginCharacterSelection();
+            }}
             disabled={!canBeginCharacterSelection}
           >
             キャラクター選択を開始

@@ -1,5 +1,6 @@
 "use client";
 
+import type { JSX } from "react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
@@ -753,7 +754,9 @@ export default function PlayPage(): JSX.Element {
             <button
               type="button"
               className={styles.button}
-              onClick={refresh}
+              onClick={() => {
+                void refresh();
+              }}
               disabled={!isConnected || isSubmitting}
             >
               最新状態を取得
@@ -761,7 +764,9 @@ export default function PlayPage(): JSX.Element {
             <button
               type="button"
               className={styles.button}
-              onClick={disconnect}
+              onClick={() => {
+                void disconnect();
+              }}
               disabled={!isConnected || isSubmitting}
             >
               切断
@@ -1370,7 +1375,9 @@ export default function PlayPage(): JSX.Element {
           <button
             type="button"
             className={`${styles.button} ${styles.primary}`}
-            onClick={handlePass}
+            onClick={() => {
+              void handlePass();
+            }}
             disabled={!isConnected || isSubmitting || !isLocalTurn}
           >
             パスする
@@ -1472,7 +1479,9 @@ export default function PlayPage(): JSX.Element {
               <button
                 type="button"
                 className={`${styles.rewardButton} ${styles.rewardButtonPrimary}`}
-                onClick={confirmTaskReward}
+                onClick={() => {
+                  void confirmTaskReward();
+                }}
                 disabled={pendingTaskId === taskRewardDialog.taskId}
               >
                 決定

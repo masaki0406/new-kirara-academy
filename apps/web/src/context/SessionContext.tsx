@@ -9,7 +9,7 @@ import {
   useState,
   ReactNode,
 } from "react";
-import type { GameState } from "@domain/types";
+import type { AdjustPlayerForTestPayload, GameState } from "@domain/types";
 import type { SessionStatus } from "../hooks/useSessionClient";
 import { useSessionClient } from "../hooks/useSessionClient";
 

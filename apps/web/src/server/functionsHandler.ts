@@ -13,13 +13,24 @@ import type {
   PlayerId,
   Ruleset,
 } from "@domain/types";
-import { buildRoomHandlers, type HandlersDeps, type PerformActionRequest, type StartGameRequest, type BeginCharacterSelectionRequest, type AdjustPlayerForTestParams } from "../../../functions/src/handlers";
-import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog } from "../../../functions/src/developmentDeckLoader";
+import {
+  buildRoomHandlers,
+  type HandlersDeps,
+  type PerformActionRequest,
+  type StartGameRequest,
+  type BeginCharacterSelectionRequest,
+  type AdjustPlayerForTestParams,
+} from "@functions/handlers";
+import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog } from "@functions/developmentDeckLoader";
 import type { CatalogDevelopmentCard } from "@domain/types";
 
 interface HandlerResult {
   status: number;
   body: Record<string, unknown>;
+}
+
+function asPayload<T>(value: Record<string, unknown>): T {
+  return value as unknown as T;
 }
 
 const firestoreLike = createFirestoreLike(firestoreAdmin);
@@ -58,15 +69,15 @@ export async function handleFunctionsAction(action: string, body: Record<string,
   try {
     switch (action) {
       case "createRoom": {
-        await handlers.createRoom(body as CreateRoomParams);
+        await handlers.createRoom(asPayload<CreateRoomParams>(body));
         return ok();
       }
       case "joinRoom": {
-        await handlers.joinRoom(body as JoinRoomParams);
+        await handlers.joinRoom(asPayload<JoinRoomParams>(body));
         return ok();
       }
       case "leaveRoom": {
-        await handlers.leaveRoom(body as LeaveRoomParams);
+        await handlers.leaveRoom(asPayload<LeaveRoomParams>(body));
         return ok();
       }
       case "randomizeTurnOrder": {
@@ -75,23 +86,25 @@ export async function handleFunctionsAction(action: string, body: Record<string,
         return ok({ order: order ?? [] });
       }
       case "updateTurnOrder": {
-        const order = await handlers.updateTurnOrder(body as UpdateTurnOrderParams);
+        const order = await handlers.updateTurnOrder(asPayload<UpdateTurnOrderParams>(body));
         return ok({ order });
       }
       case "selectCharacter": {
-        await handlers.selectCharacter(body as SelectCharacterParams);
+        await handlers.selectCharacter(asPayload<SelectCharacterParams>(body));
         return ok();
       }
       case "beginCharacterSelection": {
-        await handlers.beginCharacterSelection(body as BeginCharacterSelectionRequest);
+        await handlers.beginCharacterSelection(
+          asPayload<BeginCharacterSelectionRequest>(body),
+        );
         return ok();
       }
       case "startGame": {
-        await handlers.startGame(body as StartGameRequest);
+        await handlers.startGame(asPayload<StartGameRequest>(body));
         return ok();
       }
       case "performAction": {
-        const result = await handlers.performAction(body as PerformActionRequest);
+        const result = await handlers.performAction(asPayload<PerformActionRequest>(body));
         return ok({ result });
       }
       case "getRoomState": {
@@ -100,7 +113,7 @@ export async function handleFunctionsAction(action: string, body: Record<string,
         return ok({ state });
       }
       case "adjustPlayerForTest": {
-        await handlers.adjustPlayerForTest(body as AdjustPlayerForTestParams);
+        await handlers.adjustPlayerForTest(asPayload<AdjustPlayerForTestParams>(body));
         return ok();
       }
       case "listDevelopmentCards": {

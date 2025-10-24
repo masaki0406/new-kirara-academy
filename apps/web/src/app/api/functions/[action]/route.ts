@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { handleFunctionsAction } from "@/server/functionsHandler";
 
-interface RouteParams {
-  params: {
-    action: string;
-  };
-}
-
-export async function POST(request: Request, { params }: RouteParams) {
-  const action = params.action;
+export async function POST(request: Request) {
+  const url = new URL(request.url);
+  const segments = url.pathname.split("/").filter(Boolean);
+  const action = segments[segments.length - 1];
   if (!action) {
     return NextResponse.json(
       {

@@ -20,13 +20,15 @@ export function PhaseNavigator(): null {
     if (!isConnected || !gameState) {
       return;
     }
-    const stage = gameState.lifecycleStage as StageKey | undefined;
+    const stage = gameState.lifecycleStage;
     if (!stage || stage === "lobby") {
       return;
     }
-    const target = stagePathMap[stage];
-    if (target && pathname !== target) {
+    if (stage in stagePathMap) {
+      const target = stagePathMap[stage as StageKey];
+      if (target && pathname !== target) {
       router.push(target);
+    }
     }
   }, [isConnected, gameState?.lifecycleStage, pathname, router]);
 
