@@ -109,7 +109,7 @@ async function loadFromCollection(firestore: AdminFirestore): Promise<DeckTempla
     }
 
     const result: DevelopmentCardId[] = [];
-    snapshot.forEach((doc) => {
+    snapshot.docs.forEach((doc) => {
       const data = doc.data();
       const ids = extractCardIds(data);
       if (ids.length > 0) {
