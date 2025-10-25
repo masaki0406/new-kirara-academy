@@ -1,4 +1,4 @@
-import type { Firestore as AdminFirestore } from 'firebase-admin/firestore';
+import type { firestore } from 'firebase-admin';
 import type {
   GameState,
   DevelopmentCardId,
@@ -13,6 +13,8 @@ type DeckTemplate = DevelopmentCardId[];
 
 let cachedTemplate: DeckTemplate | null = null;
 let cacheFetchedAt = 0;
+
+type AdminFirestore = firestore.Firestore;
 
 export function createDevelopmentDeckInitializer(firestore: AdminFirestore) {
   return async function initializeDevelopmentDeck(gameState: GameState): Promise<void> {
