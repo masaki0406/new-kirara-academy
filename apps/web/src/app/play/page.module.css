@@ -899,7 +899,7 @@
   border: 1px solid rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.9);
   padding: 12px;
-  min-height: 92px;
+  min-height: 140px;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -940,6 +940,68 @@
 .journalSlotHint {
   font-size: 12px;
   color: #64748b;
+}
+
+.journalDevelopmentCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: rgba(255, 255, 255, 0.95);
+  padding: 10px;
+}
+
+.journalDevelopmentMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+.journalDevelopmentCategory {
+  padding: 2px 6px;
+  border-radius: 9999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.journalDevelopmentCostPosition {
+  font-size: 11px;
+  color: #475569;
+}
+
+.journalDevelopmentTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.journalDevelopmentDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.journalDevelopmentDetails span {
+  display: block;
+}
+
+.journalDevelopmentExtras {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.5;
 }
 
 .journalSlot-development {

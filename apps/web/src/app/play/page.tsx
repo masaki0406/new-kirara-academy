@@ -111,6 +111,7 @@ interface JournalSlotDefinition {
 
 interface JournalSlotData extends JournalSlotDefinition {
   cardId: string | null;
+  card?: CatalogDevelopmentCard | null;
   count?: number;
 }
 
@@ -674,7 +675,13 @@ export default function PlayPage(): JSX.Element {
       if (slot.role === "development") {
         const cardId = developmentCards[developmentIndex] ?? null;
         developmentIndex += 1;
-        return { ...slot, cardId };
+        const card =
+          cardId !== null
+            ? developmentCardCatalog.get(cardId) ??
+              developmentCardCatalog.get(cardId.trim()) ??
+              null
+            : null;
+        return { ...slot, cardId, card };
       }
 
       if (slot.role === "developmentDeck") {
@@ -683,7 +690,7 @@ export default function PlayPage(): JSX.Element {
 
       return { ...slot, cardId: null };
     });
-  }, [gameState]);
+  }, [gameState, developmentCardCatalog]);
 
   const foundationSlots = useMemo<FoundationSlot[]>(() => {
     const foundationCards =
@@ -881,49 +888,9 @@ export default function PlayPage(): JSX.Element {
                   {gameState.board.publicDevelopmentCards.length === 0 ? (
                     <p className={styles.muted}>カードは公開されていません。</p>
                   ) : (
-                    <div className={styles.developmentGallery}>
-                      {gameState.board.publicDevelopmentCards.map((cardId) => {
-                        const card =
-                          developmentCardCatalog.get(cardId) ??
-                          developmentCardCatalog.get(cardId.trim());
-                        if (!card) {
-                          return (
-                            <div key={cardId} className={styles.developmentCardFallback}>
-                              <strong>{cardId}</strong>
-                              <p>カード情報が未登録です。</p>
-                            </div>
-                          );
-                        }
-                        const extrasSummary = formatExtras(card.extras);
-                        return (
-                          <div key={cardId} className={styles.developmentCard}>
-                            <div className={styles.developmentCategory}>
-                              {card.costItem ?? "未分類"}
-                            </div>
-                            <h5 className={styles.developmentTitle}>{card.cardId}</h5>
-                            <div className={styles.developmentBody}>
-                              <div className={styles.developmentColumn}>
-                                <div className={styles.developmentRow}>
-                                  コスト位置: {card.costPosition ?? "-"}
-                                </div>
-                                <div className={styles.developmentRow}>
-                                  必要数: {card.costNumber ?? "-"}
-                                </div>
-                                <div className={styles.developmentRow}>
-                                  左上: {formatCostMap(card.costLeftUp)}
-                                </div>
-                                <div className={styles.developmentRow}>
-                                  左下: {formatCostMap(card.costLeftDown)}
-                                </div>
-                              </div>
-                            </div>
-                            {extrasSummary && (
-                              <p className={styles.developmentNotes}>{extrasSummary}</p>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <p className={styles.muted}>
+                      公開中の開発カードは研究日誌のカード置き場で確認できます。
+                    </p>
                   )}
                 </div>
                 <div>
@@ -1090,35 +1057,85 @@ export default function PlayPage(): JSX.Element {
                         .filter((name) => Boolean(name))
                         .join(" ");
 
-                      let value: string;
+                      let bodyContent: JSX.Element = (
+                        <span className={styles.journalSlotValue}>未設定</span>
+                      );
                       let hint: string | null = null;
 
                       switch (slot.role) {
                         case "development": {
-                          value = slot.cardId ?? "空スロット";
-                          hint = slot.cardId ? "公開中の開発カード" : "補充待ち";
+                          if (slot.cardId && slot.card) {
+                            const extrasSummary = formatExtras(slot.card.extras);
+                            const rawName =
+                              slot.card.cardId ?? slot.card.id ?? slot.cardId ?? "カード未登録";
+                            const displayName =
+                              typeof rawName === "string"
+                                ? rawName.trim() || rawName
+                                : String(rawName);
+                            bodyContent = (
+                              <div className={styles.journalDevelopmentCard}>
+                                <div className={styles.journalDevelopmentMeta}>
+                                  <span className={styles.journalDevelopmentCategory}>
+                                    {slot.card.costItem ?? "未分類"}
+                                  </span>
+                                  <span className={styles.journalDevelopmentCostPosition}>
+                                    コスト位置: {slot.card.costPosition ?? "-"}
+                                  </span>
+                                </div>
+                                <h6 className={styles.journalDevelopmentTitle}>{displayName}</h6>
+                                <div className={styles.journalDevelopmentDetails}>
+                                  <span>必要数: {slot.card.costNumber ?? "-"}</span>
+                                  <span>左上: {formatCostMap(slot.card.costLeftUp)}</span>
+                                  <span>左下: {formatCostMap(slot.card.costLeftDown)}</span>
+                                </div>
+                                {extrasSummary ? (
+                                  <p className={styles.journalDevelopmentExtras}>
+                                    {extrasSummary}
+                                  </p>
+                                ) : null}
+                              </div>
+                            );
+                            hint = "公開中の開発カード";
+                          } else if (slot.cardId) {
+                            const fallbackId = slot.cardId.trim() || slot.cardId;
+                            bodyContent = (
+                              <span className={styles.journalSlotValue}>{fallbackId}</span>
+                            );
+                            hint = "カード情報が未登録です";
+                          } else {
+                            bodyContent = (
+                              <span className={styles.journalSlotValue}>空スロット</span>
+                            );
+                            hint = "補充待ち";
+                          }
                           break;
                         }
                         case "developmentDeck": {
                           const remaining = slot.count ?? 0;
-                          value = `残り ${remaining} 枚`;
+                          bodyContent = (
+                            <span className={styles.journalSlotValue}>{`残り ${remaining} 枚`}</span>
+                          );
                           hint = "公開スロットへ補充する山札";
                           break;
                         }
                         case "vp": {
-                          value = slot.cardId ?? "空スロット";
+                          const value = slot.cardId ?? "空スロット";
+                          bodyContent = <span className={styles.journalSlotValue}>{value}</span>;
                           hint = slot.cardId ? "VPカードを配置中" : "VPカードを配置してください";
                           break;
                         }
                         case "vpDeck": {
                           const remaining =
                             typeof slot.count === "number" ? `（残り ${slot.count} 枚）` : "";
-                          value = `VPカード山札${remaining}`;
+                          const value = `VPカード山札${remaining}`;
+                          bodyContent = <span className={styles.journalSlotValue}>{value}</span>;
                           hint = "VPカードを引く際に使用します";
                           break;
                         }
                         default: {
-                          value = "未設定";
+                          bodyContent = (
+                            <span className={styles.journalSlotValue}>未設定</span>
+                          );
                           break;
                         }
                       }
@@ -1132,7 +1149,7 @@ export default function PlayPage(): JSX.Element {
                             <span className={styles.journalSlotType}>{slot.label}</span>
                           </div>
                           <div className={styles.journalSlotBody}>
-                            <span className={styles.journalSlotValue}>{value}</span>
+                            {bodyContent}
                             {hint ? (
                               <span className={styles.journalSlotHint}>{hint}</span>
                             ) : null}
