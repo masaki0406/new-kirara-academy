@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import type { CatalogDevelopmentCard } from "@domain/types";
 import styles from "./DevelopmentCardPreview.module.css";
 
