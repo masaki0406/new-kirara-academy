@@ -396,43 +396,44 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
 
         <div className={styles.main}>
           <div className={styles.tokenRow}>
-            {tokensCost.length === 0 ? (
-              <span className={styles.tokenRowEmpty}>コスト情報なし</span>
-            ) : (
-              tokensCost.map((token) => (
-                <span
-                  key={token.id}
-                  className={classNames(
-                    styles.symbolBox,
-                    styles[`symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`] ??
-                      styles.symbolNeutral,
-                  )}
-                  data-variant={token.variant}
-                  tabIndex={-1}
-                >
-                  <span className={styles.symbolIcon}>
-                    {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
-                      ?.icon ?? (
-                      <svg
-                        className={styles.symbolSvg}
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <circle cx="12" cy="12" r="8" fill="currentColor" />
-                      </svg>
+            {tokensCost.length === 0
+              ? costNotes.length === 0 && (
+                  <span className={styles.tokenRowEmpty}>コスト情報なし</span>
+                )
+              : tokensCost.map((token) => (
+                  <span
+                    key={token.id}
+                    className={classNames(
+                      styles.symbolBox,
+                      styles[
+                        `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+                      ] ?? styles.symbolNeutral,
                     )}
+                    data-variant={token.variant}
+                    tabIndex={-1}
+                  >
+                    <span className={styles.symbolIcon}>
+                      {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
+                        ?.icon ?? (
+                        <svg
+                          className={styles.symbolSvg}
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                          focusable="false"
+                        >
+                          <circle cx="12" cy="12" r="8" fill="currentColor" />
+                        </svg>
+                      )}
+                    </span>
+                    {token.value !== undefined ? (
+                      <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+                    ) : null}
+                    <span className={styles.symbolLabel}>{token.label}</span>
+                    <span className={styles.srOnly}>
+                      {token.label} {formatTokenValue(token) ?? ""}
+                    </span>
                   </span>
-                  {token.value !== undefined ? (
-                    <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
-                  ) : null}
-                  <span className={styles.symbolLabel}>{token.label}</span>
-                  <span className={styles.srOnly}>
-                    {token.label} {formatTokenValue(token) ?? ""}
-                  </span>
-                </span>
-              ))
-            )}
+                ))}
           </div>
 
           <div className={styles.center}>
