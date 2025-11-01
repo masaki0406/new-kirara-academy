@@ -30,6 +30,14 @@ interface TokenDefinition {
   variant: TokenVariant;
 }
 
+interface CostNoteEntry {
+  key: string;
+  displayLabel: string;
+  value: unknown;
+}
+
+const COST_NOTE_KEYWORDS = ["costa", "costb", "costc"];
+
 const SYMBOL_DEFINITIONS: SymbolDefinition[] = [
   {
     kind: "light",
@@ -233,6 +241,11 @@ function normalizeKeyword(raw: string): string {
     .toLowerCase();
 }
 
+function isCostNoteKey(raw: string): boolean {
+  const normalized = normalizeKeyword(raw);
+  return COST_NOTE_KEYWORDS.includes(normalized);
+}
+
 function resolveSymbolKind(raw?: string | null): SymbolDefinition | null {
   if (!raw) {
     return null;
@@ -247,11 +260,14 @@ function resolveSymbolKind(raw?: string | null): SymbolDefinition | null {
 function buildTokens(
   map: Record<string, number> | undefined,
   variant: TokenVariant,
+  filter?: (key: string, value: number) => boolean,
 ): TokenDefinition[] {
   if (!map) {
     return [];
   }
-  return Object.entries(map).map(([rawKey, value], index) => {
+  return Object.entries(map)
+    .filter(([rawKey, value]) => (filter ? filter(rawKey, value) : true))
+    .map(([rawKey, value], index) => {
     const resolved = resolveSymbolKind(rawKey);
     const kind = resolved?.kind ?? "neutral";
     const label = resolved?.label ?? rawKey;
@@ -263,6 +279,40 @@ function buildTokens(
       variant,
     };
   });
+}
+
+function collectCostNotes(
+  ...sources: Array<Array<[string, unknown]> | undefined>
+): CostNoteEntry[] {
+  const cache = new Map<string, CostNoteEntry>();
+  sources.forEach((source) => {
+    source?.forEach(([key, value]) => {
+      if (!isCostNoteKey(key)) {
+        return;
+      }
+      const normalized = normalizeKeyword(key);
+      if (cache.has(normalized)) {
+        return;
+      }
+      cache.set(normalized, {
+        key,
+        displayLabel: formatCostNoteLabel(key),
+        value,
+      });
+    });
+  });
+  return Array.from(cache.values());
+}
+
+function formatCostNoteLabel(rawKey: string): string {
+  const match = rawKey.match(/cost\s*([a-z0-9]+)/i);
+  if (match && match[1]) {
+    return `Cost ${match[1].toUpperCase()}`;
+  }
+  if (/^cost$/i.test(rawKey.trim())) {
+    return "Cost";
+  }
+  return rawKey;
 }
 
 function formatExtraValue(value: unknown): string {
@@ -324,16 +374,15 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const displayName = (card.cardId ?? card.id ?? "").trim() || card.id || "未登録カード";
   const mainSymbol = resolveSymbolKind(card.costItem);
   const themeClass = getThemeClassName(mainSymbol);
-  const tokensCost = buildTokens(card.costLeftUp, "cost");
-  const tokensReward = buildTokens(card.costLeftDown, "reward");
+  const tokensCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostNoteKey(key));
+  const tokensReward = buildTokens(card.costLeftDown, "reward", (key) => !isCostNoteKey(key));
   const extrasEntries = card.extras ? Object.entries(card.extras) : [];
-  const costNoteKeys = ["costA", "costB", "costC"];
-  const costNotes = costNoteKeys
-    .map((key) => extrasEntries.find(([entryKey]) => entryKey === key))
-    .filter((entry): entry is [string, unknown] => Boolean(entry));
-  const extras = extrasEntries.filter(
-    ([key]) => !costNoteKeys.includes(key),
-  );
+  const costNotesFromCostMap = card.costLeftUp
+    ? Object.entries(card.costLeftUp).filter(([key]) => isCostNoteKey(key))
+    : undefined;
+  const costNotesFromExtras = extrasEntries.filter(([key]) => isCostNoteKey(key));
+  const costNotes = collectCostNotes(costNotesFromCostMap, costNotesFromExtras);
+  const extras = extrasEntries.filter(([key]) => !isCostNoteKey(key));
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -452,15 +501,12 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           <footer className={styles.extras}>
             {costNotes.length > 0 ? (
               <div className={styles.costNotesRow}>
-                {costNotes.map(([key, value]) => {
-                  const label = key.replace(/^cost/i, "").toUpperCase() || key;
-                  return (
-                    <span key={key} className={styles.costNote}>
-                      <span className={styles.costNoteLabel}>{label}</span>
-                      <span className={styles.costNoteValue}>{formatExtraValue(value)}</span>
-                    </span>
-                  );
-                })}
+                {costNotes.map((note) => (
+                  <span key={note.key} className={styles.costNote}>
+                    <span className={styles.costNoteLabel}>{note.displayLabel}</span>
+                    <span className={styles.costNoteValue}>{formatExtraValue(note.value)}</span>
+                  </span>
+                ))}
               </div>
             ) : null}
             {extras.map(([key, value]) => (
