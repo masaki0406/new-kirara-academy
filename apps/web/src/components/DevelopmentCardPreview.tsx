@@ -305,14 +305,11 @@ function collectCostPositions(
 }
 
 function formatCostPositionLabel(rawKey: string): string {
-  const match = rawKey.match(/cost\s*([a-z0-9]+)/i);
-  if (match && match[1]) {
-    return `Cost ${match[1].toUpperCase()}`;
+  const normalized = normalizeKeyword(rawKey);
+  if (normalized) {
+    return normalized.toUpperCase();
   }
-  if (/^cost$/i.test(rawKey.trim())) {
-    return "Cost";
-  }
-  return rawKey;
+  return rawKey.trim();
 }
 
 function formatExtraValue(value: unknown): string {
@@ -443,12 +440,12 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           {costPositions.length > 0 ? (
             <div className={styles.costPositionsRow}>
               {costPositions.map((position) => (
-                <span key={position.key} className={styles.costPositionBox}>
+                <div key={position.key} className={styles.costPositionBox}>
                   <span className={styles.costPositionLabel}>{position.displayLabel}</span>
                   <span className={styles.costPositionValue}>
                     {formatExtraValue(position.value)}
                   </span>
-                </span>
+                </div>
               ))}
             </div>
           ) : null}
