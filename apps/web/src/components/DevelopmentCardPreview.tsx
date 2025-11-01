@@ -326,7 +326,14 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const themeClass = getThemeClassName(mainSymbol);
   const tokensCost = buildTokens(card.costLeftUp, "cost");
   const tokensReward = buildTokens(card.costLeftDown, "reward");
-  const extras = card.extras ? Object.entries(card.extras) : [];
+  const extrasEntries = card.extras ? Object.entries(card.extras) : [];
+  const costNoteKeys = ["costA", "costB", "costC"];
+  const costNotes = costNoteKeys
+    .map((key) => extrasEntries.find(([entryKey]) => entryKey === key))
+    .filter((entry): entry is [string, unknown] => Boolean(entry));
+  const extras = extrasEntries.filter(
+    ([key]) => !costNoteKeys.includes(key),
+  );
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -441,8 +448,21 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           </div>
         </div>
 
-        {extras.length > 0 ? (
+        {costNotes.length > 0 || extras.length > 0 ? (
           <footer className={styles.extras}>
+            {costNotes.length > 0 ? (
+              <div className={styles.costNotesRow}>
+                {costNotes.map(([key, value]) => {
+                  const label = key.replace(/^cost/i, "").toUpperCase() || key;
+                  return (
+                    <span key={key} className={styles.costNote}>
+                      <span className={styles.costNoteLabel}>{label}</span>
+                      <span className={styles.costNoteValue}>{formatExtraValue(value)}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : null}
             {extras.map(([key, value]) => (
               <div key={key} className={styles.extraItem}>
                 <span className={styles.extraKey}>{key}</span>
