@@ -32,7 +32,6 @@ interface TokenDefinition {
 
 interface CostPositionEntry {
   key: string;
-  displayLabel: string;
   value: unknown;
 }
 
@@ -294,22 +293,12 @@ function collectCostPositions(
       if (cache.has(normalized)) {
         return;
       }
-      cache.set(normalized, {
-        key,
-        displayLabel: formatCostPositionLabel(key),
-        value,
-      });
+      cache.set(normalized, { key, value });
     });
   });
-  return Array.from(cache.values());
-}
-
-function formatCostPositionLabel(rawKey: string): string {
-  const normalized = normalizeKeyword(rawKey);
-  if (normalized) {
-    return normalized.toUpperCase();
-  }
-  return rawKey.trim();
+  return COST_POSITION_KEYS
+    .map((expectedKey) => cache.get(expectedKey) ?? null)
+    .filter((entry): entry is CostPositionEntry => entry !== null);
 }
 
 function formatExtraValue(value: unknown): string {
@@ -441,7 +430,6 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
             <div className={styles.costPositionsRow}>
               {costPositions.map((position) => (
                 <div key={position.key} className={styles.costPositionBox}>
-                  <span className={styles.costPositionLabel}>{position.displayLabel}</span>
                   <span className={styles.costPositionValue}>
                     {formatExtraValue(position.value)}
                   </span>

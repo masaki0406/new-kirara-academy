@@ -222,7 +222,8 @@
 .costPositionBox {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  min-width: 36px;
   padding: 6px 10px;
   border-radius: 12px;
   border: 1px solid rgba(148, 163, 184, 0.5);
@@ -234,13 +235,8 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.costPositionLabel {
-  font-size: 10px;
-  color: rgba(30, 64, 175, 0.85);
-}
-
 .costPositionValue {
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(15, 23, 42, 0.92);
 }
 
