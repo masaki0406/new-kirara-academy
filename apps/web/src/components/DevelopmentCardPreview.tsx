@@ -30,13 +30,13 @@ interface TokenDefinition {
   variant: TokenVariant;
 }
 
-interface CostNoteEntry {
+interface CostPositionEntry {
   key: string;
   displayLabel: string;
   value: unknown;
 }
 
-const COST_NOTE_KEYWORDS = ["costa", "costb", "costc"];
+const COST_POSITION_KEYS = ["costa", "costb", "costc"];
 
 const SYMBOL_DEFINITIONS: SymbolDefinition[] = [
   {
@@ -241,9 +241,9 @@ function normalizeKeyword(raw: string): string {
     .toLowerCase();
 }
 
-function isCostNoteKey(raw: string): boolean {
+function isCostPositionKey(raw: string): boolean {
   const normalized = normalizeKeyword(raw);
-  return COST_NOTE_KEYWORDS.includes(normalized);
+  return COST_POSITION_KEYS.includes(normalized);
 }
 
 function resolveSymbolKind(raw?: string | null): SymbolDefinition | null {
@@ -281,13 +281,13 @@ function buildTokens(
   });
 }
 
-function collectCostNotes(
+function collectCostPositions(
   ...sources: Array<Array<[string, unknown]> | undefined>
-): CostNoteEntry[] {
-  const cache = new Map<string, CostNoteEntry>();
+): CostPositionEntry[] {
+  const cache = new Map<string, CostPositionEntry>();
   sources.forEach((source) => {
     source?.forEach(([key, value]) => {
-      if (!isCostNoteKey(key)) {
+      if (!isCostPositionKey(key)) {
         return;
       }
       const normalized = normalizeKeyword(key);
@@ -296,7 +296,7 @@ function collectCostNotes(
       }
       cache.set(normalized, {
         key,
-        displayLabel: formatCostNoteLabel(key),
+        displayLabel: formatCostPositionLabel(key),
         value,
       });
     });
@@ -304,7 +304,7 @@ function collectCostNotes(
   return Array.from(cache.values());
 }
 
-function formatCostNoteLabel(rawKey: string): string {
+function formatCostPositionLabel(rawKey: string): string {
   const match = rawKey.match(/cost\s*([a-z0-9]+)/i);
   if (match && match[1]) {
     return `Cost ${match[1].toUpperCase()}`;
@@ -374,15 +374,19 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const displayName = (card.cardId ?? card.id ?? "").trim() || card.id || "未登録カード";
   const mainSymbol = resolveSymbolKind(card.costItem);
   const themeClass = getThemeClassName(mainSymbol);
-  const tokensCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostNoteKey(key));
-  const tokensReward = buildTokens(card.costLeftDown, "reward", (key) => !isCostNoteKey(key));
+  const tokensCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostPositionKey(key));
+  const tokensReward = buildTokens(
+    card.costLeftDown,
+    "reward",
+    (key) => !isCostPositionKey(key),
+  );
   const extrasEntries = card.extras ? Object.entries(card.extras) : [];
-  const costNotesFromCostMap = card.costLeftUp
-    ? Object.entries(card.costLeftUp).filter(([key]) => isCostNoteKey(key))
+  const costPositionsFromCostMap = card.costLeftUp
+    ? Object.entries(card.costLeftUp).filter(([key]) => isCostPositionKey(key))
     : undefined;
-  const costNotesFromExtras = extrasEntries.filter(([key]) => isCostNoteKey(key));
-  const costNotes = collectCostNotes(costNotesFromCostMap, costNotesFromExtras);
-  const extras = extrasEntries.filter(([key]) => !isCostNoteKey(key));
+  const costPositionsFromExtras = extrasEntries.filter(([key]) => isCostPositionKey(key));
+  const costPositions = collectCostPositions(costPositionsFromCostMap, costPositionsFromExtras);
+  const extras = extrasEntries.filter(([key]) => !isCostPositionKey(key));
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -397,7 +401,7 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         <div className={styles.main}>
           <div className={styles.tokenRow}>
             {tokensCost.length === 0
-              ? costNotes.length === 0 && (
+              ? costPositions.length === 0 && (
                   <span className={styles.tokenRowEmpty}>コスト情報なし</span>
                 )
               : tokensCost.map((token) => (
@@ -435,6 +439,19 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
                   </span>
                 ))}
           </div>
+
+          {costPositions.length > 0 ? (
+            <div className={styles.costPositionsRow}>
+              {costPositions.map((position) => (
+                <span key={position.key} className={styles.costPositionBox}>
+                  <span className={styles.costPositionLabel}>{position.displayLabel}</span>
+                  <span className={styles.costPositionValue}>
+                    {formatExtraValue(position.value)}
+                  </span>
+                </span>
+              ))}
+            </div>
+          ) : null}
 
           <div className={styles.center}>
             <div className={styles.centerBadge}>
@@ -498,18 +515,8 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           </div>
         </div>
 
-        {costNotes.length > 0 || extras.length > 0 ? (
+        {extras.length > 0 ? (
           <footer className={styles.extras}>
-            {costNotes.length > 0 ? (
-              <div className={styles.costNotesRow}>
-                {costNotes.map((note) => (
-                  <span key={note.key} className={styles.costNote}>
-                    <span className={styles.costNoteLabel}>{note.displayLabel}</span>
-                    <span className={styles.costNoteValue}>{formatExtraValue(note.value)}</span>
-                  </span>
-                ))}
-              </div>
-            ) : null}
             {extras.map(([key, value]) => (
               <div key={key} className={styles.extraItem}>
                 <span className={styles.extraKey}>{key}</span>
