@@ -9,6 +9,7 @@ import {
   useSession,
 } from "../../context/SessionContext";
 import { CHARACTER_CATALOG, type CharacterGrowthNode } from "../../data/characters";
+import { DevelopmentCardPreview } from "../../components/DevelopmentCardPreview";
 import {
   buildUnlockedSetWithAuto,
   canUnlockGrowthNode,
@@ -158,36 +159,6 @@ interface CharacterGrowthNodeWithStatus extends CharacterGrowthNode {
   isUnlocked: boolean;
   definition?: GrowthNodeDefinition;
   unlockable: boolean;
-}
-
-function formatCostMap(costs?: Record<string, number>): string {
-  if (!costs) {
-    return "-";
-  }
-  const entries = Object.entries(costs).filter(
-    ([, value]) => typeof value === "number" && Number.isFinite(value),
-  );
-  if (entries.length === 0) {
-    return "-";
-  }
-  return entries.map(([key, value]) => `${key}: ${value}`).join(" / ");
-}
-
-function formatExtras(extras?: Record<string, unknown>): string | null {
-  if (!extras) {
-    return null;
-  }
-  const entries = Object.entries(extras);
-  if (entries.length === 0) {
-    return null;
-  }
-  return entries
-    .map(([key, value]) =>
-      `${key}: ${
-        typeof value === "object" && value !== null ? JSON.stringify(value) : String(value)
-      }`,
-    )
-    .join(" / ");
 }
 
 export default function PlayPage(): JSX.Element {
@@ -1065,35 +1036,8 @@ export default function PlayPage(): JSX.Element {
                       switch (slot.role) {
                         case "development": {
                           if (slot.cardId && slot.card) {
-                            const extrasSummary = formatExtras(slot.card.extras);
-                            const rawName =
-                              slot.card.cardId ?? slot.card.id ?? slot.cardId ?? "カード未登録";
-                            const displayName =
-                              typeof rawName === "string"
-                                ? rawName.trim() || rawName
-                                : String(rawName);
                             bodyContent = (
-                              <div className={styles.journalDevelopmentCard}>
-                                <div className={styles.journalDevelopmentMeta}>
-                                  <span className={styles.journalDevelopmentCategory}>
-                                    {slot.card.costItem ?? "未分類"}
-                                  </span>
-                                  <span className={styles.journalDevelopmentCostPosition}>
-                                    コスト位置: {slot.card.costPosition ?? "-"}
-                                  </span>
-                                </div>
-                                <h6 className={styles.journalDevelopmentTitle}>{displayName}</h6>
-                                <div className={styles.journalDevelopmentDetails}>
-                                  <span>必要数: {slot.card.costNumber ?? "-"}</span>
-                                  <span>左上: {formatCostMap(slot.card.costLeftUp)}</span>
-                                  <span>左下: {formatCostMap(slot.card.costLeftDown)}</span>
-                                </div>
-                                {extrasSummary ? (
-                                  <p className={styles.journalDevelopmentExtras}>
-                                    {extrasSummary}
-                                  </p>
-                                ) : null}
-                              </div>
+                              <DevelopmentCardPreview card={slot.card} />
                             );
                             hint = "公開中の開発カード";
                           } else if (slot.cardId) {
