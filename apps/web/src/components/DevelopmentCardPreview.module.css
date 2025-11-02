@@ -223,7 +223,7 @@
 
 .costColumn {
   display: grid;
-  grid-template-rows: auto repeat(4, minmax(0, auto)) auto;
+  grid-template-rows: auto repeat(3, minmax(0, auto)) auto;
   gap: 8px;
 }
 
