@@ -562,13 +562,16 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
+  const shouldPlaceBadgeInCenter = badgeSlot === "middle";
+
   const badgeForLeftSlot = (slot: "top" | "middle" | "bottom") => {
+    if (shouldPlaceBadgeInCenter) {
+      return null;
+    }
     if (badgeSlot !== slot) {
       return null;
     }
-    const alignment: "left" | "center" | "right" =
-      slot === "middle" ? "center" : "left";
-    return renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment);
+    return renderCostBadge(mainSymbol, card.costNumber, card.costItem, "left");
   };
 
   return (
@@ -585,10 +588,15 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           <div className={styles.costLayout}>
             <div className={classNames(styles.costColumn, styles.costColumnLeft)}>
               {renderCostSlot(costTopLeft, "left", "top", "left", badgeForLeftSlot("top"), true)}
-              {renderCostSlot([], "left", "middle", "left", badgeForLeftSlot("middle"))}
+              {renderCostSlot([], "left", "middle", "left", badgeForLeftSlot("middle"), false)}
               {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"), true)}
             </div>
             <div className={styles.centerColumn}>
+              {shouldPlaceBadgeInCenter ? (
+                <div className={styles.centerBadgeWrapper}>
+                  {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
+                </div>
+              ) : null}
               <div className={styles.tokenRow}>
                 {tokensCost.length === 0 ? (
                   hasAnyCornerCost ? null : (
