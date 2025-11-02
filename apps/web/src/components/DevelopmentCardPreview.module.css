@@ -333,7 +333,7 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
   width: 100%;
 }
@@ -342,6 +342,39 @@
   font-size: 12px;
   color: rgba(148, 163, 184, 0.8);
   text-align: center;
+}
+
+.centerToken {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.centerTokenIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--symbol-color, #2563eb);
+}
+
+.centerTokenSvg {
+  width: 20px;
+  height: 20px;
+}
+
+.centerTokenMultiplier {
+  font-size: 12px;
+  color: #475569;
+}
+
+.centerTokenValue {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .costBadge {

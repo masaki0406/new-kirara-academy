@@ -512,44 +512,32 @@ function renderTokenRowContent(
         const symbolDefinition = SYMBOL_DEFINITIONS.find(
           (definition) => definition.kind === token.kind,
         );
+        const iconClass = classNames(
+          styles.centerTokenIcon,
+          styles[
+            `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+          ] ?? undefined,
+        );
         return (
-          <span
-            key={token.id}
-            className={classNames(
-              styles.symbolBox,
-              styles[
-                `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
-              ] ?? styles.symbolNeutral,
-            )}
-            data-variant={token.variant}
-            tabIndex={-1}
-          >
-            <span className={styles.symbolIcon}>
-              {symbolDefinition?.icon ??
-                (token.variant === "reward" ? (
-                  <svg
-                    className={styles.symbolSvg}
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <rect x="5" y="5" width="14" height="14" fill="currentColor" rx="3" />
-                  </svg>
-                ) : (
-                  <svg
-                    className={styles.symbolSvg}
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <circle cx="12" cy="12" r="8" fill="currentColor" />
-                  </svg>
-                ))}
+          <span key={token.id} className={styles.centerToken}>
+            <span className={iconClass}>
+              {symbolDefinition?.icon ?? (
+                <svg
+                  className={styles.centerTokenSvg}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <circle cx="12" cy="12" r="8" fill="currentColor" />
+                </svg>
+              )}
             </span>
             {token.value !== undefined ? (
-              <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+              <>
+                <span className={styles.centerTokenMultiplier}>×</span>
+                <span className={styles.centerTokenValue}>{formatTokenValue(token)}</span>
+              </>
             ) : null}
-            <span className={styles.symbolLabel}>{token.label}</span>
             <span className={styles.srOnly}>
               {token.label} {formatTokenValue(token) ?? ""}
             </span>
