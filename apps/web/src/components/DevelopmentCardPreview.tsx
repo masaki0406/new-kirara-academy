@@ -686,10 +686,12 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     const isLeft = side === "left";
     const topEntries = isLeft ? costTopLeft : costTopRight;
     const bottomEntries = isLeft ? costBottomLeft : costBottomRight;
+    const emptyEntries: CostPositionEntry[] = [];
     return (
       <div className={classNames(styles.costColumn, isLeft ? styles.costColumnLeft : styles.costColumnRight)}>
         {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true)}
         {renderItemSlot("top", side)}
+        {renderCostSlot(emptyEntries, isLeft ? "left" : "right", "middle", side, true)}
         {renderItemSlot("middle", side)}
         {renderItemSlot("bottom", side)}
         {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true)}
