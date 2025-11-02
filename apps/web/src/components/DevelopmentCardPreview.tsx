@@ -633,7 +633,6 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     side: "left" | "right",
   ): JSX.Element => {
     const isLeft = side === "left";
-    const isBadgeSlot = isLeft && badgeSlot === slot;
     const boxClass = classNames(
       styles.centerItemBox,
       slot === "top"
@@ -642,7 +641,7 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
           ? styles.centerItemBoxBottom
           : styles.centerItemBoxMiddle,
       isLeft ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
-      isBadgeSlot ? styles.centerItemBoxActive : undefined,
+      isLeft && badgeSlot === slot ? styles.centerItemBoxActive : undefined,
     );
 
     const content: JSX.Element[] = [];
@@ -661,10 +660,11 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
       }
     }
 
-    if (isLeft && slot === "middle") {
+    if (isLeft && badgeSlot === slot) {
+      const alignment: "left" | "center" | "right" = slot === "middle" ? "center" : "left";
       content.push(
         <div key="badge" className={styles.centerBadgeHolder}>
-          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
+          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment)}
         </div>,
       );
     }
