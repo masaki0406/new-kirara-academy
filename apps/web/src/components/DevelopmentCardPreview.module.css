@@ -220,10 +220,12 @@
   width: 100%;
 }
 
+
 .costColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  min-height: 100%;
 }
 
 .costColumnLeft {
@@ -241,6 +243,26 @@
   flex-direction: column;
   gap: 6px;
   min-height: 36px;
+}
+
+.costSlotTop {
+  justify-content: flex-start;
+}
+
+.costSlotMiddle {
+  justify-content: center;
+}
+
+.costSlotBottom {
+  justify-content: flex-end;
+}
+
+.costSlotLeft {
+  align-items: flex-start;
+}
+
+.costSlotRight {
+  align-items: flex-end;
 }
 
 .costColumnLeft .costSlot {
@@ -307,7 +329,9 @@
 }
 
 .costPositionBoxEmpty {
-  visibility: hidden;
+  opacity: 0.4;
+  border-style: dashed;
+  background: transparent;
 }
 
 .costPositionValue {

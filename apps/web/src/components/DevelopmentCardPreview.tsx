@@ -473,10 +473,20 @@ function renderCostSlot(
   slotKey: "top" | "middle" | "bottom",
   keyPrefix: string,
   badge: JSX.Element | null,
+  forceBox = false,
 ): JSX.Element {
-  const shouldRenderBoxes = entries.length > 0 || badge === null;
+  const slotClass = classNames(
+    styles.costSlot,
+    slotKey === "top"
+      ? styles.costSlotTop
+      : slotKey === "bottom"
+        ? styles.costSlotBottom
+        : styles.costSlotMiddle,
+    alignment === "right" ? styles.costSlotRight : styles.costSlotLeft,
+  );
+  const shouldRenderBoxes = forceBox || entries.length > 0;
   return (
-    <div className={styles.costSlot}>
+    <div className={slotClass}>
       {shouldRenderBoxes
         ? renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`)
         : null}
@@ -552,10 +562,14 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const badgeForLeftSlot = (slot: "top" | "middle" | "bottom") =>
-    badgeSlot === slot
-      ? renderCostBadge(mainSymbol, card.costNumber, card.costItem, "left")
-      : null;
+  const badgeForLeftSlot = (slot: "top" | "middle" | "bottom") => {
+    if (badgeSlot !== slot) {
+      return null;
+    }
+    const alignment: "left" | "center" | "right" =
+      slot === "middle" ? "center" : "left";
+    return renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment);
+  };
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -570,9 +584,9 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         <div className={styles.main}>
           <div className={styles.costLayout}>
             <div className={classNames(styles.costColumn, styles.costColumnLeft)}>
-              {renderCostSlot(costTopLeft, "left", "top", "left", badgeForLeftSlot("top"))}
+              {renderCostSlot(costTopLeft, "left", "top", "left", badgeForLeftSlot("top"), true)}
               {renderCostSlot([], "left", "middle", "left", badgeForLeftSlot("middle"))}
-              {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"))}
+              {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"), true)}
             </div>
             <div className={styles.centerColumn}>
               <div className={styles.tokenRow}>
@@ -659,9 +673,9 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
               </div>
             </div>
             <div className={classNames(styles.costColumn, styles.costColumnRight)}>
-              {renderCostSlot(costTopRight, "right", "top", "right", null)}
+              {renderCostSlot(costTopRight, "right", "top", "right", null, true)}
               {renderCostSlot([], "right", "middle", "right", null)}
-              {renderCostSlot(costBottomRight, "right", "bottom", "right", null)}
+              {renderCostSlot(costBottomRight, "right", "bottom", "right", null, true)}
             </div>
           </div>
         </div>
