@@ -409,7 +409,12 @@ function renderCostBoxes(
   if (entries.length === 0) {
     return (
       <div className={rowClass}>
-        <div className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)} />
+        {COST_POSITION_KEYS.map((key) => (
+          <div
+            key={`${key}-${keyPrefix}`}
+            className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)}
+          />
+        ))}
       </div>
     );
   }
