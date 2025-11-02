@@ -35,7 +35,17 @@ interface CostPositionEntry {
   value: unknown;
 }
 
+interface CostSource {
+  data: unknown;
+  preferredKeys?: string[];
+  extraKey?: string;
+}
+
 const COST_POSITION_KEYS = ["costa", "costb", "costc"];
+const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"];
+const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"];
+const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"];
+const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
 
 const SYMBOL_DEFINITIONS: SymbolDefinition[] = [
   {
@@ -280,25 +290,60 @@ function buildTokens(
   });
 }
 
-function collectCostPositions(
-  ...sources: Array<Array<[string, unknown]> | undefined>
+function resolveCostEntries(
+  sources: CostSource[],
+  usedExtraKeys?: Set<string>,
 ): CostPositionEntry[] {
-  const cache = new Map<string, CostPositionEntry>();
-  sources.forEach((source) => {
-    source?.forEach(([key, value]) => {
-      if (!isCostPositionKey(key)) {
-        return;
+  for (const source of sources) {
+    const entries = toCostEntries(source.data, source.preferredKeys);
+    if (entries.length > 0) {
+      if (source.extraKey) {
+        usedExtraKeys?.add(source.extraKey);
       }
-      const normalized = normalizeKeyword(key);
-      if (cache.has(normalized)) {
-        return;
-      }
-      cache.set(normalized, { key, value });
-    });
-  });
-  return COST_POSITION_KEYS
-    .map((expectedKey) => cache.get(expectedKey) ?? null)
-    .filter((entry): entry is CostPositionEntry => entry !== null);
+      return entries;
+    }
+  }
+  return [];
+}
+
+function toCostEntries(
+  data: unknown,
+  preferredKeys?: string[],
+): CostPositionEntry[] {
+  if (data === null || data === undefined) {
+    return [];
+  }
+  if (typeof data === "number" || typeof data === "string" || typeof data === "boolean") {
+    return [{ key: "value", value: data }];
+  }
+  if (Array.isArray(data)) {
+    return data.map((value, index) => ({ key: `index-${index}`, value }));
+  }
+  if (typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    if (preferredKeys && preferredKeys.length > 0) {
+      const result: CostPositionEntry[] = [];
+      const used = new Set<string>();
+      preferredKeys.forEach((target) => {
+        const normalizedTarget = normalizeKeyword(target);
+        const matchKey = Object.keys(record).find(
+          (key) => normalizeKeyword(key) === normalizedTarget,
+        );
+        if (matchKey && !used.has(matchKey)) {
+          result.push({ key: matchKey, value: record[matchKey] });
+          used.add(matchKey);
+        }
+      });
+      Object.entries(record).forEach(([key, value]) => {
+        if (!used.has(key)) {
+          result.push({ key, value });
+        }
+      });
+      return result;
+    }
+    return Object.entries(record).map(([key, value]) => ({ key, value }));
+  }
+  return [];
 }
 
 function formatExtraValue(value: unknown): string {
@@ -360,19 +405,84 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const displayName = (card.cardId ?? card.id ?? "").trim() || card.id || "未登録カード";
   const mainSymbol = resolveSymbolKind(card.costItem);
   const themeClass = getThemeClassName(mainSymbol);
+  const usedExtraKeys = new Set<string>();
+  const extrasRecord = card.extras ?? {};
+  const costTopLeft = resolveCostEntries(
+    [
+      { data: card.costLeftUp, preferredKeys: COST_POSITION_KEYS },
+      ...COST_LEFT_UP_EXTRA_KEYS.map((key) => ({
+        data: extrasRecord[key],
+        preferredKeys: COST_POSITION_KEYS,
+        extraKey: key,
+      })),
+    ],
+    usedExtraKeys,
+  );
+  const costBottomLeft = resolveCostEntries(
+    [
+      { data: card.costLeftDown, preferredKeys: COST_POSITION_KEYS },
+      ...COST_LEFT_DOWN_EXTRA_KEYS.map((key) => ({
+        data: extrasRecord[key],
+        preferredKeys: COST_POSITION_KEYS,
+        extraKey: key,
+      })),
+    ],
+    usedExtraKeys,
+  );
+  const costTopRight = resolveCostEntries(
+    COST_RIGHT_UP_EXTRA_KEYS.map((key) => ({
+      data: extrasRecord[key],
+      preferredKeys: COST_POSITION_KEYS,
+      extraKey: key,
+    })),
+    usedExtraKeys,
+  );
+  const costBottomRight = resolveCostEntries(
+    COST_RIGHT_DOWN_EXTRA_KEYS.map((key) => ({
+      data: extrasRecord[key],
+      preferredKeys: COST_POSITION_KEYS,
+      extraKey: key,
+    })),
+    usedExtraKeys,
+  );
   const tokensCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostPositionKey(key));
   const tokensReward = buildTokens(
     card.costLeftDown,
     "reward",
     (key) => !isCostPositionKey(key),
   );
-  const extrasEntries = card.extras ? Object.entries(card.extras) : [];
-  const costPositionsFromCostMap = card.costLeftUp
-    ? Object.entries(card.costLeftUp).filter(([key]) => isCostPositionKey(key))
-    : undefined;
-  const costPositionsFromExtras = extrasEntries.filter(([key]) => isCostPositionKey(key));
-  const costPositions = collectCostPositions(costPositionsFromCostMap, costPositionsFromExtras);
-  const extras = extrasEntries.filter(([key]) => !isCostPositionKey(key));
+  const hasAnyCornerCost =
+    costTopLeft.length > 0 ||
+    costBottomLeft.length > 0 ||
+    costTopRight.length > 0 ||
+    costBottomRight.length > 0;
+  const extrasEntries = Object.entries(extrasRecord);
+  const extras = extrasEntries.filter(
+    ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
+  );
+
+  const renderCostRow = (entries: CostPositionEntry[], alignment: "left" | "right") => {
+    const rowClass = classNames(
+      styles.costRow,
+      alignment === "right" ? styles.costRowRight : styles.costRowLeft,
+    );
+    if (entries.length === 0) {
+      return (
+        <div className={rowClass}>
+          <div className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)} />
+        </div>
+      );
+    }
+    return (
+      <div className={rowClass}>
+        {entries.map((entry, index) => (
+          <div key={`${entry.key}-${index}`} className={styles.costPositionBox}>
+            <span className={styles.costPositionValue}>{formatExtraValue(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -385,118 +495,125 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         </header>
 
         <div className={styles.main}>
-          <div className={styles.tokenRow}>
-            {tokensCost.length === 0
-              ? costPositions.length === 0 && (
-                  <span className={styles.tokenRowEmpty}>コスト情報なし</span>
-                )
-              : tokensCost.map((token) => (
-                  <span
-                    key={token.id}
-                    className={classNames(
-                      styles.symbolBox,
-                      styles[
-                        `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
-                      ] ?? styles.symbolNeutral,
-                    )}
-                    data-variant={token.variant}
-                    tabIndex={-1}
-                  >
-                    <span className={styles.symbolIcon}>
-                      {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
-                        ?.icon ?? (
-                        <svg
-                          className={styles.symbolSvg}
-                          viewBox="0 0 24 24"
-                          aria-hidden="true"
-                          focusable="false"
-                        >
-                          <circle cx="12" cy="12" r="8" fill="currentColor" />
-                        </svg>
+          <div className={styles.costLayout}>
+            <div className={classNames(styles.corner, styles.cornerTopLeft)}>
+              {renderCostRow(costTopLeft, "left")}
+            </div>
+            <div className={classNames(styles.corner, styles.cornerTopRight)}>
+              {renderCostRow(costTopRight, "right")}
+            </div>
+            <div className={styles.centerSection}>
+              <div className={styles.tokenRow}>
+                {tokensCost.length === 0 ? (
+                  hasAnyCornerCost ? null : (
+                    <span className={styles.tokenRowEmpty}>コスト情報なし</span>
+                  )
+                ) : (
+                  tokensCost.map((token) => (
+                    <span
+                      key={token.id}
+                      className={classNames(
+                        styles.symbolBox,
+                        styles[
+                          `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+                        ] ?? styles.symbolNeutral,
                       )}
+                      data-variant={token.variant}
+                      tabIndex={-1}
+                    >
+                      <span className={styles.symbolIcon}>
+                        {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
+                          ?.icon ?? (
+                          <svg
+                            className={styles.symbolSvg}
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                            focusable="false"
+                          >
+                            <circle cx="12" cy="12" r="8" fill="currentColor" />
+                          </svg>
+                        )}
+                      </span>
+                      {token.value !== undefined ? (
+                        <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+                      ) : null}
+                      <span className={styles.symbolLabel}>{token.label}</span>
+                      <span className={styles.srOnly}>
+                        {token.label} {formatTokenValue(token) ?? ""}
+                      </span>
                     </span>
-                    {token.value !== undefined ? (
-                      <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
-                    ) : null}
-                    <span className={styles.symbolLabel}>{token.label}</span>
-                    <span className={styles.srOnly}>
-                      {token.label} {formatTokenValue(token) ?? ""}
-                    </span>
-                  </span>
-                ))}
-          </div>
-
-          {costPositions.length > 0 ? (
-            <div className={styles.costPositionsRow}>
-              {costPositions.map((position) => (
-                <div key={position.key} className={styles.costPositionBox}>
-                  <span className={styles.costPositionValue}>
-                    {formatExtraValue(position.value)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <div className={styles.center}>
-            <div className={styles.centerBadge}>
-              <span className={styles.centerIcon}>
-                {mainSymbol?.icon ?? (
-                  <svg
-                    className={styles.centerSvg}
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <circle cx="12" cy="12" r="8" fill="currentColor" />
-                  </svg>
+                  ))
                 )}
-              </span>
-              {typeof card.costNumber === "number" ? (
-                <span className={styles.centerValue}>{card.costNumber}</span>
-              ) : null}
-            </div>
-            <span className={styles.centerLabel}>{mainSymbol?.label ?? card.costItem ?? "未分類"}</span>
-          </div>
-
-          <div className={styles.tokenRow}>
-            {tokensReward.length === 0 ? (
-              <span className={styles.tokenRowEmpty}>効果情報なし</span>
-            ) : (
-              tokensReward.map((token) => (
-                <span
-                  key={token.id}
-                  className={classNames(
-                    styles.symbolBox,
-                    styles[`symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`] ??
-                      styles.symbolNeutral,
-                  )}
-                  data-variant={token.variant}
-                  tabIndex={-1}
-                >
-                  <span className={styles.symbolIcon}>
-                    {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
-                      ?.icon ?? (
+              </div>
+              <div className={styles.center}>
+                <div className={styles.centerBadge}>
+                  <span className={styles.centerIcon}>
+                    {mainSymbol?.icon ?? (
                       <svg
-                        className={styles.symbolSvg}
+                        className={styles.centerSvg}
                         viewBox="0 0 24 24"
                         aria-hidden="true"
                         focusable="false"
                       >
-                        <rect x="5" y="5" width="14" height="14" fill="currentColor" rx="3" />
+                        <circle cx="12" cy="12" r="8" fill="currentColor" />
                       </svg>
                     )}
                   </span>
-                  {token.value !== undefined ? (
-                    <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+                  {typeof card.costNumber === "number" ? (
+                    <span className={styles.centerValue}>{card.costNumber}</span>
                   ) : null}
-                  <span className={styles.symbolLabel}>{token.label}</span>
-                  <span className={styles.srOnly}>
-                    {token.label} {formatTokenValue(token) ?? ""}
-                  </span>
+                </div>
+                <span className={styles.centerLabel}>
+                  {mainSymbol?.label ?? card.costItem ?? "未分類"}
                 </span>
-              ))
-            )}
+              </div>
+              <div className={styles.tokenRow}>
+                {tokensReward.length === 0 ? (
+                  <span className={styles.tokenRowEmpty}>効果情報なし</span>
+                ) : (
+                  tokensReward.map((token) => (
+                    <span
+                      key={token.id}
+                      className={classNames(
+                        styles.symbolBox,
+                        styles[
+                          `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+                        ] ?? styles.symbolNeutral,
+                      )}
+                      data-variant={token.variant}
+                      tabIndex={-1}
+                    >
+                      <span className={styles.symbolIcon}>
+                        {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
+                          ?.icon ?? (
+                          <svg
+                            className={styles.symbolSvg}
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                            focusable="false"
+                          >
+                            <rect x="5" y="5" width="14" height="14" fill="currentColor" rx="3" />
+                          </svg>
+                        )}
+                      </span>
+                      {token.value !== undefined ? (
+                        <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+                      ) : null}
+                      <span className={styles.symbolLabel}>{token.label}</span>
+                      <span className={styles.srOnly}>
+                        {token.label} {formatTokenValue(token) ?? ""}
+                      </span>
+                    </span>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className={classNames(styles.corner, styles.cornerBottomLeft)}>
+              {renderCostRow(costBottomLeft, "left")}
+            </div>
+            <div className={classNames(styles.corner, styles.cornerBottomRight)}>
+              {renderCostRow(costBottomRight, "right")}
+            </div>
           </div>
         </div>
 
