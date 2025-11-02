@@ -215,7 +215,7 @@
 .costLayout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 20px;
   align-items: stretch;
   width: 100%;
 }
@@ -427,8 +427,7 @@
 }
 
 .costPositionBoxEmpty {
-  opacity: 0.4;
-  border-style: dashed;
+  opacity: 0.5;
   background: transparent;
 }
 
