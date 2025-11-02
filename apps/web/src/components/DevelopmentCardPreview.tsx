@@ -508,15 +508,9 @@ function renderCostSlot(
   );
 }
 
-function renderTokenRowContent(
-  tokens: TokenDefinition[],
-  emptyLabel?: string,
-): JSX.Element | null {
+function renderTokenRowContent(tokens: TokenDefinition[]): JSX.Element | null {
   if (tokens.length === 0) {
-    if (!emptyLabel) {
-      return null;
-    }
-    return <span className={styles.tokenRowEmpty}>{emptyLabel}</span>;
+    return null;
   }
 
   return (
@@ -647,10 +641,7 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     const content: JSX.Element[] = [];
 
     if (isLeft && slot === "top") {
-      const tokens = renderTokenRowContent(
-        tokensCost,
-        hasAnyCornerCost ? undefined : "コスト情報なし",
-      );
+      const tokens = renderTokenRowContent(tokensCost);
       if (tokens) {
         content.push(
           <div key="tokens" className={styles.centerTokenRow}>
@@ -670,7 +661,7 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     }
 
     if (isLeft && slot === "bottom") {
-      const tokens = renderTokenRowContent(tokensReward, "効果情報なし");
+      const tokens = renderTokenRowContent(tokensReward);
       if (tokens) {
         content.push(
           <div key="tokens" className={styles.centerTokenRow}>
