@@ -211,11 +211,11 @@
   color: rgba(15, 23, 42, 0.68);
 }
 
+
 .costLayout {
   display: grid;
-  grid-template-columns: minmax(0, 120px) 1fr minmax(0, 120px);
-  grid-template-rows: repeat(3, auto);
-  gap: 12px 20px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
   align-items: stretch;
   width: 100%;
 }
@@ -223,20 +223,18 @@
 
 .costColumn {
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  gap: 12px;
-  min-height: 100%;
+  grid-template-rows: auto repeat(3, minmax(0, auto)) auto;
+  gap: 8px;
 }
 
 .costColumnLeft {
-  grid-column: 1;
-  grid-row: 1 / span 3;
+  justify-items: stretch;
 }
 
 .costColumnRight {
-  grid-column: 3;
-  grid-row: 1 / span 3;
+  justify-items: stretch;
 }
+
 
 .costSlot {
   display: flex;
@@ -287,16 +285,6 @@
   justify-content: flex-end;
 }
 
-.centerColumn {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  display: grid;
-  grid-template-rows: auto 1fr auto;
-  align-items: stretch;
-  gap: 12px;
-  width: 100%;
-}
-
 .centerItemBox {
   display: flex;
   flex-direction: column;
@@ -326,6 +314,14 @@
 .centerItemBoxActive {
   border-color: rgba(59, 130, 246, 0.6);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.centerItemBoxLeft {
+  align-items: flex-start;
+}
+
+.centerItemBoxRight {
+  align-items: flex-end;
 }
 
 .centerBadgeHolder {

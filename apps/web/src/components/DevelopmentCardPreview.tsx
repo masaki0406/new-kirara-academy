@@ -627,11 +627,12 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const renderCenterItemBox = (
+  const renderItemSlot = (
     slot: "top" | "middle" | "bottom",
-    badgeAlignment: "left" | "center" | "right",
+    side: "left" | "right",
   ): JSX.Element => {
-    const isBadgeSlot = badgeSlot === slot;
+    const isLeft = side === "left";
+    const isBadgeSlot = isLeft && badgeSlot === slot;
     const boxClass = classNames(
       styles.centerItemBox,
       slot === "top"
@@ -639,12 +640,13 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         : slot === "bottom"
           ? styles.centerItemBoxBottom
           : styles.centerItemBoxMiddle,
+      isLeft ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
       isBadgeSlot ? styles.centerItemBoxActive : undefined,
     );
 
     const content: JSX.Element[] = [];
 
-    if (slot === "top") {
+    if (isLeft && slot === "top") {
       const tokens = renderTokenRowContent(
         tokensCost,
         hasAnyCornerCost ? undefined : "コスト情報なし",
@@ -658,15 +660,15 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
       }
     }
 
-    if (isBadgeSlot) {
+    if (isLeft && slot === "middle") {
       content.push(
         <div key="badge" className={styles.centerBadgeHolder}>
-          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, badgeAlignment)}
+          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
         </div>,
       );
     }
 
-    if (slot === "bottom") {
+    if (isLeft && slot === "bottom") {
       const tokens = renderTokenRowContent(tokensReward, "効果情報なし");
       if (tokens) {
         content.push(
@@ -688,6 +690,21 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     return <div className={boxClass}>{content}</div>;
   };
 
+  const renderCostColumn = (side: "left" | "right"): JSX.Element => {
+    const isLeft = side === "left";
+    const topEntries = isLeft ? costTopLeft : costTopRight;
+    const bottomEntries = isLeft ? costBottomLeft : costBottomRight;
+    return (
+      <div className={classNames(styles.costColumn, isLeft ? styles.costColumnLeft : styles.costColumnRight)}>
+        {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true)}
+        {renderItemSlot("top", side)}
+        {renderItemSlot("middle", side)}
+        {renderItemSlot("bottom", side)}
+        {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true)}
+      </div>
+    );
+  };
+
   return (
     <article className={classNames(styles.card, themeClass, className)}>
       <div className={styles.inner}>
@@ -700,21 +717,8 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
 
         <div className={styles.main}>
           <div className={styles.costLayout}>
-            <div className={classNames(styles.costColumn, styles.costColumnLeft)}>
-              {renderCostSlot(costTopLeft, "left", "top", "left", true)}
-              {renderCostSlot([], "left", "middle", "left")}
-              {renderCostSlot(costBottomLeft, "left", "bottom", "left", true)}
-            </div>
-            <div className={styles.centerColumn}>
-              {renderCenterItemBox("top", "left")}
-              {renderCenterItemBox("middle", badgeSlot === "middle" ? "center" : "left")}
-              {renderCenterItemBox("bottom", "left")}
-            </div>
-            <div className={classNames(styles.costColumn, styles.costColumnRight)}>
-              {renderCostSlot(costTopRight, "right", "top", "right", true)}
-              {renderCostSlot([], "right", "middle", "right")}
-              {renderCostSlot(costBottomRight, "right", "bottom", "right", true)}
-            </div>
+            {renderCostColumn("left")}
+            {renderCostColumn("right")}
           </div>
         </div>
 
