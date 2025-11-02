@@ -592,11 +592,14 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
               {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"), true)}
             </div>
             <div className={styles.centerColumn}>
-              {shouldPlaceBadgeInCenter ? (
-                <div className={styles.centerBadgeWrapper}>
-                  {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
-                </div>
-              ) : null}
+              <div className={styles.centerBadgeWrapper}>
+                {renderCostBadge(
+                  mainSymbol,
+                  shouldPlaceBadgeInCenter ? card.costNumber : undefined,
+                  shouldPlaceBadgeInCenter ? card.costItem : undefined,
+                  shouldPlaceBadgeInCenter ? "center" : "left",
+                )}
+              </div>
               <div className={styles.tokenRow}>
                 {tokensCost.length === 0 ? (
                   hasAnyCornerCost ? null : (
