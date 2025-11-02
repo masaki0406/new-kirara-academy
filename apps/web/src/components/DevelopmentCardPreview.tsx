@@ -442,14 +442,28 @@ function renderCostBadge(
         ? styles.costBadgeRight
         : undefined,
   );
+  const contentClass = classNames(
+    styles.costBadgeContent,
+    alignment === "left"
+      ? styles.costBadgeContentLeft
+      : alignment === "right"
+        ? styles.costBadgeContentRight
+        : styles.costBadgeContentCenter,
+  );
+  const iconClass = classNames(
+    styles.centerTokenIcon,
+    symbol ? styles[`symbol${symbol.kind.charAt(0).toUpperCase()}${symbol.kind.slice(1)}`] : undefined,
+  );
+  const valueText =
+    typeof costNumber === "number" && Number.isFinite(costNumber) ? String(costNumber) : "-";
 
   return (
     <div className={badgeClass}>
-      <div className={styles.centerBadge}>
-        <span className={styles.centerIcon}>
+      <div className={contentClass}>
+        <span className={iconClass}>
           {symbol?.icon ?? (
             <svg
-              className={styles.centerSvg}
+              className={styles.centerTokenSvg}
               viewBox="0 0 24 24"
               aria-hidden="true"
               focusable="false"
@@ -458,9 +472,8 @@ function renderCostBadge(
             </svg>
           )}
         </span>
-        {typeof costNumber === "number" ? (
-          <span className={styles.centerValue}>{costNumber}</span>
-        ) : null}
+        <span className={styles.centerTokenMultiplier}>×</span>
+        <span className={styles.centerTokenValue}>{valueText}</span>
       </div>
       <span className={styles.centerLabel}>{symbol?.label ?? costItem ?? "未分類"}</span>
     </div>

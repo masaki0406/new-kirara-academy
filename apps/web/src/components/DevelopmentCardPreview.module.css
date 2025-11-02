@@ -392,6 +392,24 @@
   align-items: flex-end;
 }
 
+.costBadgeContent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.costBadgeContentLeft {
+  justify-content: flex-start;
+}
+
+.costBadgeContentCenter {
+  justify-content: center;
+}
+
+.costBadgeContentRight {
+  justify-content: flex-end;
+}
+
 .costPositionBox {
   display: inline-flex;
   align-items: center;
