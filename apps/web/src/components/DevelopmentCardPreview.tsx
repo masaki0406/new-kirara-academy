@@ -472,7 +472,6 @@ function renderCostSlot(
   alignment: "left" | "right",
   slotKey: "top" | "middle" | "bottom",
   keyPrefix: string,
-  badge: JSX.Element | null,
   forceBox = false,
 ): JSX.Element {
   const slotClass = classNames(
@@ -484,14 +483,80 @@ function renderCostSlot(
         : styles.costSlotMiddle,
     alignment === "right" ? styles.costSlotRight : styles.costSlotLeft,
   );
-  const shouldRenderBoxes = forceBox || entries.length > 0;
+
+  if (!forceBox && entries.length === 0) {
+    return <div className={slotClass} />;
+  }
+
   return (
     <div className={slotClass}>
-      {shouldRenderBoxes
-        ? renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`)
-        : null}
-      {badge}
+      {renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`)}
     </div>
+  );
+}
+
+function renderTokenRowContent(
+  tokens: TokenDefinition[],
+  emptyLabel?: string,
+): JSX.Element | null {
+  if (tokens.length === 0) {
+    if (!emptyLabel) {
+      return null;
+    }
+    return <span className={styles.tokenRowEmpty}>{emptyLabel}</span>;
+  }
+
+  return (
+    <>
+      {tokens.map((token) => {
+        const symbolDefinition = SYMBOL_DEFINITIONS.find(
+          (definition) => definition.kind === token.kind,
+        );
+        return (
+          <span
+            key={token.id}
+            className={classNames(
+              styles.symbolBox,
+              styles[
+                `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+              ] ?? styles.symbolNeutral,
+            )}
+            data-variant={token.variant}
+            tabIndex={-1}
+          >
+            <span className={styles.symbolIcon}>
+              {symbolDefinition?.icon ??
+                (token.variant === "reward" ? (
+                  <svg
+                    className={styles.symbolSvg}
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <rect x="5" y="5" width="14" height="14" fill="currentColor" rx="3" />
+                  </svg>
+                ) : (
+                  <svg
+                    className={styles.symbolSvg}
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <circle cx="12" cy="12" r="8" fill="currentColor" />
+                  </svg>
+                ))}
+            </span>
+            {token.value !== undefined ? (
+              <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
+            ) : null}
+            <span className={styles.symbolLabel}>{token.label}</span>
+            <span className={styles.srOnly}>
+              {token.label} {formatTokenValue(token) ?? ""}
+            </span>
+          </span>
+        );
+      })}
+    </>
   );
 }
 
@@ -562,17 +627,19 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const shouldPlaceBadgeInCenter = badgeSlot === "middle";
-
-  const badgeForLeftSlot = (slot: "top" | "middle" | "bottom") => {
-    if (shouldPlaceBadgeInCenter) {
-      return null;
-    }
-    if (badgeSlot !== slot) {
-      return null;
-    }
-    return renderCostBadge(mainSymbol, card.costNumber, card.costItem, "left");
-  };
+  const centerTopClass = classNames(
+    styles.centerItemBox,
+    badgeSlot === "top" ? styles.centerItemBoxActive : undefined,
+  );
+  const centerMiddleClass = classNames(
+    styles.centerItemBox,
+    styles.centerItemBoxBadge,
+    badgeSlot === "middle" ? styles.centerItemBoxActive : undefined,
+  );
+  const centerBottomClass = classNames(
+    styles.centerItemBox,
+    badgeSlot === "bottom" ? styles.centerItemBoxActive : undefined,
+  );
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -587,106 +654,32 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         <div className={styles.main}>
           <div className={styles.costLayout}>
             <div className={classNames(styles.costColumn, styles.costColumnLeft)}>
-              {renderCostSlot(costTopLeft, "left", "top", "left", badgeForLeftSlot("top"), true)}
-              {renderCostSlot([], "left", "middle", "left", badgeForLeftSlot("middle"), false)}
-              {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"), true)}
+              {renderCostSlot(costTopLeft, "left", "top", "left", true)}
+              {renderCostSlot([], "left", "middle", "left")}
+              {renderCostSlot(costBottomLeft, "left", "bottom", "left", true)}
             </div>
             <div className={styles.centerColumn}>
-              <div className={styles.centerBadgeWrapper}>
-                {renderCostBadge(
-                  mainSymbol,
-                  shouldPlaceBadgeInCenter ? card.costNumber : undefined,
-                  shouldPlaceBadgeInCenter ? card.costItem : undefined,
-                  shouldPlaceBadgeInCenter ? "center" : "left",
-                )}
+              <div className={centerTopClass}>
+                <div className={styles.tokenRow}>
+                  {renderTokenRowContent(
+                    tokensCost,
+                    hasAnyCornerCost ? undefined : "コスト情報なし",
+                  )}
+                </div>
               </div>
-              <div className={styles.tokenRow}>
-                {tokensCost.length === 0 ? (
-                  hasAnyCornerCost ? null : (
-                    <span className={styles.tokenRowEmpty}>コスト情報なし</span>
-                  )
-                ) : (
-                  tokensCost.map((token) => (
-                    <span
-                      key={token.id}
-                      className={classNames(
-                        styles.symbolBox,
-                        styles[
-                          `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
-                        ] ?? styles.symbolNeutral,
-                      )}
-                      data-variant={token.variant}
-                      tabIndex={-1}
-                    >
-                      <span className={styles.symbolIcon}>
-                        {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
-                          ?.icon ?? (
-                          <svg
-                            className={styles.symbolSvg}
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                            focusable="false"
-                          >
-                            <circle cx="12" cy="12" r="8" fill="currentColor" />
-                          </svg>
-                        )}
-                      </span>
-                      {token.value !== undefined ? (
-                        <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
-                      ) : null}
-                      <span className={styles.symbolLabel}>{token.label}</span>
-                      <span className={styles.srOnly}>
-                        {token.label} {formatTokenValue(token) ?? ""}
-                      </span>
-                    </span>
-                  ))
-                )}
+              <div className={centerMiddleClass}>
+                {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
               </div>
-              <div className={styles.tokenRow}>
-                {tokensReward.length === 0 ? (
-                  <span className={styles.tokenRowEmpty}>効果情報なし</span>
-                ) : (
-                  tokensReward.map((token) => (
-                    <span
-                      key={token.id}
-                      className={classNames(
-                        styles.symbolBox,
-                        styles[
-                          `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
-                        ] ?? styles.symbolNeutral,
-                      )}
-                      data-variant={token.variant}
-                      tabIndex={-1}
-                    >
-                      <span className={styles.symbolIcon}>
-                        {SYMBOL_DEFINITIONS.find((definition) => definition.kind === token.kind)
-                          ?.icon ?? (
-                          <svg
-                            className={styles.symbolSvg}
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                            focusable="false"
-                          >
-                            <rect x="5" y="5" width="14" height="14" fill="currentColor" rx="3" />
-                          </svg>
-                        )}
-                      </span>
-                      {token.value !== undefined ? (
-                        <span className={styles.symbolValue}>{formatTokenValue(token)}</span>
-                      ) : null}
-                      <span className={styles.symbolLabel}>{token.label}</span>
-                      <span className={styles.srOnly}>
-                        {token.label} {formatTokenValue(token) ?? ""}
-                      </span>
-                    </span>
-                  ))
-                )}
+              <div className={centerBottomClass}>
+                <div className={styles.tokenRow}>
+                  {renderTokenRowContent(tokensReward, "効果情報なし")}
+                </div>
               </div>
             </div>
             <div className={classNames(styles.costColumn, styles.costColumnRight)}>
-              {renderCostSlot(costTopRight, "right", "top", "right", null, true)}
-              {renderCostSlot([], "right", "middle", "right", null)}
-              {renderCostSlot(costBottomRight, "right", "bottom", "right", null, true)}
+              {renderCostSlot(costTopRight, "right", "top", "right", true)}
+              {renderCostSlot([], "right", "middle", "right")}
+              {renderCostSlot(costBottomRight, "right", "bottom", "right", true)}
             </div>
           </div>
         </div>
