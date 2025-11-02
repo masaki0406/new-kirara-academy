@@ -627,7 +627,10 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const renderCenterItemBox = (slot: "top" | "middle" | "bottom"): JSX.Element => {
+  const renderCenterItemBox = (
+    slot: "top" | "middle" | "bottom",
+    badgeAlignment: "left" | "center" | "right",
+  ): JSX.Element => {
     const isBadgeSlot = badgeSlot === slot;
     const boxClass = classNames(
       styles.centerItemBox,
@@ -658,7 +661,7 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     if (isBadgeSlot) {
       content.push(
         <div key="badge" className={styles.centerBadgeHolder}>
-          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
+          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, badgeAlignment)}
         </div>,
       );
     }
@@ -703,9 +706,9 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
               {renderCostSlot(costBottomLeft, "left", "bottom", "left", true)}
             </div>
             <div className={styles.centerColumn}>
-              {renderCenterItemBox("top")}
-              {renderCenterItemBox("middle")}
-              {renderCenterItemBox("bottom")}
+              {renderCenterItemBox("top", "left")}
+              {renderCenterItemBox("middle", badgeSlot === "middle" ? "center" : "left")}
+              {renderCenterItemBox("bottom", "left")}
             </div>
             <div className={classNames(styles.costColumn, styles.costColumnRight)}>
               {renderCostSlot(costTopRight, "right", "top", "right", true)}
