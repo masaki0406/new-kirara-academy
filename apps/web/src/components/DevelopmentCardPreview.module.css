@@ -299,24 +299,53 @@
 
 .centerItemBox {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   justify-content: center;
+  align-items: stretch;
   border: 1px solid rgba(148, 163, 184, 0.45);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   padding: 12px;
-  min-height: 72px;
-  width: 100%;
+  min-height: 88px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
-.centerItemBoxBadge {
-  padding: 16px 12px;
+.centerItemBoxTop {
+  justify-content: flex-start;
+}
+
+.centerItemBoxMiddle {
+  justify-content: center;
+}
+
+.centerItemBoxBottom {
+  justify-content: flex-end;
 }
 
 .centerItemBoxActive {
   border-color: rgba(59, 130, 246, 0.6);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.centerBadgeHolder {
+  display: flex;
+  justify-content: center;
+}
+
+.centerTokenRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.centerPlaceholder {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.8);
+  text-align: center;
 }
 
 .costBadge {

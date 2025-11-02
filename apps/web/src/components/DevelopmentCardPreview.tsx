@@ -627,19 +627,63 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const badgeSlot: "top" | "middle" | "bottom" =
     card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const centerTopClass = classNames(
-    styles.centerItemBox,
-    badgeSlot === "top" ? styles.centerItemBoxActive : undefined,
-  );
-  const centerMiddleClass = classNames(
-    styles.centerItemBox,
-    styles.centerItemBoxBadge,
-    badgeSlot === "middle" ? styles.centerItemBoxActive : undefined,
-  );
-  const centerBottomClass = classNames(
-    styles.centerItemBox,
-    badgeSlot === "bottom" ? styles.centerItemBoxActive : undefined,
-  );
+  const renderCenterItemBox = (slot: "top" | "middle" | "bottom"): JSX.Element => {
+    const isBadgeSlot = badgeSlot === slot;
+    const boxClass = classNames(
+      styles.centerItemBox,
+      slot === "top"
+        ? styles.centerItemBoxTop
+        : slot === "bottom"
+          ? styles.centerItemBoxBottom
+          : styles.centerItemBoxMiddle,
+      isBadgeSlot ? styles.centerItemBoxActive : undefined,
+    );
+
+    const content: JSX.Element[] = [];
+
+    if (slot === "top") {
+      const tokens = renderTokenRowContent(
+        tokensCost,
+        hasAnyCornerCost ? undefined : "コスト情報なし",
+      );
+      if (tokens) {
+        content.push(
+          <div key="tokens" className={styles.centerTokenRow}>
+            {tokens}
+          </div>,
+        );
+      }
+    }
+
+    if (isBadgeSlot) {
+      content.push(
+        <div key="badge" className={styles.centerBadgeHolder}>
+          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
+        </div>,
+      );
+    }
+
+    if (slot === "bottom") {
+      const tokens = renderTokenRowContent(tokensReward, "効果情報なし");
+      if (tokens) {
+        content.push(
+          <div key="tokens" className={styles.centerTokenRow}>
+            {tokens}
+          </div>,
+        );
+      }
+    }
+
+    if (content.length === 0) {
+      content.push(
+        <span key="placeholder" className={styles.centerPlaceholder}>
+          -
+        </span>,
+      );
+    }
+
+    return <div className={boxClass}>{content}</div>;
+  };
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -659,22 +703,9 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
               {renderCostSlot(costBottomLeft, "left", "bottom", "left", true)}
             </div>
             <div className={styles.centerColumn}>
-              <div className={centerTopClass}>
-                <div className={styles.tokenRow}>
-                  {renderTokenRowContent(
-                    tokensCost,
-                    hasAnyCornerCost ? undefined : "コスト情報なし",
-                  )}
-                </div>
-              </div>
-              <div className={centerMiddleClass}>
-                {renderCostBadge(mainSymbol, card.costNumber, card.costItem, "center")}
-              </div>
-              <div className={centerBottomClass}>
-                <div className={styles.tokenRow}>
-                  {renderTokenRowContent(tokensReward, "効果情報なし")}
-                </div>
-              </div>
+              {renderCenterItemBox("top")}
+              {renderCenterItemBox("middle")}
+              {renderCenterItemBox("bottom")}
             </div>
             <div className={classNames(styles.costColumn, styles.costColumnRight)}>
               {renderCostSlot(costTopRight, "right", "top", "right", true)}
