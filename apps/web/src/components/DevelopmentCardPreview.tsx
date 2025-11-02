@@ -396,6 +396,95 @@ function formatTokenValue(token: TokenDefinition): string | undefined {
   return String(token.value);
 }
 
+function renderCostBoxes(
+  entries: CostPositionEntry[],
+  alignment: "left" | "right",
+  keyPrefix: string,
+): JSX.Element {
+  const rowClass = classNames(
+    styles.costRow,
+    alignment === "right" ? styles.costRowRight : styles.costRowLeft,
+  );
+
+  if (entries.length === 0) {
+    return (
+      <div className={rowClass}>
+        <div className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)} />
+      </div>
+    );
+  }
+
+  return (
+    <div className={rowClass}>
+      {entries.map((entry, index) => (
+        <div
+          key={`${keyPrefix}-${entry.key}-${index}`}
+          className={styles.costPositionBox}
+        >
+          <span className={styles.costPositionValue}>{formatExtraValue(entry.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function renderCostBadge(
+  symbol: SymbolDefinition | null,
+  costNumber: number | undefined,
+  costItem: string | undefined,
+  alignment: "left" | "center" | "right",
+): JSX.Element {
+  const badgeClass = classNames(
+    styles.costBadge,
+    alignment === "left"
+      ? styles.costBadgeLeft
+      : alignment === "right"
+        ? styles.costBadgeRight
+        : undefined,
+  );
+
+  return (
+    <div className={badgeClass}>
+      <div className={styles.centerBadge}>
+        <span className={styles.centerIcon}>
+          {symbol?.icon ?? (
+            <svg
+              className={styles.centerSvg}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <circle cx="12" cy="12" r="8" fill="currentColor" />
+            </svg>
+          )}
+        </span>
+        {typeof costNumber === "number" ? (
+          <span className={styles.centerValue}>{costNumber}</span>
+        ) : null}
+      </div>
+      <span className={styles.centerLabel}>{symbol?.label ?? costItem ?? "未分類"}</span>
+    </div>
+  );
+}
+
+function renderCostSlot(
+  entries: CostPositionEntry[],
+  alignment: "left" | "right",
+  slotKey: "top" | "middle" | "bottom",
+  keyPrefix: string,
+  badge: JSX.Element | null,
+): JSX.Element {
+  const shouldRenderBoxes = entries.length > 0 || badge === null;
+  return (
+    <div className={styles.costSlot}>
+      {shouldRenderBoxes
+        ? renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`)
+        : null}
+      {badge}
+    </div>
+  );
+}
+
 interface Props {
   card: CatalogDevelopmentCard;
   className?: string;
@@ -460,29 +549,13 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const extras = extrasEntries.filter(
     ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
   );
+  const badgeSlot: "top" | "middle" | "bottom" =
+    card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
-  const renderCostRow = (entries: CostPositionEntry[], alignment: "left" | "right") => {
-    const rowClass = classNames(
-      styles.costRow,
-      alignment === "right" ? styles.costRowRight : styles.costRowLeft,
-    );
-    if (entries.length === 0) {
-      return (
-        <div className={rowClass}>
-          <div className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)} />
-        </div>
-      );
-    }
-    return (
-      <div className={rowClass}>
-        {entries.map((entry, index) => (
-          <div key={`${entry.key}-${index}`} className={styles.costPositionBox}>
-            <span className={styles.costPositionValue}>{formatExtraValue(entry.value)}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  const badgeForLeftSlot = (slot: "top" | "middle" | "bottom") =>
+    badgeSlot === slot
+      ? renderCostBadge(mainSymbol, card.costNumber, card.costItem, "left")
+      : null;
 
   return (
     <article className={classNames(styles.card, themeClass, className)}>
@@ -496,13 +569,12 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
 
         <div className={styles.main}>
           <div className={styles.costLayout}>
-            <div className={classNames(styles.corner, styles.cornerTopLeft)}>
-              {renderCostRow(costTopLeft, "left")}
+            <div className={classNames(styles.costColumn, styles.costColumnLeft)}>
+              {renderCostSlot(costTopLeft, "left", "top", "left", badgeForLeftSlot("top"))}
+              {renderCostSlot([], "left", "middle", "left", badgeForLeftSlot("middle"))}
+              {renderCostSlot(costBottomLeft, "left", "bottom", "left", badgeForLeftSlot("bottom"))}
             </div>
-            <div className={classNames(styles.corner, styles.cornerTopRight)}>
-              {renderCostRow(costTopRight, "right")}
-            </div>
-            <div className={styles.centerSection}>
+            <div className={styles.centerColumn}>
               <div className={styles.tokenRow}>
                 {tokensCost.length === 0 ? (
                   hasAnyCornerCost ? null : (
@@ -545,28 +617,6 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
                   ))
                 )}
               </div>
-              <div className={styles.center}>
-                <div className={styles.centerBadge}>
-                  <span className={styles.centerIcon}>
-                    {mainSymbol?.icon ?? (
-                      <svg
-                        className={styles.centerSvg}
-                        viewBox="0 0 24 24"
-                        aria-hidden="true"
-                        focusable="false"
-                      >
-                        <circle cx="12" cy="12" r="8" fill="currentColor" />
-                      </svg>
-                    )}
-                  </span>
-                  {typeof card.costNumber === "number" ? (
-                    <span className={styles.centerValue}>{card.costNumber}</span>
-                  ) : null}
-                </div>
-                <span className={styles.centerLabel}>
-                  {mainSymbol?.label ?? card.costItem ?? "未分類"}
-                </span>
-              </div>
               <div className={styles.tokenRow}>
                 {tokensReward.length === 0 ? (
                   <span className={styles.tokenRowEmpty}>効果情報なし</span>
@@ -608,11 +658,10 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
                 )}
               </div>
             </div>
-            <div className={classNames(styles.corner, styles.cornerBottomLeft)}>
-              {renderCostRow(costBottomLeft, "left")}
-            </div>
-            <div className={classNames(styles.corner, styles.cornerBottomRight)}>
-              {renderCostRow(costBottomRight, "right")}
+            <div className={classNames(styles.costColumn, styles.costColumnRight)}>
+              {renderCostSlot(costTopRight, "right", "top", "right", null)}
+              {renderCostSlot([], "right", "middle", "right", null)}
+              {renderCostSlot(costBottomRight, "right", "bottom", "right", null)}
             </div>
           </div>
         </div>

@@ -213,58 +213,42 @@
 
 .costLayout {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-rows: auto 1fr auto;
-  gap: 8px 16px;
-  align-items: center;
+  grid-template-columns: minmax(0, 120px) 1fr minmax(0, 120px);
+  grid-template-rows: repeat(3, auto);
+  gap: 12px 20px;
+  align-items: stretch;
   width: 100%;
 }
 
-.corner {
+.costColumn {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  min-height: 32px;
-}
-
-.cornerTopLeft {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: flex-start;
-  align-self: flex-start;
-}
-
-.cornerTopRight {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: flex-end;
-  align-self: flex-start;
-  align-items: flex-end;
-}
-
-.cornerBottomLeft {
-  grid-column: 1;
-  grid-row: 3;
-  justify-self: flex-start;
-  align-self: flex-end;
-}
-
-.cornerBottomRight {
-  grid-column: 3;
-  grid-row: 3;
-  justify-self: flex-end;
-  align-self: flex-end;
-  align-items: flex-end;
-}
-
-.centerSection {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 10px;
-  width: 100%;
+}
+
+.costColumnLeft {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+
+.costColumnRight {
+  grid-column: 3;
+  grid-row: 1 / span 3;
+}
+
+.costSlot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 36px;
+}
+
+.costColumnLeft .costSlot {
+  align-items: flex-start;
+}
+
+.costColumnRight .costSlot {
+  align-items: flex-end;
 }
 
 .costRow {
@@ -279,6 +263,31 @@
 
 .costRowRight {
   justify-content: flex-end;
+}
+
+.centerColumn {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.costBadge {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.costBadgeLeft {
+  align-items: flex-start;
+}
+
+.costBadgeRight {
+  align-items: flex-end;
 }
 
 .costPositionBox {
