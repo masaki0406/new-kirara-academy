@@ -1323,6 +1323,334 @@
   }
 }
 
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 2000;
+}
+
+.polishModal {
+  width: min(900px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.28);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 24px 24px;
+}
+
+.polishModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.polishModalHeader h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.polishCloseButton {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: #475569;
+}
+
+.polishModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.polishSummary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.polishSummaryRow {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.polishWarning {
+  margin: 0;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+.polishColumns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.polishSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.polishSection h6 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1e293b;
+}
+
+.polishEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.polishOptionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.polishOptionItem {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.polishOptionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.polishOptionControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.polishToggleButton {
+  border-radius: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  background: rgba(255, 255, 255, 0.98);
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.polishTotals {
+  font-size: 12px;
+  color: #1f2937;
+}
+
+.polishSelectionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.polishSelectionItem {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.polishSelectionMeta {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.polishFoundationList {
+  display: grid;
+  gap: 10px;
+}
+
+.polishFoundationOption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.polishFoundationOption input[type="radio"] {
+  width: 16px;
+  height: 16px;
+}
+
+.polishFoundationOptionActive {
+  border-color: rgba(37, 99, 235, 0.55);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18);
+}
+
+.polishFoundationOptionDisabled {
+  opacity: 0.6;
+}
+
+.polishFoundationLabel {
+  display: block;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.polishFoundationCard {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.polishModalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.polishPrimaryButton,
+.polishSecondaryButton {
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-size: 13px;
+}
+
+.polishPrimaryButton {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.polishPrimaryButton:disabled {
+  background: rgba(148, 163, 184, 0.4);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: not-allowed;
+}
+
+.polishSecondaryButton {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.5);
+  color: #475569;
+}
+
+.polishSecondaryButton:hover {
+  border-color: rgba(37, 99, 235, 0.4);
+  color: #1d4ed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  .modalOverlay {
+    background: rgba(2, 6, 23, 0.65);
+  }
+
+  .polishModal {
+    background: rgba(15, 23, 42, 0.92);
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #e2e8f0;
+  }
+
+  .polishModalHeader h4 {
+    color: #e2e8f0;
+  }
+
+  .polishCloseButton {
+    color: #e2e8f0;
+  }
+
+  .polishSummary {
+    background: rgba(37, 99, 235, 0.22);
+  }
+
+  .polishSummaryRow {
+    color: #e2e8f0;
+  }
+
+  .polishWarning {
+    color: #fca5a5;
+  }
+
+  .polishOptionItem,
+  .polishSelectionItem {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(148, 163, 184, 0.38);
+  }
+
+  .polishToggleButton {
+    background: rgba(37, 99, 235, 0.18);
+    color: #bfdbfe;
+    border-color: rgba(96, 165, 250, 0.45);
+  }
+
+  .polishTotals {
+    color: #e2e8f0;
+  }
+
+  .polishFoundationOption {
+    background: rgba(30, 41, 59, 0.7);
+    border-color: rgba(148, 163, 184, 0.35);
+  }
+
+  .polishFoundationLabel {
+    color: #e2e8f0;
+  }
+
+  .polishFoundationCard {
+    color: #cbd5f5;
+  }
+
+  .polishSecondaryButton {
+    border-color: rgba(148, 163, 184, 0.5);
+    color: #cbd5f5;
+  }
+}
+
 .growthTitle {
   margin: 0;
   font-size: 13px;

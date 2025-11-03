@@ -102,6 +102,11 @@ const LAB_TASKS: TaskDefinition[] = [
   },
 ];
 
+const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"];
+const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"];
+const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"];
+const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
+
 type PlayerActionCategory = "lab" | "student" | "general";
 
 interface PlayerActionDefinition {
@@ -112,6 +117,7 @@ interface PlayerActionDefinition {
   description: string;
   requirement?: PlayerActionRequirement;
   highlight?: "primary" | "warning";
+  implemented?: boolean;
 }
 
 interface PlayerActionContext {
@@ -137,6 +143,23 @@ interface PlayerActionViewModel extends PlayerActionDefinition {
   available: boolean;
   reason?: string;
 }
+
+type PolishSelectionMap = Record<
+  string,
+  {
+    type: "development" | "vp";
+    flipped: boolean;
+  }
+>;
+
+interface PolishSelectionDetail {
+  cardId: string;
+  type: "development" | "vp";
+  card: CatalogDevelopmentCard | null;
+  flipped: boolean;
+  totals: { left: number; right: number };
+}
+
 
 const PLAYER_ACTION_CATEGORY_ORDER: PlayerActionCategory[] = ["lab", "student", "general"];
 
@@ -247,6 +270,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
         "共有設備を使いレンズの研磨とロビー整理を進めます。研究の基礎アクションです。",
       requirement: combineRequirements(requireActionPoints(1), requireResource("stagnation", 1)),
       highlight: "primary",
+      implemented: true,
     };
   })(),
   (() => {
@@ -353,6 +377,67 @@ function classNames(...values: Array<string | false | null | undefined>): string
   return values.filter(Boolean).join(" ");
 }
 
+function toNumeric(value: unknown): number {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+function sumCostRecord(record: Record<string, unknown> | undefined): number {
+  if (!record) {
+    return 0;
+  }
+  return Object.values(record).reduce<number>(
+    (total, entry) => total + toNumeric(entry),
+    0,
+  );
+}
+
+function sumExtras(
+  extras: Record<string, unknown> | undefined,
+  keys: string[],
+): number {
+  if (!extras) {
+    return 0;
+  }
+  return keys.reduce((total, key) => {
+    if (!(key in extras)) {
+      return total;
+    }
+    const value = extras[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return total + sumCostRecord(value as Record<string, unknown>);
+    }
+    return total + toNumeric(value);
+  }, 0);
+}
+
+function getPolishCardTotals(
+  card: CatalogDevelopmentCard | null | undefined,
+  flipped: boolean,
+): { left: number; right: number } {
+  if (!card) {
+    return { left: 0, right: 0 };
+  }
+  const leftBase =
+    sumCostRecord(card.costLeftUp) +
+    sumCostRecord(card.costLeftDown) +
+    sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS) +
+    sumExtras(card.extras, COST_LEFT_DOWN_EXTRA_KEYS);
+  const rightBase =
+    sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS) +
+    sumExtras(card.extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+  if (flipped) {
+    return { left: rightBase, right: leftBase };
+  }
+  return { left: leftBase, right: rightBase };
+}
+
 type JournalSlotRole = "development" | "developmentDeck" | "vp" | "vpDeck";
 
 interface JournalSlotDefinition {
@@ -451,6 +536,10 @@ export default function PlayPage(): JSX.Element {
   );
   const [isLoadingVpCards, setIsLoadingVpCards] = useState(false);
   const [vpCardError, setVpCardError] = useState<string | null>(null);
+  const [isPolishDialogOpen, setIsPolishDialogOpen] = useState(false);
+  const [polishSelectionMap, setPolishSelectionMap] = useState<PolishSelectionMap>({});
+  const [polishFoundationChoice, setPolishFoundationChoice] = useState<FoundationCost | null>(null);
+  const [isPolishSubmitting, setIsPolishSubmitting] = useState(false);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -740,6 +829,60 @@ export default function PlayPage(): JSX.Element {
     };
   }, [gameState, localGamePlayer]);
 
+  const foundationSlots = useMemo<FoundationSlot[]>(() => {
+    const foundationCards =
+      (
+        gameState?.board as {
+          foundationCards?: Partial<Record<FoundationCost, string | null>>;
+        } | null
+      )?.foundationCards ?? {};
+
+    return FOUNDATION_CARD_COSTS.map((cost) => ({
+      cost,
+      cardId: foundationCards[cost] ?? null,
+    }));
+  }, [gameState]);
+
+  const openPolishDialog = useCallback(() => {
+    setPolishSelectionMap({});
+    setPolishFoundationChoice(null);
+    setIsPolishDialogOpen(true);
+  }, []);
+
+  const closePolishDialog = useCallback(() => {
+    setIsPolishDialogOpen(false);
+    setPolishSelectionMap({});
+    setPolishFoundationChoice(null);
+    setIsPolishSubmitting(false);
+  }, []);
+
+  const handleTogglePolishCard = useCallback((cardId: string, type: "development" | "vp") => {
+    setPolishSelectionMap((prev) => {
+      const next = { ...prev };
+      if (next[cardId]) {
+        delete next[cardId];
+      } else {
+        next[cardId] = { type, flipped: false };
+      }
+      return next;
+    });
+  }, []);
+
+  const handleTogglePolishFlip = useCallback((cardId: string) => {
+    setPolishSelectionMap((prev) => {
+      const next = { ...prev };
+      const entry = next[cardId];
+      if (entry) {
+        next[cardId] = { ...entry, flipped: !entry.flipped };
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectPolishFoundation = useCallback((cost: FoundationCost | null) => {
+    setPolishFoundationChoice(cost);
+  }, []);
+
   const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
     if (!localGamePlayer) {
       return [];
@@ -783,6 +926,78 @@ export default function PlayPage(): JSX.Element {
 
     return ordered;
   }, [localGamePlayer, effectiveResources, lobbySummary]);
+
+  const polishSelectionDetails = useMemo<PolishSelectionDetail[]>(() => {
+    return Object.entries(polishSelectionMap).map(([cardId, entry]) => {
+      const card =
+        entry.type === "development"
+          ? developmentCardCatalog.get(cardId) ?? null
+          : vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null;
+      return {
+        cardId,
+        type: entry.type,
+        card,
+        flipped: entry.flipped,
+        totals: getPolishCardTotals(card, entry.flipped),
+      };
+    });
+  }, [polishSelectionMap, developmentCardCatalog, vpCardCatalog]);
+
+  const polishSummary = useMemo(() => {
+    const totals = polishSelectionDetails.reduce(
+      (acc, detail) => {
+        acc.left += detail.totals.left;
+        acc.right += detail.totals.right;
+        return acc;
+      },
+      { left: 0, right: 0 },
+    );
+    const diff = totals.right - totals.left;
+    const diffLimit = diff <= 4;
+    const foundationRequirement = Math.max(0, diff);
+    const selectedFoundation =
+      polishFoundationChoice !== null
+        ? foundationSlots.find(
+            (slot) => slot.cost === polishFoundationChoice && slot.cardId !== null,
+          ) ?? null
+        : null;
+    const foundationMet = Boolean(
+      selectedFoundation && selectedFoundation.cost >= foundationRequirement,
+    );
+    const canSubmit =
+      polishSelectionDetails.length > 0 && diffLimit && foundationMet && !isPolishSubmitting;
+
+    return {
+      totals,
+      diff,
+      diffLimit,
+      foundationRequirement,
+      foundationMet,
+      selectedFoundation,
+      canSubmit,
+    };
+  }, [
+    polishSelectionDetails,
+    polishFoundationChoice,
+    foundationSlots,
+    isPolishSubmitting,
+  ]);
+
+  const handleSubmitPolish = useCallback(async () => {
+    if (!polishSummary.canSubmit) {
+      return;
+    }
+    setIsPolishSubmitting(true);
+    try {
+      setFeedback("研磨アクションの送信処理はまだ実装されていません。");
+      closePolishDialog();
+    } catch (error) {
+      console.error(error);
+      setFeedback("研磨アクションの実行に失敗しました。");
+    } finally {
+      setIsPolishSubmitting(false);
+    }
+  }, [polishSummary.canSubmit, closePolishDialog, setFeedback]);
 
   const growthNodes = localCharacterProfile?.growthNodes ?? [];
 
@@ -1044,19 +1259,25 @@ export default function PlayPage(): JSX.Element {
     });
   }, [gameState, developmentCardCatalog, vpCardCatalog]);
 
-  const foundationSlots = useMemo<FoundationSlot[]>(() => {
-    const foundationCards =
-      (
-        gameState?.board as {
-          foundationCards?: Partial<Record<FoundationCost, string | null>>;
-        } | null
-      )?.foundationCards ?? {};
+  const polishDevelopmentOptions = useMemo(
+    () =>
+      localGamePlayer
+        ? localGamePlayer.hand.map((cardId) => ({
+            cardId,
+            card: developmentCardCatalog.get(cardId) ?? null,
+          }))
+        : [],
+    [localGamePlayer, developmentCardCatalog],
+  );
 
-    return FOUNDATION_CARD_COSTS.map((cost) => ({
-      cost,
-      cardId: foundationCards[cost] ?? null,
+  const polishVpOptions = useMemo(() => {
+    const vpIds = gameState?.board?.publicVpCards ?? [];
+    const unique = Array.from(new Set(vpIds));
+    return unique.map((cardId) => ({
+      cardId,
+      card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
     }));
-  }, [gameState]);
+  }, [gameState?.board?.publicVpCards, vpCardCatalog, developmentCardCatalog]);
 
   return (
     <div className={styles.page}>
@@ -1682,6 +1903,22 @@ export default function PlayPage(): JSX.Element {
                                         ? styles.playerActionStatusAvailable
                                         : styles.playerActionStatusBlocked,
                                     );
+                                    const implemented = action.implemented ?? false;
+                                    const hasPolishSources =
+                                      action.id !== "polish" ||
+                                      polishDevelopmentOptions.length > 0 ||
+                                      polishVpOptions.length > 0;
+                                    const buttonDisabled =
+                                      !action.available || !implemented || !hasPolishSources;
+                                    const handleActionClick = () => {
+                                      if (!implemented) {
+                                        setFeedback("この行動は現在準備中です。");
+                                        return;
+                                      }
+                                      if (action.id === "polish") {
+                                        openPolishDialog();
+                                      }
+                                    };
                                     return (
                                       <div key={action.id} className={cardClass}>
                                         <div className={styles.playerActionHeader}>
@@ -1705,11 +1942,20 @@ export default function PlayPage(): JSX.Element {
                                             不足: {action.reason}
                                           </p>
                                         ) : null}
+                                        {action.id === "polish" && implemented && !hasPolishSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            手札または利用可能な VP カードがありません。
+                                          </p>
+                                        ) : null}
+                                        {!implemented ? (
+                                          <p className={styles.playerActionHint}>この行動は現在準備中です。</p>
+                                        ) : null}
                                         <div className={styles.playerActionFooter}>
                                           <button
                                             type="button"
                                             className={styles.playerActionButton}
-                                            disabled={!action.available}
+                                            disabled={buttonDisabled}
+                                            onClick={handleActionClick}
                                           >
                                             行動を選択
                                           </button>
@@ -1826,7 +2072,7 @@ export default function PlayPage(): JSX.Element {
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>アクション</h2>
         <p className={styles.description}>
-          現在はパスのみ送信できます。今後の実装で他のアクション選択 UI を追加予定です。
+          行動メニューから実行条件を確認できます。研磨は詳細設定ダイアログを利用して準備できます。
         </p>
         <div className={styles.buttonRow}>
           <button
@@ -1852,6 +2098,212 @@ export default function PlayPage(): JSX.Element {
           </pre>
         </details>
       </section>
+      {isPolishDialogOpen && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="研磨アクション">
+          <div className={styles.polishModal}>
+            <div className={styles.polishModalHeader}>
+              <h4>研磨アクション</h4>
+              <button
+                type="button"
+                className={styles.polishCloseButton}
+                onClick={closePolishDialog}
+                aria-label="閉じる"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.polishModalBody}>
+              <div className={styles.polishSummary}>
+                <div className={styles.polishSummaryRow}>
+                  <span>左コスト合計</span>
+                  <strong>{polishSummary.totals.left}</strong>
+                </div>
+                <div className={styles.polishSummaryRow}>
+                  <span>右コスト合計</span>
+                  <strong>{polishSummary.totals.right}</strong>
+                </div>
+                <div className={styles.polishSummaryRow}>
+                  <span>差分 (右 - 左)</span>
+                  <strong>{polishSummary.diff}</strong>
+                </div>
+                <div className={styles.polishSummaryRow}>
+                  <span>必要土台コスト</span>
+                  <strong>{polishSummary.foundationRequirement}</strong>
+                </div>
+              </div>
+              {!polishSummary.diffLimit ? (
+                <p className={styles.polishWarning}>右側の合計は左側より 4 以内にしてください。</p>
+              ) : null}
+              {polishSelectionDetails.length > 0 && !polishSummary.foundationMet ? (
+                <p className={styles.polishWarning}>
+                  土台カードのコストが不足しています（必要 {polishSummary.foundationRequirement}）。
+                </p>
+              ) : null}
+              <div className={styles.polishColumns}>
+                <section className={styles.polishSection}>
+                  <h6>手札の開発カード</h6>
+                  {polishDevelopmentOptions.length === 0 ? (
+                    <p className={styles.polishEmpty}>手札に開発カードがありません。</p>
+                  ) : (
+                    <ul className={styles.polishOptionList}>
+                      {polishDevelopmentOptions.map(({ cardId, card }) => {
+                        const entry = polishSelectionMap[cardId];
+                        const selected = Boolean(entry);
+                        const totals = getPolishCardTotals(card, entry?.flipped ?? false);
+                        return (
+                          <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
+                            <label className={styles.polishOptionLabel}>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => handleTogglePolishCard(cardId, "development")}
+                              />
+                              <span>{card?.cardId ?? cardId}</span>
+                            </label>
+                            {selected ? (
+                              <div className={styles.polishOptionControls}>
+                                <button
+                                  type="button"
+                                  className={styles.polishToggleButton}
+                                  onClick={() => handleTogglePolishFlip(cardId)}
+                                >
+                                  {entry?.flipped ? "裏面扱い" : "表面扱い"}
+                                </button>
+                                <span className={styles.polishTotals}>
+                                  左 {totals.left} / 右 {totals.right}
+                                </span>
+                              </div>
+                            ) : null}
+                            {!card ? (
+                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+                <section className={styles.polishSection}>
+                  <h6>利用可能な VP カード</h6>
+                  {polishVpOptions.length === 0 ? (
+                    <p className={styles.polishEmpty}>利用可能な VP カードがありません。</p>
+                  ) : (
+                    <ul className={styles.polishOptionList}>
+                      {polishVpOptions.map(({ cardId, card }) => {
+                        const entry = polishSelectionMap[cardId];
+                        const selected = Boolean(entry);
+                        const totals = getPolishCardTotals(card, entry?.flipped ?? false);
+                        return (
+                          <li key={`vp-${cardId}`} className={styles.polishOptionItem}>
+                            <label className={styles.polishOptionLabel}>
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => handleTogglePolishCard(cardId, "vp")}
+                              />
+                              <span>{card?.cardId ?? cardId}</span>
+                            </label>
+                            {selected ? (
+                              <div className={styles.polishOptionControls}>
+                                <button
+                                  type="button"
+                                  className={styles.polishToggleButton}
+                                  onClick={() => handleTogglePolishFlip(cardId)}
+                                >
+                                  {entry?.flipped ? "裏面扱い" : "表面扱い"}
+                                </button>
+                                <span className={styles.polishTotals}>
+                                  左 {totals.left} / 右 {totals.right}
+                                </span>
+                              </div>
+                            ) : null}
+                            {!card ? (
+                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                            ) : null}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </div>
+              <section className={styles.polishSection}>
+                <h6>選択したカード</h6>
+                {polishSelectionDetails.length === 0 ? (
+                  <p className={styles.polishEmpty}>カードを選択してください。</p>
+                ) : (
+                  <ul className={styles.polishSelectionList}>
+                    {polishSelectionDetails.map((detail) => (
+                      <li key={`sel-${detail.cardId}`} className={styles.polishSelectionItem}>
+                        <div>
+                          <strong>{detail.card?.cardId ?? detail.cardId}</strong>
+                          <span className={styles.polishSelectionMeta}>
+                            {detail.type === "vp" ? "VPカード" : "開発カード"}
+                            {detail.flipped ? "（裏面扱い）" : "（表面扱い）"}
+                          </span>
+                        </div>
+                        <span className={styles.polishTotals}>
+                          左 {detail.totals.left} / 右 {detail.totals.right}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section className={styles.polishSection}>
+                <h6>土台カードの選択</h6>
+                {foundationSlots.some((slot) => slot.cardId) ? (
+                  <div className={styles.polishFoundationList} role="radiogroup" aria-label="土台カード">
+                    {foundationSlots.map((slot) => {
+                      const disabled = !slot.cardId;
+                      const checked = polishFoundationChoice === slot.cost;
+                      return (
+                        <label
+                          key={slot.cost}
+                          className={classNames(
+                            styles.polishFoundationOption,
+                            checked ? styles.polishFoundationOptionActive : undefined,
+                            disabled ? styles.polishFoundationOptionDisabled : undefined,
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="polishFoundation"
+                            value={slot.cost}
+                            disabled={disabled}
+                            checked={checked}
+                            onChange={() => handleSelectPolishFoundation(slot.cost)}
+                          />
+                          <div>
+                            <span className={styles.polishFoundationLabel}>コスト {slot.cost}</span>
+                            <span className={styles.polishFoundationCard}>{slot.cardId ?? "未配置"}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className={styles.polishEmpty}>利用可能な土台カードがありません。</p>
+                )}
+              </section>
+            </div>
+            <div className={styles.polishModalFooter}>
+              <button type="button" className={styles.polishSecondaryButton} onClick={closePolishDialog}>
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.polishPrimaryButton}
+                onClick={() => void handleSubmitPolish()}
+                disabled={!polishSummary.canSubmit}
+              >
+                {isPolishSubmitting ? "送信中..." : "研磨を実行"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {taskRewardDialog && (
         <div className={styles.taskRewardOverlay}>
           <div className={styles.taskRewardModal}>
