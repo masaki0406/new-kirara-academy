@@ -128,7 +128,7 @@ export interface BoardState {
   lenses: Record<LensId, LensState>;
   lobbySlots: LobbySlot[];
   publicDevelopmentCards: DevelopmentCardId[];
-  publicVpCards?: DevelopmentCardId[];
+  publicVpCards: DevelopmentCardId[];
 }
 
 export interface ResourceCost {
@@ -196,10 +196,12 @@ export interface GameState {
   players: Record<PlayerId, PlayerState>;
   board: BoardState;
   developmentDeck: DevelopmentCardId[];
+  vpDeck: DevelopmentCardId[];
   lensDeck: LensId[];
   tasks: Record<TaskId, TaskState>;
   logs: ActionLogEntry[];
   developmentDeckInitialized?: boolean;
+  vpDeckInitialized?: boolean;
   snapshotId?: string;
 }
 

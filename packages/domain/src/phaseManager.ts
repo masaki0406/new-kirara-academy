@@ -14,8 +14,10 @@ interface PhaseManagerDeps {
     initialActionPoints: number;
     publicDevelopmentSlots: number;
     stagnationPenalty?: number;
+    publicVpSlots?: number;
   };
   initializeDevelopmentDeck?: (gameState: MutableGameState['state']) => Promise<void>;
+  initializeVpDeck?: (gameState: MutableGameState['state']) => Promise<void>;
 }
 
 export class PhaseManagerImpl implements PhaseManager {
@@ -26,6 +28,10 @@ export class PhaseManagerImpl implements PhaseManager {
     if (this.deps.initializeDevelopmentDeck && !gameState.developmentDeckInitialized) {
       await this.deps.initializeDevelopmentDeck(gameState);
     }
+    if (this.deps.initializeVpDeck && !gameState.vpDeckInitialized) {
+      await this.deps.initializeVpDeck(gameState);
+    }
+    ensureDeckState(gameState);
     const order = determineTurnOrder(gameState.currentRound, gameState.players);
     this.deps.turnOrder.setInitialOrder(order);
     gameState.currentPlayerId = order[0];
@@ -44,6 +50,7 @@ export class PhaseManagerImpl implements PhaseManager {
       gameState,
       this.deps.rulesetConfig?.publicDevelopmentSlots ?? 8,
     );
+    replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
     // 共有ボード初期化（各レンズのロビー状態リセット）
     gameState.board.lobbySlots.forEach((slot) => {
       slot.occupantId = undefined;
@@ -75,6 +82,7 @@ export class PhaseManagerImpl implements PhaseManager {
       gameState,
       this.deps.rulesetConfig?.publicDevelopmentSlots ?? 8,
     );
+    replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
     await state.save();
   }
 
@@ -111,6 +119,21 @@ function determineTurnOrder(
   return [...ids.slice(idx), ...ids.slice(0, idx)];
 }
 
+function ensureDeckState(gameState: MutableGameState['state']): void {
+  if (!Array.isArray(gameState.board.publicDevelopmentCards)) {
+    gameState.board.publicDevelopmentCards = [];
+  }
+  if (!Array.isArray(gameState.board.publicVpCards)) {
+    gameState.board.publicVpCards = [];
+  }
+  if (!Array.isArray(gameState.developmentDeck)) {
+    gameState.developmentDeck = [];
+  }
+  if (!Array.isArray(gameState.vpDeck)) {
+    gameState.vpDeck = [];
+  }
+}
+
 function replenishDevelopmentRow(gameState: MutableGameState['state'], requiredSlots: number): void {
   while (gameState.board.publicDevelopmentCards.length < requiredSlots && gameState.developmentDeck.length > 0) {
     const card = gameState.developmentDeck.shift();
@@ -118,6 +141,23 @@ function replenishDevelopmentRow(gameState: MutableGameState['state'], requiredS
       break;
     }
     gameState.board.publicDevelopmentCards.push(card);
+  }
+}
+
+function replenishVpRow(gameState: MutableGameState['state'], requiredSlots: number): void {
+  if (!Array.isArray(gameState.board.publicVpCards)) {
+    gameState.board.publicVpCards = [];
+  }
+  if (!Array.isArray(gameState.vpDeck)) {
+    gameState.vpDeck = [];
+  }
+
+  while (gameState.board.publicVpCards.length < requiredSlots && gameState.vpDeck.length > 0) {
+    const card = gameState.vpDeck.shift();
+    if (!card) {
+      break;
+    }
+    gameState.board.publicVpCards.push(card);
   }
 }
 

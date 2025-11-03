@@ -21,7 +21,12 @@ import {
   type BeginCharacterSelectionRequest,
   type AdjustPlayerForTestParams,
 } from "@functions/handlers";
-import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog, loadVpCardCatalog } from "@functions/developmentDeckLoader";
+import {
+  createDevelopmentDeckInitializer,
+  createVpDeckInitializer,
+  loadDevelopmentCardCatalog,
+  loadVpCardCatalog,
+} from "@functions/developmentDeckLoader";
 import type { CatalogDevelopmentCard } from "@domain/types";
 
 interface HandlerResult {
@@ -44,6 +49,7 @@ const firestoreAdapter = new FirestoreAdapterImpl(firestoreLike, {
 
 const roomService = new RoomService(firestoreAdapter);
 const initializeDevelopmentDeck = createDevelopmentDeckInitializer(firestoreAdmin);
+const initializeVpDeck = createVpDeckInitializer(firestoreAdmin);
 
 const defaultRuleset: Ruleset = {
   version: "prototype",
@@ -157,8 +163,10 @@ function createGameSession(roomId: string): GameSession {
       initialActionPoints: 2,
       publicDevelopmentSlots: 8,
       stagnationPenalty: 2,
+      publicVpSlots: 2,
     },
     initializeDevelopmentDeck,
+    initializeVpDeck,
   });
 
   const actionResolver = createDefaultActionResolver();
@@ -189,12 +197,15 @@ function createInitialState(roomId: string): GameState {
       lenses: {},
       lobbySlots: [],
       publicDevelopmentCards: [],
+      publicVpCards: [],
     },
     developmentDeck: [],
+    vpDeck: [],
     lensDeck: [],
     tasks: createSharedTasks(),
     logs: [],
     developmentDeckInitialized: false,
+    vpDeckInitialized: false,
   };
 }
 

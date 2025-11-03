@@ -10,6 +10,10 @@ class PhaseManagerImpl {
         if (this.deps.initializeDevelopmentDeck && !gameState.developmentDeckInitialized) {
             await this.deps.initializeDevelopmentDeck(gameState);
         }
+        if (this.deps.initializeVpDeck && !gameState.vpDeckInitialized) {
+            await this.deps.initializeVpDeck(gameState);
+        }
+        ensureDeckState(gameState);
         const order = determineTurnOrder(gameState.currentRound, gameState.players);
         this.deps.turnOrder.setInitialOrder(order);
         gameState.currentPlayerId = order[0];
@@ -25,6 +29,7 @@ class PhaseManagerImpl {
         });
         // 公開開発カード補充
         replenishDevelopmentRow(gameState, this.deps.rulesetConfig?.publicDevelopmentSlots ?? 8);
+        replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
         // 共有ボード初期化（各レンズのロビー状態リセット）
         gameState.board.lobbySlots.forEach((slot) => {
             slot.occupantId = undefined;
@@ -51,6 +56,7 @@ class PhaseManagerImpl {
         });
         // 公開列を補充
         replenishDevelopmentRow(gameState, this.deps.rulesetConfig?.publicDevelopmentSlots ?? 8);
+        replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
         await state.save();
     }
     async finalScoring(state) {
@@ -78,6 +84,20 @@ function determineTurnOrder(currentRound, players) {
     const idx = ids.indexOf(firstPassed);
     return [...ids.slice(idx), ...ids.slice(0, idx)];
 }
+function ensureDeckState(gameState) {
+    if (!Array.isArray(gameState.board.publicDevelopmentCards)) {
+        gameState.board.publicDevelopmentCards = [];
+    }
+    if (!Array.isArray(gameState.board.publicVpCards)) {
+        gameState.board.publicVpCards = [];
+    }
+    if (!Array.isArray(gameState.developmentDeck)) {
+        gameState.developmentDeck = [];
+    }
+    if (!Array.isArray(gameState.vpDeck)) {
+        gameState.vpDeck = [];
+    }
+}
 function replenishDevelopmentRow(gameState, requiredSlots) {
     while (gameState.board.publicDevelopmentCards.length < requiredSlots && gameState.developmentDeck.length > 0) {
         const card = gameState.developmentDeck.shift();
@@ -85,6 +105,21 @@ function replenishDevelopmentRow(gameState, requiredSlots) {
             break;
         }
         gameState.board.publicDevelopmentCards.push(card);
+    }
+}
+function replenishVpRow(gameState, requiredSlots) {
+    if (!Array.isArray(gameState.board.publicVpCards)) {
+        gameState.board.publicVpCards = [];
+    }
+    if (!Array.isArray(gameState.vpDeck)) {
+        gameState.vpDeck = [];
+    }
+    while (gameState.board.publicVpCards.length < requiredSlots && gameState.vpDeck.length > 0) {
+        const card = gameState.vpDeck.shift();
+        if (!card) {
+            break;
+        }
+        gameState.board.publicVpCards.push(card);
     }
 }
 function applyResourceConversions(gameState, conversion) {

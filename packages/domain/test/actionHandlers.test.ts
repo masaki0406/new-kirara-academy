@@ -187,8 +187,10 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       lenses: {},
       lobbySlots: [],
       publicDevelopmentCards: ['dev-1'],
+      publicVpCards: [],
     },
     developmentDeck: [],
+    vpDeck: [],
     lensDeck: [],
     tasks: {},
     logs: [],
@@ -197,6 +199,10 @@ function createGameState(overrides?: Partial<GameState>): GameState {
   return {
     ...state,
     ...overrides,
+    board: {
+      ...state.board,
+      ...(overrides?.board ?? {}),
+    },
     players: {
       ...state.players,
       ...(overrides?.players ?? {}),

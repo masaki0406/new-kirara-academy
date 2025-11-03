@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.listDevelopmentCards = exports.adjustPlayerForTest = exports.getRoomState = exports.performAction = exports.startGame = exports.beginCharacterSelection = exports.selectCharacter = exports.updateTurnOrder = exports.randomizeTurnOrder = exports.leaveRoom = exports.joinRoom = exports.createRoom = void 0;
+exports.listVpCards = exports.listDevelopmentCards = exports.adjustPlayerForTest = exports.getRoomState = exports.performAction = exports.startGame = exports.beginCharacterSelection = exports.selectCharacter = exports.updateTurnOrder = exports.randomizeTurnOrder = exports.leaveRoom = exports.joinRoom = exports.createRoom = void 0;
 const app_1 = require("firebase-admin/app");
 const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
@@ -25,6 +25,7 @@ const firestoreAdapter = new firestoreAdapter_1.FirestoreAdapterImpl(firestoreLi
 });
 const roomService = new roomService_1.RoomService(firestoreAdapter);
 const initializeDevelopmentDeck = (0, developmentDeckLoader_1.createDevelopmentDeckInitializer)(firestore);
+const initializeVpDeck = (0, developmentDeckLoader_1.createVpDeckInitializer)(firestore);
 const defaultRuleset = {
     version: 'prototype',
     resourceCaps: { light: 6, rainbow: 6, stagnation: 6 },
@@ -74,6 +75,28 @@ exports.listDevelopmentCards = (0, https_1.onRequest)(async (request, response) 
         });
     }
 });
+exports.listVpCards = (0, https_1.onRequest)(async (request, response) => {
+    if (request.method !== 'POST') {
+        response.status(405).json({
+            status: 'error',
+            result: { errors: ['Method not allowed. Use POST.'] },
+        });
+        return;
+    }
+    try {
+        const cards = await (0, developmentDeckLoader_1.loadVpCardCatalog)(firestore);
+        response.json({ status: 'ok', cards });
+    }
+    catch (error) {
+        console.error('[listVpCards] Failed to load cards', error);
+        response.status(500).json({
+            status: 'error',
+            result: {
+                errors: [error instanceof Error ? error.message : 'Unknown error'],
+            },
+        });
+    }
+});
 function createGameSession(roomId) {
     const turnOrder = new turnOrder_1.TurnOrderImpl();
     const phaseManager = new phaseManager_1.PhaseManagerImpl({
@@ -83,8 +106,10 @@ function createGameSession(roomId) {
             initialActionPoints: 2,
             publicDevelopmentSlots: 8,
             stagnationPenalty: 2,
+            publicVpSlots: 2,
         },
         initializeDevelopmentDeck,
+        initializeVpDeck,
     });
     const actionResolver = (0, actionResolver_1.createDefaultActionResolver)();
     return new gameSession_1.GameSessionImpl(roomId, {
@@ -112,12 +137,15 @@ function createInitialState(roomId) {
             lenses: {},
             lobbySlots: [],
             publicDevelopmentCards: [],
+            publicVpCards: [],
         },
         developmentDeck: [],
+        vpDeck: [],
         lensDeck: [],
         tasks: createSharedTasks(),
         logs: [],
         developmentDeckInitialized: false,
+        vpDeckInitialized: false,
     };
 }
 function createSharedTasks() {

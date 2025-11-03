@@ -9,7 +9,12 @@ import { GameSessionImpl } from '../../packages/domain/src/gameSession';
 import { PhaseManagerImpl } from '../../packages/domain/src/phaseManager';
 import { TurnOrderImpl } from '../../packages/domain/src/turnOrder';
 import { createDefaultActionResolver } from '../../packages/domain/src/actionResolver';
-import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog, loadVpCardCatalog } from './developmentDeckLoader';
+import {
+  createDevelopmentDeckInitializer,
+  createVpDeckInitializer,
+  loadDevelopmentCardCatalog,
+  loadVpCardCatalog,
+} from './developmentDeckLoader';
 import {
   createRoomFunction,
   joinRoomFunction,
@@ -41,6 +46,7 @@ const firestoreAdapter = new FirestoreAdapterImpl(firestoreLike, {
 
 const roomService = new RoomService(firestoreAdapter);
 const initializeDevelopmentDeck = createDevelopmentDeckInitializer(firestore);
+const initializeVpDeck = createVpDeckInitializer(firestore);
 
 const defaultRuleset: Ruleset = {
   version: 'prototype',
@@ -124,8 +130,10 @@ function createGameSession(roomId: string): GameSession {
       initialActionPoints: 2,
       publicDevelopmentSlots: 8,
       stagnationPenalty: 2,
+      publicVpSlots: 2,
     },
     initializeDevelopmentDeck,
+    initializeVpDeck,
   });
 
   const actionResolver = createDefaultActionResolver();
@@ -159,10 +167,12 @@ function createInitialState(roomId: string): GameState {
       publicVpCards: [],
     },
     developmentDeck: [],
+    vpDeck: [],
     lensDeck: [],
     tasks: createSharedTasks(),
     logs: [],
     developmentDeckInitialized: false,
+    vpDeckInitialized: false,
   };
 }
 

@@ -698,6 +698,7 @@ export default function PlayPage(): JSX.Element {
     const developmentCards = gameState?.board?.publicDevelopmentCards ?? [];
     const vpCards = gameState?.board?.publicVpCards ?? [];
     const developmentDeckCount = gameState?.developmentDeck.length ?? 0;
+    const vpDeckCount = gameState?.vpDeck?.length ?? 0;
     let developmentIndex = 0;
     let vpIndex = 0;
 
@@ -738,6 +739,10 @@ export default function PlayPage(): JSX.Element {
         vpIndex += 1;
         const card = resolveCard(cardId, [vpCardCatalog, developmentCardCatalog]);
         return { ...slot, cardId, card };
+      }
+
+      if (slot.role === "vpDeck") {
+        return { ...slot, cardId: null, count: vpDeckCount };
       }
 
       return { ...slot, cardId: null };

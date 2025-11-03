@@ -13,6 +13,8 @@ type DeckTemplate = DevelopmentCardId[];
 
 let cachedTemplate: DeckTemplate | null = null;
 let cacheFetchedAt = 0;
+let cachedVpTemplate: DeckTemplate | null = null;
+let vpCacheFetchedAt = 0;
 
 type AdminFirestore = {
   doc(path: string): {
@@ -49,6 +51,44 @@ export function createDevelopmentDeckInitializer(firestore: AdminFirestore) {
   };
 }
 
+export function createVpDeckInitializer(
+  firestore: AdminFirestore,
+  options: { publicSlots?: number } = {},
+) {
+  const requiredSlots = typeof options.publicSlots === 'number' ? options.publicSlots : 2;
+  return async function initializeVpDeck(gameState: GameState): Promise<void> {
+    if (!Array.isArray(gameState.board.publicVpCards)) {
+      gameState.board.publicVpCards = [];
+    }
+    if (!Array.isArray(gameState.vpDeck)) {
+      gameState.vpDeck = [];
+    }
+
+    if (gameState.vpDeckInitialized) {
+      if (gameState.board.publicVpCards.length < requiredSlots) {
+        replenishVpRow(gameState, requiredSlots);
+      }
+      return;
+    }
+
+    if (gameState.vpDeck.length === 0) {
+      const template = await getVpDeckTemplate(firestore);
+      if (!template || template.length === 0) {
+        console.warn(
+          `[vpDeck] No card IDs available from ${VP_COLLECTION_PATH}; deck remains empty.`,
+        );
+        gameState.board.publicVpCards = [];
+        gameState.vpDeckInitialized = true;
+        return;
+      }
+      gameState.vpDeck = shuffleDeck(template);
+    }
+
+    replenishVpRow(gameState, requiredSlots);
+    gameState.vpDeckInitialized = true;
+  };
+}
+
 async function getDeckTemplate(firestore: AdminFirestore): Promise<DeckTemplate> {
   const now = Date.now();
   if (cachedTemplate && now - cacheFetchedAt < CACHE_TTL_MS) {
@@ -72,6 +112,51 @@ async function getDeckTemplate(firestore: AdminFirestore): Promise<DeckTemplate>
     cachedTemplate = [];
     cacheFetchedAt = now;
     return cachedTemplate;
+  }
+}
+
+async function getVpDeckTemplate(firestore: AdminFirestore): Promise<DeckTemplate> {
+  const now = Date.now();
+  if (cachedVpTemplate && now - vpCacheFetchedAt < CACHE_TTL_MS) {
+    return cachedVpTemplate;
+  }
+
+  try {
+    const snapshot = await firestore.collection(VP_COLLECTION_PATH).get();
+    if (snapshot.empty) {
+      console.warn(
+        `[vpDeck] Collection ${VP_COLLECTION_PATH} is empty; deck cannot be built.`,
+      );
+      cachedVpTemplate = [];
+      vpCacheFetchedAt = now;
+      return cachedVpTemplate;
+    }
+
+    const result: DevelopmentCardId[] = [];
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data() ?? {};
+      const ids = extractCardIds(data);
+      if (ids.length > 0) {
+        result.push(...ids);
+        return;
+      }
+      const raw = typeof data.cardId === 'string' ? data.cardId : undefined;
+      const resolved = (raw ?? doc.id).trim();
+      if (resolved) {
+        result.push(resolved as DevelopmentCardId);
+      }
+    });
+    cachedVpTemplate = result;
+    vpCacheFetchedAt = now;
+    return cachedVpTemplate;
+  } catch (error) {
+    console.error(
+      `[vpDeck] Failed to load collection ${VP_COLLECTION_PATH}:`,
+      error instanceof Error ? error.message : error,
+    );
+    cachedVpTemplate = [];
+    vpCacheFetchedAt = now;
+    return cachedVpTemplate;
   }
 }
 
@@ -235,6 +320,24 @@ function shuffleDeck(source: DeckTemplate): DeckTemplate {
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
   return deck;
+}
+
+function replenishVpRow(gameState: GameState, requiredSlots: number): void {
+  const board = gameState.board;
+  if (!Array.isArray(board.publicVpCards)) {
+    board.publicVpCards = [];
+  }
+  if (!Array.isArray(gameState.vpDeck)) {
+    gameState.vpDeck = [];
+  }
+
+  while (board.publicVpCards.length < requiredSlots && gameState.vpDeck.length > 0) {
+    const card = gameState.vpDeck.shift();
+    if (!card) {
+      break;
+    }
+    board.publicVpCards.push(card);
+  }
 }
 
 export async function loadDevelopmentCardCatalog(
