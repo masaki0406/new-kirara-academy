@@ -6,6 +6,7 @@ import type {
 
 const DECK_DOCUMENT_PATH = 'card_foundation/cards_normal';
 const DECK_COLLECTION_PATH = 'cards_normal';
+const VP_COLLECTION_PATH = 'cards_vp';
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 type DeckTemplate = DevelopmentCardId[];
@@ -240,6 +241,52 @@ export async function loadDevelopmentCardCatalog(
   firestore: AdminFirestore,
 ): Promise<CatalogDevelopmentCard[]> {
   const snapshot = await firestore.collection(DECK_COLLECTION_PATH).get();
+  if (snapshot.empty) {
+    return [];
+  }
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data() ?? {};
+    const cardIdRaw = typeof data.cardId === 'string' ? data.cardId : undefined;
+    const cardId = (cardIdRaw ?? doc.id).trim();
+    const costItem = typeof data.cost_item === 'string' ? data.cost_item : undefined;
+    const costNumber = toOptionalNumber(data.cost_num);
+    const costPosition = toOptionalNumber(data.cost_pos);
+    const costLeftUp = toNumberMap(data.cost_leftup);
+    const costLeftDown = toNumberMap(data.cost_leftdown);
+
+    const extras: Record<string, unknown> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (
+        key === 'cardId' ||
+        key === 'cost_item' ||
+        key === 'cost_num' ||
+        key === 'cost_pos' ||
+        key === 'cost_leftup' ||
+        key === 'cost_leftdown'
+      ) {
+        return;
+      }
+      extras[key] = value;
+    });
+
+    return {
+      id: doc.id,
+      cardId,
+      costItem,
+      costNumber,
+      costPosition,
+      costLeftUp,
+      costLeftDown,
+      extras: Object.keys(extras).length > 0 ? extras : undefined,
+    };
+  });
+}
+
+export async function loadVpCardCatalog(
+  firestore: AdminFirestore,
+): Promise<CatalogDevelopmentCard[]> {
+  const snapshot = await firestore.collection(VP_COLLECTION_PATH).get();
   if (snapshot.empty) {
     return [];
   }

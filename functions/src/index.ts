@@ -9,7 +9,7 @@ import { GameSessionImpl } from '../../packages/domain/src/gameSession';
 import { PhaseManagerImpl } from '../../packages/domain/src/phaseManager';
 import { TurnOrderImpl } from '../../packages/domain/src/turnOrder';
 import { createDefaultActionResolver } from '../../packages/domain/src/actionResolver';
-import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog } from './developmentDeckLoader';
+import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog, loadVpCardCatalog } from './developmentDeckLoader';
 import {
   createRoomFunction,
   joinRoomFunction,
@@ -93,6 +93,28 @@ export const listDevelopmentCards = onRequest(async (request, response) => {
   }
 });
 
+export const listVpCards = onRequest(async (request, response) => {
+  if (request.method !== 'POST') {
+    response.status(405).json({
+      status: 'error',
+      result: { errors: ['Method not allowed. Use POST.'] },
+    });
+    return;
+  }
+  try {
+    const cards = await loadVpCardCatalog(firestore);
+    response.json({ status: 'ok', cards });
+  } catch (error) {
+    console.error('[listVpCards] Failed to load cards', error);
+    response.status(500).json({
+      status: 'error',
+      result: {
+        errors: [error instanceof Error ? error.message : 'Unknown error'],
+      },
+    });
+  }
+});
+
 function createGameSession(roomId: string): GameSession {
   const turnOrder = new TurnOrderImpl();
   const phaseManager = new PhaseManagerImpl({
@@ -134,6 +156,7 @@ function createInitialState(roomId: string): GameState {
       lenses: {},
       lobbySlots: [],
       publicDevelopmentCards: [],
+      publicVpCards: [],
     },
     developmentDeck: [],
     lensDeck: [],

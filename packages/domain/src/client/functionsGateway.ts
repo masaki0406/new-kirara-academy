@@ -43,6 +43,10 @@ interface ListDevelopmentCardsResponse extends StatusResponse {
   cards?: CatalogDevelopmentCard[];
 }
 
+interface ListVpCardsResponse extends StatusResponse {
+  cards?: CatalogDevelopmentCard[];
+}
+
 interface SelectCharacterParamsRequest {
   roomId: string;
   playerId: PlayerId;
@@ -145,6 +149,11 @@ export class FunctionsGateway {
 
   async listDevelopmentCards(): Promise<CatalogDevelopmentCard[]> {
     const response = await this.call<ListDevelopmentCardsResponse>('listDevelopmentCards', {});
+    return Array.isArray(response.cards) ? (response.cards as CatalogDevelopmentCard[]) : [];
+  }
+
+  async listVpCards(): Promise<CatalogDevelopmentCard[]> {
+    const response = await this.call<ListVpCardsResponse>('listVpCards', {});
     return Array.isArray(response.cards) ? (response.cards as CatalogDevelopmentCard[]) : [];
   }
 

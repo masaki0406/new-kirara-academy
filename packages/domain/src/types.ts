@@ -128,6 +128,7 @@ export interface BoardState {
   lenses: Record<LensId, LensState>;
   lobbySlots: LobbySlot[];
   publicDevelopmentCards: DevelopmentCardId[];
+  publicVpCards?: DevelopmentCardId[];
 }
 
 export interface ResourceCost {

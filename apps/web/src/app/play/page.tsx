@@ -195,6 +195,11 @@ export default function PlayPage(): JSX.Element {
   >(new Map());
   const [isLoadingDevelopmentCards, setIsLoadingDevelopmentCards] = useState(false);
   const [developmentCardError, setDevelopmentCardError] = useState<string | null>(null);
+  const [vpCardCatalog, setVpCardCatalog] = useState<Map<string, CatalogDevelopmentCard>>(
+    new Map(),
+  );
+  const [isLoadingVpCards, setIsLoadingVpCards] = useState(false);
+  const [vpCardError, setVpCardError] = useState<string | null>(null);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -211,6 +216,8 @@ export default function PlayPage(): JSX.Element {
     if (!trimmedBaseUrl) {
       setDevelopmentCardCatalog(new Map());
       setDevelopmentCardError(null);
+      setVpCardCatalog(new Map());
+      setVpCardError(null);
       return;
     }
 
@@ -246,6 +253,56 @@ export default function PlayPage(): JSX.Element {
       .finally(() => {
         if (!cancelled) {
           setIsLoadingDevelopmentCards(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [baseUrl]);
+
+  useEffect(() => {
+    const trimmedBaseUrl = baseUrl?.trim();
+    if (!trimmedBaseUrl) {
+      setVpCardCatalog(new Map());
+      setVpCardError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const gateway = new FunctionsGateway({ baseUrl: trimmedBaseUrl, fetchImpl: fetch });
+    setIsLoadingVpCards(true);
+    setVpCardError(null);
+
+    gateway
+      .listVpCards()
+      .then((cards) => {
+        if (cancelled) {
+          return;
+        }
+        const map = new Map<string, CatalogDevelopmentCard>();
+        cards.forEach((card) => {
+          const resolvedId = (card.cardId || card.id).trim();
+          if (resolvedId) {
+            map.set(resolvedId, card);
+          }
+          if (card.id && card.id !== resolvedId) {
+            map.set(card.id, card);
+          }
+        });
+        setVpCardCatalog(map);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        console.error("Failed to load VP cards", error);
+        setVpCardCatalog(new Map());
+        setVpCardError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingVpCards(false);
         }
       });
 
@@ -639,19 +696,36 @@ export default function PlayPage(): JSX.Element {
 
   const journalSlots = useMemo<JournalSlotData[]>(() => {
     const developmentCards = gameState?.board?.publicDevelopmentCards ?? [];
+    const vpCards = gameState?.board?.publicVpCards ?? [];
     const developmentDeckCount = gameState?.developmentDeck.length ?? 0;
     let developmentIndex = 0;
+    let vpIndex = 0;
+
+    const resolveCard = (
+      rawId: string | null,
+      catalogs: Map<string, CatalogDevelopmentCard>[],
+    ): CatalogDevelopmentCard | null => {
+      if (!rawId) {
+        return null;
+      }
+      const trimmed = rawId.trim();
+      for (const catalog of catalogs) {
+        if (catalog.size === 0) {
+          continue;
+        }
+        const match = catalog.get(rawId) ?? (trimmed !== rawId ? catalog.get(trimmed) : undefined);
+        if (match) {
+          return match;
+        }
+      }
+      return null;
+    };
 
     return JOURNAL_SLOT_LAYOUT.map((slot) => {
       if (slot.role === "development") {
         const cardId = developmentCards[developmentIndex] ?? null;
         developmentIndex += 1;
-        const card =
-          cardId !== null
-            ? developmentCardCatalog.get(cardId) ??
-              developmentCardCatalog.get(cardId.trim()) ??
-              null
-            : null;
+        const card = resolveCard(cardId, [developmentCardCatalog]);
         return { ...slot, cardId, card };
       }
 
@@ -659,9 +733,16 @@ export default function PlayPage(): JSX.Element {
         return { ...slot, cardId: null, count: developmentDeckCount };
       }
 
+      if (slot.role === "vp") {
+        const cardId = vpCards[vpIndex] ?? null;
+        vpIndex += 1;
+        const card = resolveCard(cardId, [vpCardCatalog, developmentCardCatalog]);
+        return { ...slot, cardId, card };
+      }
+
       return { ...slot, cardId: null };
     });
-  }, [gameState, developmentCardCatalog]);
+  }, [gameState, developmentCardCatalog, vpCardCatalog]);
 
   const foundationSlots = useMemo<FoundationSlot[]>(() => {
     const foundationCards =
@@ -865,6 +946,24 @@ export default function PlayPage(): JSX.Element {
                   )}
                 </div>
                 <div>
+                  <h4 className={styles.boardTitle}>公開 VP カード</h4>
+                  {isLoadingVpCards && (
+                    <p className={styles.muted}>VPカード情報を取得中です...</p>
+                  )}
+                  {vpCardError && (
+                    <p className={`${styles.status} ${styles["status-error"]}`}>
+                      VPカード情報の取得に失敗しました: {vpCardError}
+                    </p>
+                  )}
+                  {(gameState.board.publicVpCards ?? []).length === 0 ? (
+                    <p className={styles.muted}>VPカードは公開されていません。</p>
+                  ) : (
+                    <p className={styles.muted}>
+                      公開中の VP カードは研究日誌の VP カード置き場で確認できます。
+                    </p>
+                  )}
+                </div>
+                <div>
                   <h4 className={styles.boardTitle}>ロビー配置</h4>
                   {gameState.board.lobbySlots.length === 0 ? (
                     <p className={styles.muted}>ロビーは空です。</p>
@@ -1063,9 +1162,23 @@ export default function PlayPage(): JSX.Element {
                           break;
                         }
                         case "vp": {
-                          const value = slot.cardId ?? "空スロット";
-                          bodyContent = <span className={styles.journalSlotValue}>{value}</span>;
-                          hint = slot.cardId ? "VPカードを配置中" : "VPカードを配置してください";
+                          if (slot.card) {
+                            bodyContent = (
+                              <DevelopmentCardPreview card={slot.card} orientation="right" />
+                            );
+                            hint = "公開中の VP カード";
+                          } else if (slot.cardId) {
+                            const fallbackId = slot.cardId.trim() || slot.cardId;
+                            bodyContent = (
+                              <span className={styles.journalSlotValue}>{fallbackId}</span>
+                            );
+                            hint = "VPカード情報が未登録です";
+                          } else {
+                            bodyContent = (
+                              <span className={styles.journalSlotValue}>空スロット</span>
+                            );
+                            hint = "VPカードを配置してください";
+                          }
                           break;
                         }
                         case "vpDeck": {

@@ -21,7 +21,7 @@ import {
   type BeginCharacterSelectionRequest,
   type AdjustPlayerForTestParams,
 } from "@functions/handlers";
-import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog } from "@functions/developmentDeckLoader";
+import { createDevelopmentDeckInitializer, loadDevelopmentCardCatalog, loadVpCardCatalog } from "@functions/developmentDeckLoader";
 import type { CatalogDevelopmentCard } from "@domain/types";
 
 interface HandlerResult {
@@ -118,6 +118,10 @@ export async function handleFunctionsAction(action: string, body: Record<string,
       }
       case "listDevelopmentCards": {
         const cards = await loadDevelopmentCardCatalog(firestoreAdmin);
+        return ok({ cards: cards as CatalogDevelopmentCard[] });
+      }
+      case "listVpCards": {
+        const cards = await loadVpCardCatalog(firestoreAdmin);
         return ok({ cards: cards as CatalogDevelopmentCard[] });
       }
       default:

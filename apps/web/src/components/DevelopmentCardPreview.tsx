@@ -290,6 +290,32 @@ function buildTokens(
   });
 }
 
+function buildTokensFromEntries(
+  entries: CostPositionEntry[],
+  variant: TokenVariant,
+): TokenDefinition[] {
+  if (!entries || entries.length === 0) {
+    return [];
+  }
+  const map: Record<string, number> = {};
+  entries.forEach(({ key, value }) => {
+    const numeric = toOptionalNumber(value);
+    if (typeof numeric === "number") {
+      map[key] = numeric;
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.entries(value as Record<string, unknown>).forEach(([innerKey, innerValue]) => {
+        const innerNumeric = toOptionalNumber(innerValue);
+        if (typeof innerNumeric === "number") {
+          map[innerKey] = innerNumeric;
+        }
+      });
+    }
+  });
+  return buildTokens(map, variant);
+}
+
 function resolveCostEntries(
   sources: CostSource[],
   usedExtraKeys?: Set<string>,
@@ -563,9 +589,10 @@ function renderTokenRowContent(tokens: TokenDefinition[]): JSX.Element | null {
 interface Props {
   card: CatalogDevelopmentCard;
   className?: string;
+  orientation?: "left" | "right";
 }
 
-export function DevelopmentCardPreview({ card, className }: Props): JSX.Element {
+export function DevelopmentCardPreview({ card, className, orientation = "left" }: Props): JSX.Element {
   const displayName = (card.cardId ?? card.id ?? "").trim() || card.id || "未登録カード";
   const mainSymbol = resolveSymbolKind(card.costItem);
   const themeClass = getThemeClassName(mainSymbol);
@@ -609,17 +636,44 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
     })),
     usedExtraKeys,
   );
-  const tokensCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostPositionKey(key));
-  const tokensReward = buildTokens(
+  const tokensLeftCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostPositionKey(key));
+  const tokensLeftReward = buildTokens(
     card.costLeftDown,
     "reward",
     (key) => !isCostPositionKey(key),
   );
-  const hasAnyCornerCost =
+  const tokensRightCost = buildTokensFromEntries(costTopRight, "cost");
+  const tokensRightReward = buildTokensFromEntries(costBottomRight, "reward");
+  const primarySide = orientation;
+  const leftHasContent =
     costTopLeft.length > 0 ||
     costBottomLeft.length > 0 ||
+    tokensLeftCost.length > 0 ||
+    tokensLeftReward.length > 0;
+  const rightHasContent =
     costTopRight.length > 0 ||
-    costBottomRight.length > 0;
+    costBottomRight.length > 0 ||
+    tokensRightCost.length > 0 ||
+    tokensRightReward.length > 0;
+  let effectiveLeftTopEntries = costTopLeft;
+  let effectiveLeftBottomEntries = costBottomLeft;
+  let effectiveLeftCostTokens = tokensLeftCost;
+  let effectiveLeftRewardTokens = tokensLeftReward;
+  let effectiveRightTopEntries = costTopRight;
+  let effectiveRightBottomEntries = costBottomRight;
+  let effectiveRightCostTokens = tokensRightCost;
+  let effectiveRightRewardTokens = tokensRightReward;
+
+  if (orientation === "right" && !rightHasContent && leftHasContent) {
+    effectiveLeftTopEntries = [] as CostPositionEntry[];
+    effectiveLeftBottomEntries = [] as CostPositionEntry[];
+    effectiveLeftCostTokens = [] as TokenDefinition[];
+    effectiveLeftRewardTokens = [] as TokenDefinition[];
+    effectiveRightTopEntries = costTopLeft;
+    effectiveRightBottomEntries = costBottomLeft;
+    effectiveRightCostTokens = tokensLeftCost;
+    effectiveRightRewardTokens = tokensLeftReward;
+  }
   const extrasEntries = Object.entries(extrasRecord);
   const extras = extrasEntries.filter(
     ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
@@ -630,8 +684,10 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
   const renderItemSlot = (
     slot: "top" | "middle" | "bottom",
     side: "left" | "right",
+    costTokens: TokenDefinition[],
+    rewardTokens: TokenDefinition[],
   ): JSX.Element => {
-    const isLeft = side === "left";
+    const isPrimary = side === primarySide;
     const boxClass = classNames(
       styles.centerItemBox,
       slot === "top"
@@ -639,14 +695,14 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
         : slot === "bottom"
           ? styles.centerItemBoxBottom
           : styles.centerItemBoxMiddle,
-      isLeft ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
-      isLeft && badgeSlot === slot ? styles.centerItemBoxActive : undefined,
+      side === "left" ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
+      isPrimary && badgeSlot === slot ? styles.centerItemBoxActive : undefined,
     );
 
     const content: JSX.Element[] = [];
 
-    if (isLeft && slot === "top") {
-      const tokens = renderTokenRowContent(tokensCost);
+    if (isPrimary && slot === "top") {
+      const tokens = renderTokenRowContent(costTokens);
       if (tokens) {
         content.push(
           <div key="tokens" className={styles.centerTokenRow}>
@@ -656,8 +712,15 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
       }
     }
 
-    if (isLeft && badgeSlot === slot) {
-      const alignment: "left" | "center" | "right" = slot === "middle" ? "center" : "left";
+    if (isPrimary && badgeSlot === slot) {
+      const alignment: "left" | "center" | "right" =
+        primarySide === "right"
+          ? slot === "middle"
+            ? "center"
+            : "right"
+          : slot === "middle"
+            ? "center"
+            : "left";
       content.push(
         <div key="badge" className={styles.centerBadgeHolder}>
           {renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment)}
@@ -665,8 +728,8 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
       );
     }
 
-    if (isLeft && slot === "bottom") {
-      const tokens = renderTokenRowContent(tokensReward);
+    if (isPrimary && slot === "bottom") {
+      const tokens = renderTokenRowContent(rewardTokens);
       if (tokens) {
         content.push(
           <div key="tokens" className={styles.centerTokenRow}>
@@ -689,14 +752,16 @@ export function DevelopmentCardPreview({ card, className }: Props): JSX.Element 
 
   const renderCostColumn = (side: "left" | "right"): JSX.Element => {
     const isLeft = side === "left";
-    const topEntries = isLeft ? costTopLeft : costTopRight;
-    const bottomEntries = isLeft ? costBottomLeft : costBottomRight;
+    const topEntries = isLeft ? effectiveLeftTopEntries : effectiveRightTopEntries;
+    const bottomEntries = isLeft ? effectiveLeftBottomEntries : effectiveRightBottomEntries;
+    const costTokens = isLeft ? effectiveLeftCostTokens : effectiveRightCostTokens;
+    const rewardTokens = isLeft ? effectiveLeftRewardTokens : effectiveRightRewardTokens;
     return (
       <div className={classNames(styles.costColumn, isLeft ? styles.costColumnLeft : styles.costColumnRight)}>
         {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true)}
-        {renderItemSlot("top", side)}
-        {renderItemSlot("middle", side)}
-        {renderItemSlot("bottom", side)}
+        {renderItemSlot("top", side, costTokens, rewardTokens)}
+        {renderItemSlot("middle", side, costTokens, rewardTokens)}
+        {renderItemSlot("bottom", side, costTokens, rewardTokens)}
         {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true)}
       </div>
     );
