@@ -11,6 +11,8 @@ import {
   ResourceReward,
   ResourceType,
   ResourceWallet,
+  LabDefinition,
+  LabCostDefinition,
 } from './types';
 import { triggerEvent } from './triggerEngine';
 import {
@@ -21,6 +23,26 @@ import {
 } from './characterGrowth';
 
 const DEFAULT_LOBBY_STOCK = 4;
+
+function resolveLabCost(lab: LabDefinition | undefined): LabCostDefinition {
+  const base: LabCostDefinition = { actionPoints: 1 };
+  if (!lab?.cost) {
+    return base;
+  }
+  return {
+    actionPoints: lab.cost.actionPoints ?? 1,
+    creativity: lab.cost.creativity,
+    resources: lab.cost.resources,
+    lobby: lab.cost.lobby,
+  };
+}
+
+function getPlayerLobbyStock(player: PlayerState): number {
+  if (typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)) {
+    return player.lobbyStock;
+  }
+  return DEFAULT_LOBBY_STOCK;
+}
 
 export type Validator = (
   action: PlayerAction,
@@ -69,10 +91,6 @@ export const validateLabActivate: Validator = async (action, context) => {
     errors.push('現在の手番プレイヤーではありません');
   }
 
-  if (player.actionPoints < 1) {
-    errors.push('行動力が不足しています');
-  }
-
   const labId = typeof action.payload.labId === 'string' ? action.payload.labId : undefined;
   if (!labId) {
     errors.push('ラボIDが指定されていません');
@@ -83,6 +101,27 @@ export const validateLabActivate: Validator = async (action, context) => {
   if (!lab) {
     errors.push('指定されたラボが存在しません');
     return errors;
+  }
+
+  const cost = resolveLabCost(lab);
+  const actionPointCost = cost.actionPoints ?? 0;
+  if (player.actionPoints < actionPointCost) {
+    errors.push('行動力が不足しています');
+  }
+
+  if (cost.creativity && player.creativity < cost.creativity) {
+    errors.push('創造力が不足しています');
+  }
+
+  if (cost.resources && !canPayResourceCost(player.resources, cost.resources)) {
+    errors.push('必要な資源が不足しています');
+  }
+
+  if (cost.lobby) {
+    const stock = getPlayerLobbyStock(player);
+    if (stock < cost.lobby) {
+      errors.push('ロビー在庫が不足しています');
+    }
   }
 
   lab.rewards
@@ -112,7 +151,31 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
     throw new Error('指定されたラボが存在しません');
   }
 
-  player.actionPoints = Math.max(0, player.actionPoints - 1);
+  const cost = resolveLabCost(lab);
+  const actionPointCost = cost.actionPoints ?? 0;
+  if (actionPointCost > 0) {
+    player.actionPoints = Math.max(0, player.actionPoints - actionPointCost);
+  }
+  if (cost.creativity) {
+    player.creativity = Math.max(0, player.creativity - cost.creativity);
+  }
+  if (cost.resources) {
+    payResourceCost(player.resources, cost.resources);
+  }
+  if (cost.lobby) {
+    const currentStock = getPlayerLobbyStock(player);
+    const nextStock = Math.max(0, currentStock - cost.lobby);
+    player.lobbyStock = nextStock;
+    const placements = gameState.labPlacements;
+    const existingPlacement = placements.find(
+      (placement) => placement.labId === labId && placement.playerId === action.playerId,
+    );
+    if (existingPlacement) {
+      existingPlacement.count += cost.lobby;
+    } else {
+      placements.push({ labId, playerId: action.playerId, count: cost.lobby });
+    }
+  }
 
   for (const reward of lab.rewards) {
     applyReward(player, reward);

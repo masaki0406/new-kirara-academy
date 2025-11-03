@@ -46,9 +46,9 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     name: "集光",
     nameEn: "FOCUS LIGHT",
     side: "left",
-    material: "光の収束を行う観測装置を稼働し、研究に必要な光資源を生成します。",
-    cost: ["行動力 1", "追加コストなし"],
-    result: ["光トークン ×1 を獲得", "必要に応じて虹トークンへ変換"],
+    material: "集光ボードで創造力とロビーを使い、光資源を生成します。",
+    cost: ["創造力 ×1", "ロビー ×1 (集光ボードに配置)"],
+    result: ["光トークン ×1 を獲得"],
   },
   {
     id: "negotiation",
@@ -279,11 +279,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       id: "focus-light",
       label: "集光",
       category: "lab",
-      summary: summary || "行動力 1 / 追加コストなし",
+      summary: summary || "創造力 1 / ロビー 1 を消費",
       description:
         description ||
-        "観測装置を稼働させて光資源を生成します。資源確保の基本となる行動です。",
-      requirement: requireActionPoints(1),
+        "集光ボードにロビーを配置し、創造力を消費して光トークンを 1 つ得ます。",
+      requirement: combineRequirements(requireCreativity(1), requireLobbyStock()),
     };
   })(),
   (() => {

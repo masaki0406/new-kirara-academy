@@ -43,6 +43,12 @@ export interface AdjustPlayerForTestParams extends AdjustPlayerForTestPayload {
   roomId: string;
 }
 
+function ensureStateDefaults(state: GameState): void {
+  if (!Array.isArray(state.labPlacements)) {
+    state.labPlacements = [];
+  }
+}
+
 export class RoomService {
   constructor(private readonly adapter: FirestoreAdapter) {}
 
@@ -51,6 +57,7 @@ export class RoomService {
   async createRoom(params: CreateRoomParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
 
     if (!Array.isArray(state.turnOrder)) {
       state.turnOrder = [];
@@ -95,6 +102,7 @@ export class RoomService {
   async beginCharacterSelection(params: BeginCharacterSelectionParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
     const requester = state.players[params.requesterId];
     if (!requester) {
       throw new Error('Player not found.');
@@ -113,6 +121,7 @@ export class RoomService {
   async updateLifecycleStage(params: UpdateLifecycleStageParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
     state.lifecycleStage = params.stage;
     await snapshot.save();
     return state;
@@ -121,6 +130,7 @@ export class RoomService {
   async joinRoom(params: JoinRoomParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
 
     if (!Array.isArray(state.turnOrder)) {
       state.turnOrder = [];
@@ -164,6 +174,7 @@ export class RoomService {
   async leaveRoom(params: LeaveRoomParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
 
     delete state.players[params.playerId];
 
@@ -190,6 +201,7 @@ export class RoomService {
   async randomizeTurnOrder(roomId: string): Promise<PlayerId[] | null> {
     const snapshot = await this.adapter.loadGameState(roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
     const playerIds = Object.keys(state.players);
     if (playerIds.length === 0) {
       state.turnOrder = [];
@@ -207,6 +219,7 @@ export class RoomService {
   async updateTurnOrder(params: UpdateTurnOrderParams): Promise<PlayerId[]> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
 
     const playerIds = new Set(Object.keys(state.players));
     const nextOrder: PlayerId[] = [];
@@ -233,6 +246,7 @@ export class RoomService {
   async adjustPlayerForTest(params: AdjustPlayerForTestParams): Promise<void> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
     const player = state.players[params.playerId];
     if (!player) {
       throw new Error('Player not found.');
@@ -277,6 +291,7 @@ export class RoomService {
   async selectCharacter(params: SelectCharacterParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
 
     const player = state.players[params.playerId];
     if (!player) {
@@ -299,6 +314,7 @@ export class RoomService {
   async getRoomState(roomId: string): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(roomId);
     const state = snapshot.state;
+    ensureStateDefaults(state);
     if (!state.lifecycleStage) {
       state.lifecycleStage = 'lobby';
     }

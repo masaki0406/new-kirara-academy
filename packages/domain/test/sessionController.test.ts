@@ -126,6 +126,7 @@ function createState(id: string): GameState {
     lensDeck: [],
     tasks: {},
     logs: [],
+    labPlacements: [],
   };
 }
 

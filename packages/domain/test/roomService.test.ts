@@ -52,6 +52,7 @@ function createInitialState(): GameState {
     lensDeck: [],
     tasks: {},
     logs: [],
+    labPlacements: [],
   };
 }
 

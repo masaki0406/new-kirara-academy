@@ -115,6 +115,7 @@ function createState(roomId: string): GameState {
     lensDeck: [],
     tasks: {},
     logs: [],
+    labPlacements: [],
   };
 }
 

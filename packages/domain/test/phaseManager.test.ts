@@ -122,6 +122,7 @@ describe('PhaseManagerImpl.finalScoring', () => {
       lensDeck: [],
       tasks: {},
       logs: [],
+      labPlacements: [],
     };
 
     const save = vi.fn();
@@ -208,6 +209,7 @@ describe('PhaseManagerImpl.finalScoring', () => {
       lensDeck: [],
       tasks: {},
       logs: [],
+      labPlacements: [],
     };
 
     const save = vi.fn();

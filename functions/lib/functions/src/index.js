@@ -26,12 +26,46 @@ const firestoreAdapter = new firestoreAdapter_1.FirestoreAdapterImpl(firestoreLi
 const roomService = new roomService_1.RoomService(firestoreAdapter);
 const initializeDevelopmentDeck = (0, developmentDeckLoader_1.createDevelopmentDeckInitializer)(firestore);
 const initializeVpDeck = (0, developmentDeckLoader_1.createVpDeckInitializer)(firestore);
+const defaultLabs = {
+    polish: {
+        labId: 'polish',
+        name: '研磨',
+        description: '開発カードを加工し、レンズ製作の準備を進めます。',
+        cost: { actionPoints: 1 },
+        rewards: [],
+    },
+    'focus-light': {
+        labId: 'focus-light',
+        name: '集光',
+        description: '創造力とロビーを使って光資源を生成します。',
+        cost: { actionPoints: 1, creativity: 1, lobby: 1 },
+        rewards: [
+            { type: 'resource', value: { light: 1 } },
+        ],
+    },
+    negotiation: {
+        labId: 'negotiation',
+        name: '根回し',
+        description: '教員と調整し、次のラウンドに備えます。',
+        cost: { actionPoints: 1, creativity: 1 },
+        rewards: [],
+    },
+    spirit: {
+        labId: 'spirit',
+        name: '気合',
+        description: '士気を高め、創造力を取り戻します。',
+        cost: { actionPoints: 1, creativity: 1 },
+        rewards: [
+            { type: 'resource', value: { creativity: 1 } },
+        ],
+    },
+};
 const defaultRuleset = {
     version: 'prototype',
     resourceCaps: { light: 6, rainbow: 6, stagnation: 6 },
     endgameConversions: { light: 1, rainbow: 2, stagnation: 0 },
     characters: {},
-    labs: {},
+    labs: defaultLabs,
     lenses: {},
     developmentCards: {},
     tasks: createSharedTasks(),
@@ -144,6 +178,7 @@ function createInitialState(roomId) {
         lensDeck: [],
         tasks: createSharedTasks(),
         logs: [],
+        labPlacements: [],
         developmentDeckInitialized: false,
         vpDeckInitialized: false,
     };

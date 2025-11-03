@@ -200,6 +200,7 @@ export interface GameState {
   lensDeck: LensId[];
   tasks: Record<TaskId, TaskState>;
   logs: ActionLogEntry[];
+  labPlacements: LabPlacement[];
   developmentDeckInitialized?: boolean;
   vpDeckInitialized?: boolean;
   snapshotId?: string;
@@ -294,11 +295,25 @@ export interface DevelopmentCardDefinition extends DevelopmentCardState {}
 
 export interface TaskDefinition extends TaskState {}
 
+export interface LabCostDefinition {
+  actionPoints?: number;
+  creativity?: number;
+  resources?: ResourceCost;
+  lobby?: number;
+}
+
 export interface LabDefinition {
   labId: LabId;
   name: string;
   rewards: RewardDefinition[];
   description?: string;
+  cost?: LabCostDefinition;
+}
+
+export interface LabPlacement {
+  labId: LabId;
+  playerId: PlayerId;
+  count: number;
 }
 
 export interface CatalogDevelopmentCard {

@@ -5,6 +5,7 @@ import {
   validatePass,
   applyPass,
   validateLabActivate,
+  applyLabActivate,
   validateLensActivate,
   applyLensActivate,
   validateCollect,
@@ -120,6 +121,18 @@ const baseRuleset: Ruleset = {
     'lab-1': {
       labId: 'lab-1',
       name: 'Starter Lab',
+      cost: { actionPoints: 1 },
+      rewards: [
+        {
+          type: 'resource',
+          value: { light: 1 },
+        },
+      ],
+    },
+    'focus-light': {
+      labId: 'focus-light',
+      name: '集光',
+      cost: { actionPoints: 1, creativity: 1, lobby: 1 },
       rewards: [
         {
           type: 'resource',
@@ -194,6 +207,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
     lensDeck: [],
     tasks: {},
     logs: [],
+    labPlacements: [],
   };
 
   return {
@@ -218,6 +232,88 @@ function createContext(gameState: GameState, turnOrder?: TurnOrderImpl): ActionC
     turnOrder,
   };
 }
+
+describe('labActivate focus-light', () => {
+  it('consumes creativity and lobby stock while granting light', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 2,
+          creativity: 2,
+          lobbyStock: 2,
+        },
+      },
+      labPlacements: [],
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'focus-light' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toHaveLength(0);
+
+    await applyLabActivate(action, createContext(gameState));
+
+    const player = gameState.players.a;
+    expect(player.actionPoints).toBe(1);
+    expect(player.creativity).toBe(1);
+    expect(player.resources.light).toBe(1);
+    expect(player.lobbyStock).toBe(1);
+    expect(gameState.labPlacements).toEqual([
+      { labId: 'focus-light', playerId: 'a', count: 1 },
+    ]);
+  });
+
+  it('rejects when creativity or lobby stock are insufficient', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          creativity: 0,
+          lobbyStock: 0,
+        },
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'focus-light' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('創造力が不足しています');
+    expect(errors).toContain('ロビー在庫が不足しています');
+  });
+
+  it('prevents exceeding light capacity', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          resources: {
+            ...baseState.players.a.resources,
+            light: 6,
+          },
+          lobbyStock: 2,
+        },
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'focus-light' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('light の上限を超えます');
+  });
+});
 
 describe('rooting action', () => {
   it('allows rooting when no one has rooted yet', async () => {
