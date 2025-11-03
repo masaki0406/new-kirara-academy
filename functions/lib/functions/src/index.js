@@ -137,7 +137,8 @@ function createGameSession(roomId) {
         turnOrder,
         ruleset: defaultRuleset,
         rulesetConfig: {
-            initialActionPoints: 2,
+            initialActionPoints: 7,
+            supplyCreativity: 1,
             publicDevelopmentSlots: 8,
             stagnationPenalty: 2,
             publicVpSlots: 2,

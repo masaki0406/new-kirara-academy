@@ -47,11 +47,113 @@ const ruleset: Ruleset = {
       ],
     },
   },
-  labs: {},
+  labs: {
+    supply: {
+      labId: 'supply',
+      name: '供給',
+      rewards: [],
+    },
+  },
   lenses: {},
   developmentCards: {},
   tasks: {},
 };
+
+describe('PhaseManagerImpl.preparePhase', () => {
+  it('distributes supply phase resources and resets player state', async () => {
+    const turnOrder = new TurnOrderImpl();
+    const phaseManager = new PhaseManagerImpl({
+      turnOrder,
+      ruleset,
+      rulesetConfig: {
+        initialActionPoints: 7,
+        supplyCreativity: 1,
+        publicDevelopmentSlots: 8,
+        publicVpSlots: 2,
+      },
+    });
+
+    const gameState: GameState = {
+      roomId: 'room-1',
+      currentRound: 2,
+      currentPhase: 'end',
+      currentPlayerId: null,
+      lifecycleStage: 'inGame',
+      turnOrder: ['a', 'b'],
+      players: {
+        a: {
+          playerId: 'a',
+          displayName: 'Player A',
+          actionPoints: 3,
+          creativity: 2,
+          vp: 0,
+          resources: {
+            light: 0,
+            rainbow: 0,
+            stagnation: 0,
+            maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
+          },
+          hand: [],
+          ownedLenses: [],
+          tasksCompleted: [],
+          hasPassed: true,
+          unlockedCharacterNodes: [],
+          isRooting: true,
+        },
+        b: {
+          playerId: 'b',
+          displayName: 'Player B',
+          actionPoints: 1,
+          creativity: 5,
+          vp: 0,
+          resources: {
+            light: 0,
+            rainbow: 0,
+            stagnation: 0,
+            maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
+          },
+          hand: [],
+          ownedLenses: [],
+          tasksCompleted: [],
+          hasPassed: true,
+        },
+      },
+      board: {
+        lenses: {},
+        lobbySlots: [],
+        publicDevelopmentCards: [],
+        publicVpCards: [],
+      },
+      developmentDeck: [],
+      vpDeck: [],
+      lensDeck: [],
+      tasks: {},
+      logs: [],
+      labPlacements: [],
+    };
+
+    const save = vi.fn();
+    const mutable: MutableGameState = {
+      state: gameState,
+      save,
+    };
+
+    await phaseManager.preparePhase(mutable);
+
+    expect(gameState.currentPhase).toBe('setup');
+    expect(gameState.currentPlayerId).toBe('a');
+    expect(gameState.players.a.actionPoints).toBe(7);
+    expect(gameState.players.a.creativity).toBe(3);
+    expect(gameState.players.a.hasPassed).toBe(false);
+    expect(gameState.players.a.isRooting).toBeFalsy();
+    expect(gameState.players.b.actionPoints).toBe(7);
+    expect(gameState.players.b.creativity).toBe(6);
+    expect(gameState.players.b.hasPassed).toBe(false);
+    expect(gameState.board.publicDevelopmentCards).toHaveLength(0);
+    expect(gameState.board.publicVpCards).toHaveLength(0);
+    expect(save).toHaveBeenCalled();
+  });
+});
 
 describe('PhaseManagerImpl.finalScoring', () => {
   it('converts remaining resources into VP based on ruleset', async () => {
@@ -61,8 +163,10 @@ describe('PhaseManagerImpl.finalScoring', () => {
       ruleset,
       rulesetConfig: {
         stagnationPenalty: 2,
-        initialActionPoints: 2,
+        initialActionPoints: 7,
+        supplyCreativity: 1,
         publicDevelopmentSlots: 8,
+        publicVpSlots: 2,
       },
     });
 
@@ -146,8 +250,10 @@ describe('PhaseManagerImpl.finalScoring', () => {
       ruleset,
       rulesetConfig: {
         stagnationPenalty: 2,
-        initialActionPoints: 2,
+        initialActionPoints: 7,
+        supplyCreativity: 1,
         publicDevelopmentSlots: 8,
+        publicVpSlots: 2,
       },
     });
 

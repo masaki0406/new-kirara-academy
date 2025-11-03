@@ -18,10 +18,12 @@ class PhaseManagerImpl {
         this.deps.turnOrder.setInitialOrder(order);
         gameState.currentPlayerId = order[0];
         gameState.currentPhase = 'setup';
+        const supplyAp = this.deps.rulesetConfig?.initialActionPoints ?? 7;
+        const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
         // リソース・行動力初期化
         Object.values(gameState.players).forEach((player) => {
-            const initialAp = this.deps.rulesetConfig?.initialActionPoints ?? 2;
-            player.actionPoints = initialAp;
+            player.actionPoints = supplyAp;
+            player.creativity += supplyCreativity;
             player.hasPassed = false;
             if (player.isRooting) {
                 player.isRooting = false;

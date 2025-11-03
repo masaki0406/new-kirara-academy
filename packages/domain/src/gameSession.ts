@@ -73,9 +73,9 @@ export class GameSessionImpl implements GameSession {
 
       this.currentRound += 1;
       state.currentRound = this.currentRound;
-      state.currentPhase = 'end';
-      await mutableState.save();
-      this.currentPhase = 'end';
+      state.currentPhase = 'setup';
+      await this.deps.phaseManager.preparePhase(mutableState);
+      this.currentPhase = 'setup';
       return true;
     }
     return false;
