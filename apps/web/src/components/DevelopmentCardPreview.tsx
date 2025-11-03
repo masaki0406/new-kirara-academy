@@ -44,7 +44,14 @@ interface CostSource {
 const COST_POSITION_KEYS = ["costa", "costb", "costc"];
 const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"];
 const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"];
-const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"];
+const COST_RIGHT_UP_EXTRA_KEYS = [
+  "cost_right_up",
+  "costRightUp",
+  "costTopRight",
+  "cost_rightup",
+  "COST",
+  "cost",
+];
 const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
 
 const SYMBOL_DEFINITIONS: SymbolDefinition[] = [
@@ -552,6 +559,33 @@ function toOptionalNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function toOptionalIntegerLike(value: unknown): number | undefined {
+  const numeric = toOptionalNumber(value);
+  if (typeof numeric === "number") {
+    return Math.trunc(numeric);
+  }
+  if (typeof value === "string") {
+    const match = value.match(/(\d+)/);
+    if (match) {
+      const parsed = Number(match[1]);
+      if (!Number.isNaN(parsed)) {
+        return Math.trunc(parsed);
+      }
+    }
+  }
+  return undefined;
+}
+
+function toSlotFromPosition(position: number | undefined | null): "top" | "middle" | "bottom" {
+  if (position === 1) {
+    return "top";
+  }
+  if (position === 3) {
+    return "bottom";
+  }
+  return "middle";
+}
+
 function renderTokenRowContent(tokens: TokenDefinition[]): JSX.Element | null {
   if (tokens.length === 0) {
     return null;
@@ -611,6 +645,19 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
   const themeClass = getThemeClassName(mainSymbol);
   const usedExtraKeys = new Set<string>();
   const extrasRecord = card.extras ?? {};
+  const claimExtraValue = (targets: string | string[]) => {
+    const normalizedTargets = (Array.isArray(targets) ? targets : [targets]).map((target) =>
+      target.toLowerCase(),
+    );
+    const entry = Object.entries(extrasRecord).find(([key]) =>
+      normalizedTargets.includes(key.toLowerCase()),
+    );
+    if (!entry) {
+      return null;
+    }
+    usedExtraKeys.add(entry[0]);
+    return { key: entry[0], value: entry[1] };
+  };
   const costTopLeft = resolveCostEntries(
     [
       { data: card.costLeftUp, preferredKeys: COST_POSITION_KEYS },
@@ -687,6 +734,15 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
     effectiveRightCostTokens = tokensLeftCost;
     effectiveRightRewardTokens = tokensLeftReward;
   }
+  const vpRewardEntry = claimExtraValue(["getvp", "get_vp"]);
+  const vpRewardAmount = vpRewardEntry ? toOptionalNumber(vpRewardEntry.value) : undefined;
+  const vpPosEntry = claimExtraValue(["vppos", "vp_pos"]);
+  const vpPosValue = vpPosEntry ? toOptionalIntegerLike(vpPosEntry.value) : undefined;
+  const hasVpReward = typeof vpRewardAmount === "number" && Number.isFinite(vpRewardAmount);
+  const vpRewardSlot: "top" | "middle" | "bottom" | null = hasVpReward
+    ? toSlotFromPosition(vpPosValue)
+    : null;
+  const vpRewardText = hasVpReward ? `VP × ${vpRewardAmount}` : null;
   const extrasEntries = Object.entries(extrasRecord);
   const extras = extrasEntries.filter(
     ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
@@ -737,6 +793,14 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
       content.push(
         <div key="badge" className={styles.centerBadgeHolder}>
           {renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment)}
+        </div>,
+      );
+    }
+
+    if (isPrimary && vpRewardText && vpRewardSlot === slot) {
+      content.push(
+        <div key="vp" className={styles.centerTokenRow}>
+          <span className={styles.centerTokenText}>{vpRewardText}</span>
         </div>,
       );
     }
