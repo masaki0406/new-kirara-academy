@@ -17,7 +17,7 @@ import {
   type GrowthNodeDefinition,
 } from "@domain/characterGrowth";
 import { FunctionsGateway } from "@domain/client/functionsGateway";
-import type { CatalogDevelopmentCard } from "@domain/types";
+import type { CatalogDevelopmentCard, PlayerState, ResourceWallet } from "@domain/types";
 
 type LabActionSide = "left" | "right";
 
@@ -101,6 +101,257 @@ const LAB_TASKS: TaskDefinition[] = [
     description: "完成したレンズを 3 枚揃えると卒業課題に挑戦可能です。",
   },
 ];
+
+type PlayerActionCategory = "lab" | "student" | "general";
+
+interface PlayerActionDefinition {
+  id: string;
+  label: string;
+  category: PlayerActionCategory;
+  summary: string;
+  description: string;
+  requirement?: PlayerActionRequirement;
+  highlight?: "primary" | "warning";
+}
+
+interface PlayerActionContext {
+  player: PlayerState;
+  resources: ResourceWallet;
+  lobby: LobbySummary;
+}
+
+interface PlayerActionAvailability {
+  available: boolean;
+  reason?: string;
+}
+
+type PlayerActionRequirement = (context: PlayerActionContext) => PlayerActionAvailability;
+
+interface PlayerActionGroupViewModel {
+  category: PlayerActionCategory;
+  label: string;
+  actions: PlayerActionViewModel[];
+}
+
+interface PlayerActionViewModel extends PlayerActionDefinition {
+  available: boolean;
+  reason?: string;
+}
+
+const PLAYER_ACTION_CATEGORY_ORDER: PlayerActionCategory[] = ["lab", "student", "general"];
+
+const PLAYER_ACTION_CATEGORY_LABELS: Record<PlayerActionCategory, string> = {
+  lab: "研究棟アクション",
+  student: "学生アクション",
+  general: "共通操作",
+};
+
+const LAB_ACTION_LOOKUP = new Map<string, LabActionDefinition>(
+  LAB_ACTIONS.map((action) => [action.id, action]),
+);
+
+type ResourceKey = "light" | "rainbow" | "stagnation";
+
+const RESOURCE_LABELS: Record<ResourceKey, string> = {
+  light: "光トークン",
+  rainbow: "虹トークン",
+  stagnation: "淀みトークン",
+};
+
+function getLabActionText(id: string): { summary: string; description: string } {
+  const entry = LAB_ACTION_LOOKUP.get(id);
+  if (!entry) {
+    return {
+      summary: "",
+      description: "",
+    };
+  }
+  const summary = entry.cost.join(" / ");
+  const description = `${entry.material} 【効果】${entry.result.join(" / ")}`;
+  return { summary, description };
+}
+
+function combineRequirements(
+  ...requirements: PlayerActionRequirement[]
+): PlayerActionRequirement {
+  return (context) => {
+    for (const requirement of requirements) {
+      const result = requirement(context);
+      if (!result.available) {
+        return result;
+      }
+    }
+    return { available: true };
+  };
+}
+
+function requireActionPoints(amount: number): PlayerActionRequirement {
+  return ({ player }) =>
+    player.actionPoints >= amount
+      ? { available: true }
+      : { available: false, reason: `行動力が ${amount} 必要です` };
+}
+
+function requireCreativity(amount: number): PlayerActionRequirement {
+  return ({ player }) =>
+    player.creativity >= amount
+      ? { available: true }
+      : { available: false, reason: `創造力が ${amount} 必要です` };
+}
+
+function requireResource(resource: ResourceKey, amount: number): PlayerActionRequirement {
+  return ({ resources }) =>
+    resources[resource] >= amount
+      ? { available: true }
+      : { available: false, reason: `${RESOURCE_LABELS[resource]}が ${amount} 必要です` };
+}
+
+function requireOwnedLens(): PlayerActionRequirement {
+  return ({ player }) =>
+    player.ownedLenses.length > 0
+      ? { available: true }
+      : { available: false, reason: "所有しているレンズが必要です" };
+}
+
+function requireLobbyStock(): PlayerActionRequirement {
+  return ({ lobby }) =>
+    lobby.stock > 0
+      ? { available: true }
+      : { available: false, reason: "ロビー在庫が不足しています" };
+}
+
+function requireNotPassed(): PlayerActionRequirement {
+  return ({ player }) =>
+    !player.hasPassed
+      ? { available: true }
+      : { available: false, reason: "すでにパス済みです" };
+}
+
+function requireActionPointsExhausted(): PlayerActionRequirement {
+  return ({ player }) =>
+    player.actionPoints === 0
+      ? { available: true }
+      : { available: false, reason: "行動力を使い切ったあとに実行します" };
+}
+
+const PLAYER_ACTIONS: PlayerActionDefinition[] = [
+  (() => {
+    const { summary, description } = getLabActionText("polish");
+    return {
+      id: "polish",
+      label: "研磨",
+      category: "lab",
+      summary: summary || "行動力 1 / 淀みトークン ×1",
+      description:
+        description ||
+        "共有設備を使いレンズの研磨とロビー整理を進めます。研究の基礎アクションです。",
+      requirement: combineRequirements(requireActionPoints(1), requireResource("stagnation", 1)),
+      highlight: "primary",
+    };
+  })(),
+  (() => {
+    const { summary, description } = getLabActionText("focus-light");
+    return {
+      id: "focus-light",
+      label: "集光",
+      category: "lab",
+      summary: summary || "行動力 1 / 追加コストなし",
+      description:
+        description ||
+        "観測装置を稼働させて光資源を生成します。資源確保の基本となる行動です。",
+      requirement: requireActionPoints(1),
+    };
+  })(),
+  (() => {
+    const { summary, description } = getLabActionText("negotiation");
+    return {
+      id: "negotiation",
+      label: "根回し",
+      category: "student",
+      summary: summary || "行動力 1 / 創造力 ×1",
+      description:
+        description ||
+        "講義棟で教員と調整し、次ラウンドの優先枠やロビー再配置のチャンスを得ます。",
+      requirement: combineRequirements(requireActionPoints(1), requireCreativity(1)),
+      highlight: "primary",
+    };
+  })(),
+  (() => {
+    const { summary, description } = getLabActionText("spirit");
+    return {
+      id: "spirit",
+      label: "気合",
+      category: "student",
+      summary: summary || "行動力 1 / 創造力 ×1",
+      description:
+        description ||
+        "学生ラウンジで士気を高め、創造力の回復や淀みの浄化を行います。",
+      requirement: combineRequirements(requireActionPoints(1), requireCreativity(1)),
+    };
+  })(),
+  {
+    id: "lens-activate",
+    label: "レンズ起動",
+    category: "general",
+    summary: "行動力 1 / 所有レンズを起動",
+    description: "所有するレンズを起動し、対応する効果を発動します。",
+    requirement: combineRequirements(requireActionPoints(1), requireOwnedLens()),
+    highlight: "primary",
+  },
+  {
+    id: "move",
+    label: "移動",
+    category: "general",
+    summary: "行動力 1 / ロビーを移動",
+    description: "ロビーコマを移動して、研究や交渉を行うポジションを調整します。",
+    requirement: combineRequirements(requireActionPoints(1), requireLobbyStock()),
+  },
+  {
+    id: "restart",
+    label: "再起動",
+    category: "general",
+    summary: "行動力を消費後に再度立て直す",
+    description: "行動力を使い切ったあとで態勢を立て直し、次の展開に備えます。",
+    requirement: combineRequirements(requireActionPointsExhausted()),
+  },
+  {
+    id: "collect",
+    label: "収集",
+    category: "general",
+    summary: "行動力 1 / 資源を獲得",
+    description: "共有ボードやカードの効果を利用して、追加の資源を獲得します。",
+    requirement: requireActionPoints(1),
+  },
+  {
+    id: "will",
+    label: "意思",
+    category: "student",
+    summary: "創造力 1 / 意思を固める",
+    description: "意思力を整え、キャラクター固有の効果を発動するための準備を行います。",
+    requirement: requireCreativity(1),
+  },
+  {
+    id: "persuasion",
+    label: "説得",
+    category: "student",
+    summary: "創造力 2 / 相手との交渉",
+    description: "追加コストを支払いながら、他プレイヤーとの交渉や共有枠の獲得を狙います。",
+    requirement: requireCreativity(2),
+  },
+  {
+    id: "pass",
+    label: "パス",
+    category: "general",
+    summary: "いつでも使用可",
+    description: "これ以上行動しない場合はパスを宣言し、次のプレイヤーへ手番を渡します。",
+    requirement: requireNotPassed(),
+    highlight: "warning",
+  },
+];
+
+function classNames(...values: Array<string | false | null | undefined>): string {
+  return values.filter(Boolean).join(" ");
+}
 
 type JournalSlotRole = "development" | "developmentDeck" | "vp" | "vpDeck";
 
@@ -488,6 +739,50 @@ export default function PlayPage(): JSX.Element {
       totalTokens: baselineStock,
     };
   }, [gameState, localGamePlayer]);
+
+  const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
+    if (!localGamePlayer) {
+      return [];
+    }
+    const resources = effectiveResources ?? localGamePlayer.resources;
+    const context: PlayerActionContext = {
+      player: localGamePlayer,
+      resources,
+      lobby: lobbySummary,
+    };
+    const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
+
+    PLAYER_ACTIONS.forEach((action) => {
+      const availability = (action.requirement ?? (() => ({ available: true })))(context);
+      const view: PlayerActionViewModel = {
+        ...action,
+        available: availability.available,
+        reason: availability.available ? undefined : availability.reason,
+      };
+      const existing = groups.get(action.category);
+      if (existing) {
+        existing.actions.push(view);
+      } else {
+        groups.set(action.category, {
+          category: action.category,
+          label: PLAYER_ACTION_CATEGORY_LABELS[action.category],
+          actions: [view],
+        });
+      }
+    });
+
+    const ordered = Array.from(groups.values()).sort(
+      (a, b) =>
+        PLAYER_ACTION_CATEGORY_ORDER.indexOf(a.category) -
+        PLAYER_ACTION_CATEGORY_ORDER.indexOf(b.category),
+    );
+
+    ordered.forEach((group) => {
+      group.actions.sort((a, b) => a.label.localeCompare(b.label, "ja"));
+    });
+
+    return ordered;
+  }, [localGamePlayer, effectiveResources, lobbySummary]);
 
   const growthNodes = localCharacterProfile?.growthNodes ?? [];
 
@@ -1339,12 +1634,95 @@ export default function PlayPage(): JSX.Element {
                               ))}
                             </ul>
                           </div>
-                        ) : (
+                    ) : (
                           <p className={styles.muted}>
                             このキャラクターの成長能力データはまだ登録されていません。
                           </p>
                         )}
                       </>
+                    ) : null}
+                    {playerActionsByCategory.length > 0 ? (
+                      <div className={styles.playerActionsSection}>
+                        <div className={styles.playerActionsHeader}>
+                          <h5 className={styles.playerActionsTitle}>行動メニュー</h5>
+                          <p className={styles.playerActionsCaption}>
+                            行動可能な選択肢と条件を一覧で確認できます。条件を満たすと実行ボタンが有効になります。
+                          </p>
+                        </div>
+                        <div className={styles.playerActionGroups}>
+                          {playerActionsByCategory.map((group) => {
+                            const availableCount = group.actions.filter(
+                              (action) => action.available,
+                            ).length;
+                            return (
+                              <section key={group.category} className={styles.playerActionGroup}>
+                                <div className={styles.playerActionGroupHeader}>
+                                  <h6 className={styles.playerActionGroupLabel}>{group.label}</h6>
+                                  <span className={styles.playerActionGroupCount}>
+                                    {availableCount} / {group.actions.length} 実行可能
+                                  </span>
+                                </div>
+                                <div className={styles.playerActionGrid}>
+                                  {group.actions.map((action) => {
+                                    const cardClass = classNames(
+                                      styles.playerActionCard,
+                                      action.available
+                                        ? styles.playerActionCardAvailable
+                                        : styles.playerActionCardDisabled,
+                                      action.available && action.highlight === "primary"
+                                        ? styles.playerActionCardHighlightPrimary
+                                        : undefined,
+                                      action.available && action.highlight === "warning"
+                                        ? styles.playerActionCardHighlightWarning
+                                        : undefined,
+                                    );
+                                    const badgeClass = classNames(
+                                      styles.playerActionStatus,
+                                      action.available
+                                        ? styles.playerActionStatusAvailable
+                                        : styles.playerActionStatusBlocked,
+                                    );
+                                    return (
+                                      <div key={action.id} className={cardClass}>
+                                        <div className={styles.playerActionHeader}>
+                                          <span className={styles.playerActionName}>
+                                            {action.label}
+                                          </span>
+                                          <span className={badgeClass}>
+                                            {action.available
+                                              ? "実行可能"
+                                              : action.reason ?? "条件不足"}
+                                          </span>
+                                        </div>
+                                        <p className={styles.playerActionSummary}>
+                                          {action.summary}
+                                        </p>
+                                        <p className={styles.playerActionDescription}>
+                                          {action.description}
+                                        </p>
+                                        {!action.available && action.reason ? (
+                                          <p className={styles.playerActionHint}>
+                                            不足: {action.reason}
+                                          </p>
+                                        ) : null}
+                                        <div className={styles.playerActionFooter}>
+                                          <button
+                                            type="button"
+                                            className={styles.playerActionButton}
+                                            disabled={!action.available}
+                                          >
+                                            行動を選択
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </section>
+                            );
+                          })}
+                        </div>
+                      </div>
                     ) : null}
                     {debugEnabled && localGamePlayer ? (
                       <details className={styles.debugPanel}>

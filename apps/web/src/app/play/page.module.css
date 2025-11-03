@@ -1088,6 +1088,241 @@
   gap: 10px;
 }
 
+.playerActionsSection {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.playerActionsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.playerActionsTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #1d4ed8;
+}
+
+.playerActionsCaption {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  flex: 1 1 auto;
+}
+
+.playerActionGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.playerActionGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.playerActionGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.playerActionGroupLabel {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0f172a;
+}
+
+.playerActionGroupCount {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.playerActionGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.playerActionCard {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.playerActionCardAvailable {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+
+.playerActionCardHighlightPrimary {
+  border-color: rgba(37, 99, 235, 0.55);
+  background: rgba(59, 130, 246, 0.14);
+}
+
+.playerActionCardHighlightWarning {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.playerActionCardDisabled {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(241, 245, 249, 0.72);
+  color: #94a3b8;
+}
+
+.playerActionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.playerActionName {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.playerActionStatus {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.playerActionStatusAvailable {
+  background: rgba(59, 130, 246, 0.18);
+  color: #1d4ed8;
+}
+
+.playerActionStatusBlocked {
+  background: rgba(148, 163, 184, 0.3);
+  color: #475569;
+}
+
+.playerActionSummary {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.playerActionDescription {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #4b5563;
+}
+
+.playerActionHint {
+  margin: 0;
+  font-size: 11px;
+  color: #b91c1c;
+}
+
+.playerActionFooter {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.playerActionButton {
+  border-radius: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  background: rgba(255, 255, 255, 0.98);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.playerActionButton:hover {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.playerActionButton:disabled {
+  border-color: rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  cursor: not-allowed;
+}
+
+@media (prefers-color-scheme: dark) {
+  .playerActionsCaption {
+    color: #94a3b8;
+  }
+
+  .playerActionCard {
+    background: rgba(15, 23, 42, 0.7);
+    border-color: rgba(148, 163, 184, 0.32);
+  }
+
+  .playerActionCardAvailable {
+    border-color: rgba(96, 165, 250, 0.45);
+    box-shadow: 0 2px 10px rgba(30, 64, 175, 0.35);
+  }
+
+  .playerActionCardHighlightPrimary {
+    background: rgba(37, 99, 235, 0.28);
+    border-color: rgba(147, 197, 253, 0.6);
+  }
+
+  .playerActionCardHighlightWarning {
+    background: rgba(248, 113, 113, 0.25);
+    border-color: rgba(248, 150, 150, 0.55);
+  }
+
+  .playerActionCardDisabled {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: rgba(203, 213, 225, 0.62);
+  }
+
+  .playerActionDescription {
+    color: #94a3b8;
+  }
+
+  .playerActionButton {
+    background: rgba(15, 23, 42, 0.6);
+    color: #bfdbfe;
+    border-color: rgba(147, 197, 253, 0.5);
+  }
+
+  .playerActionButton:hover {
+    background: rgba(37, 99, 235, 0.24);
+  }
+
+  .playerActionButton:disabled {
+    background: rgba(51, 65, 85, 0.6);
+    color: rgba(148, 163, 184, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+  }
+}
+
 .growthTitle {
   margin: 0;
   font-size: 13px;
