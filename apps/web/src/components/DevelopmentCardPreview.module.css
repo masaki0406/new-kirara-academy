@@ -324,23 +324,9 @@
   align-items: flex-end;
 }
 
-.centerBadgeHolder {
-  display: flex;
-  justify-content: center;
-}
-
-.centerTokenRow {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  width: 100%;
-}
-
-.centerTokenText {
-  font-size: 14px;
-  font-weight: 600;
+.centerVpText {
+  font-size: 16px;
+  font-weight: 700;
   color: #0f172a;
 }
 
@@ -348,72 +334,6 @@
   font-size: 12px;
   color: rgba(148, 163, 184, 0.8);
   text-align: center;
-}
-
-.centerToken {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  color: #0f172a;
-}
-
-.centerTokenIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--symbol-color, #2563eb);
-}
-
-.centerTokenSvg {
-  width: 20px;
-  height: 20px;
-}
-
-.centerTokenMultiplier {
-  font-size: 12px;
-  color: #475569;
-}
-
-.centerTokenValue {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.costBadge {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-}
-
-.costBadgeLeft {
-  align-items: flex-start;
-}
-
-.costBadgeRight {
-  align-items: flex-end;
-}
-
-.costBadgeContent {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.costBadgeContentLeft {
-  justify-content: flex-start;
-}
-
-.costBadgeContentCenter {
-  justify-content: center;
-}
-
-.costBadgeContentRight {
-  justify-content: flex-end;
 }
 
 .costPositionBox {

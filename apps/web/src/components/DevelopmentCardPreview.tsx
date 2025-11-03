@@ -13,21 +13,11 @@ type CardSymbolKind =
   | "growth"
   | "neutral";
 
-type TokenVariant = "cost" | "reward" | "meta";
-
 interface SymbolDefinition {
   kind: CardSymbolKind;
   label: string;
   keywords: string[];
   icon: JSX.Element;
-}
-
-interface TokenDefinition {
-  id: string;
-  kind: CardSymbolKind;
-  label: string;
-  value?: number;
-  variant: TokenVariant;
 }
 
 interface CostPositionEntry {
@@ -273,56 +263,6 @@ function resolveSymbolKind(raw?: string | null): SymbolDefinition | null {
   return directMatch ?? null;
 }
 
-function buildTokens(
-  map: Record<string, number> | undefined,
-  variant: TokenVariant,
-  filter?: (key: string, value: number) => boolean,
-): TokenDefinition[] {
-  if (!map) {
-    return [];
-  }
-  return Object.entries(map)
-    .filter(([rawKey, value]) => (filter ? filter(rawKey, value) : true))
-    .map(([rawKey, value], index) => {
-    const resolved = resolveSymbolKind(rawKey);
-    const kind = resolved?.kind ?? "neutral";
-    const label = resolved?.label ?? rawKey;
-    return {
-      id: `${variant}-${rawKey}-${index}`,
-      kind,
-      label,
-      value,
-      variant,
-    };
-  });
-}
-
-function buildTokensFromEntries(
-  entries: CostPositionEntry[],
-  variant: TokenVariant,
-): TokenDefinition[] {
-  if (!entries || entries.length === 0) {
-    return [];
-  }
-  const map: Record<string, number> = {};
-  entries.forEach(({ key, value }) => {
-    const numeric = toOptionalNumber(value);
-    if (typeof numeric === "number") {
-      map[key] = numeric;
-      return;
-    }
-    if (value && typeof value === "object") {
-      Object.entries(value as Record<string, unknown>).forEach(([innerKey, innerValue]) => {
-        const innerNumeric = toOptionalNumber(innerValue);
-        if (typeof innerNumeric === "number") {
-          map[innerKey] = innerNumeric;
-        }
-      });
-    }
-  });
-  return buildTokens(map, variant);
-}
-
 function resolveCostEntries(
   sources: CostSource[],
   usedExtraKeys?: Set<string>,
@@ -419,16 +359,6 @@ function classNames(...values: Array<string | undefined | null>): string {
   return values.filter(Boolean).join(" ");
 }
 
-function formatTokenValue(token: TokenDefinition): string | undefined {
-  if (token.value === undefined || Number.isNaN(token.value)) {
-    return undefined;
-  }
-  if (token.variant === "reward" && token.value > 0) {
-    return `+${token.value}`;
-  }
-  return String(token.value);
-}
-
 function renderCostBoxes(
   entries: CostPositionEntry[],
   alignment: "left" | "right",
@@ -462,58 +392,6 @@ function renderCostBoxes(
           <span className={styles.costPositionValue}>{formatExtraValue(entry.value)}</span>
         </div>
       ))}
-    </div>
-  );
-}
-
-function renderCostBadge(
-  symbol: SymbolDefinition | null,
-  costNumber: number | undefined,
-  costItem: string | undefined,
-  alignment: "left" | "center" | "right",
-): JSX.Element {
-  const badgeClass = classNames(
-    styles.costBadge,
-    alignment === "left"
-      ? styles.costBadgeLeft
-      : alignment === "right"
-        ? styles.costBadgeRight
-        : undefined,
-  );
-  const contentClass = classNames(
-    styles.costBadgeContent,
-    alignment === "left"
-      ? styles.costBadgeContentLeft
-      : alignment === "right"
-        ? styles.costBadgeContentRight
-        : styles.costBadgeContentCenter,
-  );
-  const iconClass = classNames(
-    styles.centerTokenIcon,
-    symbol ? styles[`symbol${symbol.kind.charAt(0).toUpperCase()}${symbol.kind.slice(1)}`] : undefined,
-  );
-  const valueText =
-    typeof costNumber === "number" && Number.isFinite(costNumber) ? String(costNumber) : "-";
-
-  return (
-    <div className={badgeClass}>
-      <div className={contentClass}>
-        <span className={iconClass}>
-          {symbol?.icon ?? (
-            <svg
-              className={styles.centerTokenSvg}
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <circle cx="12" cy="12" r="8" fill="currentColor" />
-            </svg>
-          )}
-        </span>
-        <span className={styles.centerTokenMultiplier}>×</span>
-        <span className={styles.centerTokenValue}>{valueText}</span>
-      </div>
-      <span className={styles.centerLabel}>{symbol?.label ?? costItem ?? "未分類"}</span>
     </div>
   );
 }
@@ -586,53 +464,6 @@ function toSlotFromPosition(position: number | undefined | null): "top" | "middl
   return "middle";
 }
 
-function renderTokenRowContent(tokens: TokenDefinition[]): JSX.Element | null {
-  if (tokens.length === 0) {
-    return null;
-  }
-
-  return (
-    <>
-      {tokens.map((token) => {
-        const symbolDefinition = SYMBOL_DEFINITIONS.find(
-          (definition) => definition.kind === token.kind,
-        );
-        const iconClass = classNames(
-          styles.centerTokenIcon,
-          styles[
-            `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
-          ] ?? undefined,
-        );
-        return (
-          <span key={token.id} className={styles.centerToken}>
-            <span className={iconClass}>
-              {symbolDefinition?.icon ?? (
-                <svg
-                  className={styles.centerTokenSvg}
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <circle cx="12" cy="12" r="8" fill="currentColor" />
-                </svg>
-              )}
-            </span>
-            {token.value !== undefined ? (
-              <>
-                <span className={styles.centerTokenMultiplier}>×</span>
-                <span className={styles.centerTokenValue}>{formatTokenValue(token)}</span>
-              </>
-            ) : null}
-            <span className={styles.srOnly}>
-              {token.label} {formatTokenValue(token) ?? ""}
-            </span>
-          </span>
-        );
-      })}
-    </>
-  );
-}
-
 interface Props {
   card: CatalogDevelopmentCard;
   className?: string;
@@ -696,44 +527,7 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
     })),
     usedExtraKeys,
   );
-  const tokensLeftCost = buildTokens(card.costLeftUp, "cost", (key) => !isCostPositionKey(key));
-  const tokensLeftReward = buildTokens(
-    card.costLeftDown,
-    "reward",
-    (key) => !isCostPositionKey(key),
-  );
-  const tokensRightCost = buildTokensFromEntries(costTopRight, "cost");
-  const tokensRightReward = buildTokensFromEntries(costBottomRight, "reward");
   const primarySide = orientation;
-  const leftHasContent =
-    costTopLeft.length > 0 ||
-    costBottomLeft.length > 0 ||
-    tokensLeftCost.length > 0 ||
-    tokensLeftReward.length > 0;
-  const rightHasContent =
-    costTopRight.length > 0 ||
-    costBottomRight.length > 0 ||
-    tokensRightCost.length > 0 ||
-    tokensRightReward.length > 0;
-  let effectiveLeftTopEntries = costTopLeft;
-  let effectiveLeftBottomEntries = costBottomLeft;
-  let effectiveLeftCostTokens = tokensLeftCost;
-  let effectiveLeftRewardTokens = tokensLeftReward;
-  let effectiveRightTopEntries = costTopRight;
-  let effectiveRightBottomEntries = costBottomRight;
-  let effectiveRightCostTokens = tokensRightCost;
-  let effectiveRightRewardTokens = tokensRightReward;
-
-  if (orientation === "right" && !rightHasContent && leftHasContent) {
-    effectiveLeftTopEntries = [] as CostPositionEntry[];
-    effectiveLeftBottomEntries = [] as CostPositionEntry[];
-    effectiveLeftCostTokens = [] as TokenDefinition[];
-    effectiveLeftRewardTokens = [] as TokenDefinition[];
-    effectiveRightTopEntries = costTopLeft;
-    effectiveRightBottomEntries = costBottomLeft;
-    effectiveRightCostTokens = tokensLeftCost;
-    effectiveRightRewardTokens = tokensLeftReward;
-  }
   const vpRewardEntry = claimExtraValue(["getvp", "get_vp"]);
   const vpRewardAmount = vpRewardEntry ? toOptionalNumber(vpRewardEntry.value) : undefined;
   const vpPosEntry = claimExtraValue(["vppos", "vp_pos"]);
@@ -747,16 +541,13 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
   const extras = extrasEntries.filter(
     ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
   );
-  const badgeSlot: "top" | "middle" | "bottom" =
-    card.costPosition === 1 ? "top" : card.costPosition === 3 ? "bottom" : "middle";
 
   const renderItemSlot = (
     slot: "top" | "middle" | "bottom",
     side: "left" | "right",
-    costTokens: TokenDefinition[],
-    rewardTokens: TokenDefinition[],
   ): JSX.Element => {
     const isPrimary = side === primarySide;
+    const isActive = isPrimary && vpRewardText && vpRewardSlot === slot;
     const boxClass = classNames(
       styles.centerItemBox,
       slot === "top"
@@ -765,80 +556,30 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
           ? styles.centerItemBoxBottom
           : styles.centerItemBoxMiddle,
       side === "left" ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
-      isPrimary && badgeSlot === slot ? styles.centerItemBoxActive : undefined,
+      isActive ? styles.centerItemBoxActive : undefined,
     );
 
-    const content: JSX.Element[] = [];
-
-    if (isPrimary && slot === "top") {
-      const tokens = renderTokenRowContent(costTokens);
-      if (tokens) {
-        content.push(
-          <div key="tokens" className={styles.centerTokenRow}>
-            {tokens}
-          </div>,
-        );
-      }
-    }
-
-    if (isPrimary && badgeSlot === slot) {
-      const alignment: "left" | "center" | "right" =
-        primarySide === "right"
-          ? slot === "middle"
-            ? "center"
-            : "right"
-          : slot === "middle"
-            ? "center"
-            : "left";
-      content.push(
-        <div key="badge" className={styles.centerBadgeHolder}>
-          {renderCostBadge(mainSymbol, card.costNumber, card.costItem, alignment)}
-        </div>,
-      );
-    }
-
-    if (isPrimary && vpRewardText && vpRewardSlot === slot) {
-      content.push(
-        <div key="vp" className={styles.centerTokenRow}>
-          <span className={styles.centerTokenText}>{vpRewardText}</span>
-        </div>,
-      );
-    }
-
-    if (isPrimary && slot === "bottom") {
-      const tokens = renderTokenRowContent(rewardTokens);
-      if (tokens) {
-        content.push(
-          <div key="tokens" className={styles.centerTokenRow}>
-            {tokens}
-          </div>,
-        );
-      }
-    }
-
-    if (content.length === 0) {
-      content.push(
-        <span key="placeholder" className={styles.centerPlaceholder}>
-          -
-        </span>,
-      );
-    }
-
-    return <div className={boxClass}>{content}</div>;
+    return (
+      <div className={boxClass}>
+        {isActive ? (
+          <span className={styles.centerVpText}>{vpRewardText}</span>
+        ) : (
+          <span className={styles.centerPlaceholder}>-</span>
+        )}
+      </div>
+    );
   };
 
   const renderCostColumn = (side: "left" | "right"): JSX.Element => {
     const isLeft = side === "left";
-    const topEntries = isLeft ? effectiveLeftTopEntries : effectiveRightTopEntries;
-    const bottomEntries = isLeft ? effectiveLeftBottomEntries : effectiveRightBottomEntries;
-    const costTokens = isLeft ? effectiveLeftCostTokens : effectiveRightCostTokens;
-    const rewardTokens = isLeft ? effectiveLeftRewardTokens : effectiveRightRewardTokens;
+    const topEntries = isLeft ? costTopLeft : costTopRight;
+    const bottomEntries = isLeft ? costBottomLeft : costBottomRight;
     return (
       <div className={classNames(styles.costColumn, isLeft ? styles.costColumnLeft : styles.costColumnRight)}>
         {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true)}
-        {renderItemSlot("top", side, costTokens, rewardTokens)}
-        {renderItemSlot("middle", side, costTokens, rewardTokens)}
-        {renderItemSlot("bottom", side, costTokens, rewardTokens)}
+        {renderItemSlot("top", side)}
+        {renderItemSlot("middle", side)}
+        {renderItemSlot("bottom", side)}
         {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true)}
       </div>
     );
