@@ -8,7 +8,7 @@ import {
   DEFAULT_FUNCTIONS_BASE_URL,
   useSession,
 } from "../../context/SessionContext";
-import { CHARACTER_CATALOG, type CharacterGrowthNode } from "../../data/characters";
+import { CHARACTER_CATALOG, getCharacterColor, type CharacterGrowthNode } from "../../data/characters";
 import { DevelopmentCardPreview } from "../../components/DevelopmentCardPreview";
 import {
   buildUnlockedSetWithAuto,
@@ -38,7 +38,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "POLISH",
     side: "left",
     material: "共有設備が揃う研究棟で、レンズ改良を進めるための研磨機を利用できます。",
-    cost: ["行動力 1", "淀みトークン ×1"],
+    cost: ["行動力 1", "淀みトークン ×1", "ロビー ×1 (研磨スペースへ配置)"],
     result: ["未完成のレンズを研究進捗 +1", "共有レンズのロビーを整理"],
   },
   {
@@ -56,7 +56,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "NEGOTIATION",
     side: "right",
     material: "講義棟で教員と調整し、次の研究予定に優先枠を確保します。",
-    cost: ["行動力 1", "創造力 ×1"],
+    cost: ["行動力 1", "創造力 ×1", "ロビー ×1 (交渉スペースへ配置)"],
     result: ["次ラウンド開始時の手番候補に登録", "ロビー 1 体を即時再配置"],
   },
   {
@@ -65,7 +65,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "SPIRIT",
     side: "right",
     material: "学生ラウンジで気持ちを整え、集中力と士気を高めます。",
-    cost: ["行動力 1", "創造力 ×1"],
+    cost: ["行動力 1", "創造力 ×1", "ロビー ×1 (ラウンジへ配置)"],
     result: ["創造力 +1", "淀みトークン ×1 を浄化して光へ変換"],
   },
 ];
@@ -160,6 +160,24 @@ interface PolishSelectionDetail {
   totals: { left: number; right: number };
 }
 
+interface LabPlacementView {
+  playerId: string;
+  name: string;
+  count: number;
+  color?: string;
+}
+
+
+const PLAYER_COLOR_PALETTE = [
+  "#ef4444",
+  "#22c55e",
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ec4899",
+  "#10b981",
+];
 
 const PLAYER_ACTION_CATEGORY_ORDER: PlayerActionCategory[] = ["lab", "student", "general"];
 
@@ -268,7 +286,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       description:
         description ||
         "共有設備を使いレンズの研磨とロビー整理を進めます。研究の基礎アクションです。",
-      requirement: combineRequirements(requireActionPoints(1), requireResource("stagnation", 1)),
+      requirement: combineRequirements(
+        requireActionPoints(1),
+        requireResource("stagnation", 1),
+        requireLobbyStock(),
+      ),
       highlight: "primary",
       implemented: true,
     };
@@ -297,7 +319,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       description:
         description ||
         "講義棟で教員と調整し、次ラウンドの優先枠やロビー再配置のチャンスを得ます。",
-      requirement: combineRequirements(requireActionPoints(1), requireCreativity(1)),
+      requirement: combineRequirements(
+        requireActionPoints(1),
+        requireCreativity(1),
+        requireLobbyStock(),
+      ),
       highlight: "primary",
     };
   })(),
@@ -311,7 +337,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       description:
         description ||
         "学生ラウンジで士気を高め、創造力の回復や淀みの浄化を行います。",
-      requirement: combineRequirements(requireActionPoints(1), requireCreativity(1)),
+      requirement: combineRequirements(
+        requireActionPoints(1),
+        requireCreativity(1),
+        requireLobbyStock(),
+      ),
     };
   })(),
   {
@@ -1294,6 +1324,21 @@ export default function PlayPage(): JSX.Element {
     });
   }, [gameState, developmentCardCatalog, vpCardCatalog]);
 
+  const playerColorMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (gameState?.players) {
+      const playerIds = Object.keys(gameState.players);
+      playerIds.forEach((playerId, index) => {
+        const player = gameState.players[playerId];
+        const characterColor =
+          player?.characterId ? getCharacterColor(player.characterId) : undefined;
+        const fallbackColor = PLAYER_COLOR_PALETTE[index % PLAYER_COLOR_PALETTE.length];
+        map.set(playerId, characterColor ?? fallbackColor);
+      });
+    }
+    return map;
+  }, [gameState?.players]);
+
   const polishDevelopmentOptions = useMemo(
     () =>
       localGamePlayer
@@ -1313,6 +1358,30 @@ export default function PlayPage(): JSX.Element {
       card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
     }));
   }, [gameState?.board?.publicVpCards, vpCardCatalog, developmentCardCatalog]);
+
+  const labPlacementSummary = useMemo(() => {
+    const summary = new Map<string, LabPlacementView[]>();
+    if (!gameState?.labPlacements) {
+      return summary;
+    }
+    gameState.labPlacements.forEach(({ labId, playerId, count }) => {
+      if (!count || count <= 0) {
+        return;
+      }
+      const player = gameState.players[playerId];
+      const name = player?.displayName ?? playerId;
+      const list = summary.get(labId) ?? [];
+      const existing = list.find((entry) => entry.playerId === playerId);
+      const color = playerColorMap.get(playerId);
+      if (existing) {
+        existing.count += count;
+      } else {
+        list.push({ playerId, name, count, color });
+      }
+      summary.set(labId, list);
+    });
+    return summary;
+  }, [gameState?.labPlacements, gameState?.players, playerColorMap]);
 
   return (
     <div className={styles.page}>
@@ -1572,6 +1641,32 @@ export default function PlayPage(): JSX.Element {
                               ))}
                             </ul>
                           </div>
+                          <div className={styles.labPlacementSection}>
+                            <span className={styles.labDetailLabel}>ロビー配置</span>
+                            {(() => {
+                              const placements = labPlacementSummary.get(action.id) ?? [];
+                              if (placements.length === 0) {
+                                return <p className={styles.labPlacementEmpty}>ロビー未配置</p>;
+                              }
+                              return (
+                                <ul className={styles.labPlacementList}>
+                                  {placements.map((placement) => (
+                                    <li key={placement.playerId} className={styles.labPlacementItem}>
+                                      <span className={styles.labPlacementIdentity}>
+                                        <span
+                                          className={styles.labPlacementDot}
+                                          style={{ backgroundColor: placement.color ?? "#94a3b8" }}
+                                          aria-hidden="true"
+                                        />
+                                        <span className={styles.labPlacementName}>{placement.name}</span>
+                                      </span>
+                                      <span className={styles.labPlacementCount}>×{placement.count}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </section>
                     ))}
@@ -1600,6 +1695,32 @@ export default function PlayPage(): JSX.Element {
                                 <li key={item}>{item}</li>
                               ))}
                             </ul>
+                          </div>
+                          <div className={styles.labPlacementSection}>
+                            <span className={styles.labDetailLabel}>ロビー配置</span>
+                            {(() => {
+                              const placements = labPlacementSummary.get(action.id) ?? [];
+                              if (placements.length === 0) {
+                                return <p className={styles.labPlacementEmpty}>ロビー未配置</p>;
+                              }
+                              return (
+                                <ul className={styles.labPlacementList}>
+                                  {placements.map((placement) => (
+                                    <li key={placement.playerId} className={styles.labPlacementItem}>
+                                      <span className={styles.labPlacementIdentity}>
+                                        <span
+                                          className={styles.labPlacementDot}
+                                          style={{ backgroundColor: placement.color ?? "#94a3b8" }}
+                                          aria-hidden="true"
+                                        />
+                                        <span className={styles.labPlacementName}>{placement.name}</span>
+                                      </span>
+                                      <span className={styles.labPlacementCount}>×{placement.count}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              );
+                            })()}
                           </div>
                         </div>
                       </section>

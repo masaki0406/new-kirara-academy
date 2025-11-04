@@ -56,7 +56,7 @@ const defaultLabs: Ruleset['labs'] = {
     labId: 'polish',
     name: '研磨',
     description: '開発カードを加工し、レンズ製作の準備を進めます。',
-    cost: { actionPoints: 1 },
+    cost: { actionPoints: 1, lobby: 1 },
     rewards: [],
   },
   'focus-light': {
@@ -72,14 +72,14 @@ const defaultLabs: Ruleset['labs'] = {
     labId: 'negotiation',
     name: '根回し',
     description: '教員との調整で次の展開に備えます。',
-    cost: { actionPoints: 1, creativity: 1 },
+    cost: { actionPoints: 1, creativity: 1, lobby: 1 },
     rewards: [],
   },
   spirit: {
     labId: 'spirit',
     name: '気合',
     description: '士気を高め、創造力を取り戻します。',
-    cost: { actionPoints: 1, creativity: 1 },
+    cost: { actionPoints: 1, creativity: 1, lobby: 1 },
     rewards: [
       { type: 'resource', value: { creativity: 1 } },
     ],

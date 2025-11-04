@@ -519,3 +519,41 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     ],
   },
 ];
+
+const CHARACTER_COLOR_SEQUENCE = [
+  "#ef4444",
+  "#22c55e",
+  "#3b82f6",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ec4899",
+  "#10b981",
+];
+
+const CHARACTER_COLOR_MAP = new Map<string, string>();
+
+const CHARACTER_COLOR_OVERRIDES: Record<string, string> = {
+  "shirogami-yuu": "#6b7280",
+  "akito-daidou": "#f97316",
+  "kazari-hizumi": "#facc15",
+  "midori-rina": "#22c55e",
+  "aono-haruyo": "#3b82f6",
+  "akane-hiyori": "#ef4444",
+};
+
+CHARACTER_CATALOG.forEach((character, index) => {
+  const override = CHARACTER_COLOR_OVERRIDES[character.id];
+  if (override) {
+    CHARACTER_COLOR_MAP.set(character.id, override);
+    return;
+  }
+  if (!CHARACTER_COLOR_MAP.has(character.id)) {
+    const paletteIndex = index % CHARACTER_COLOR_SEQUENCE.length;
+    CHARACTER_COLOR_MAP.set(character.id, CHARACTER_COLOR_SEQUENCE[paletteIndex]);
+  }
+});
+
+export function getCharacterColor(characterId: string): string | undefined {
+  return CHARACTER_COLOR_MAP.get(characterId);
+}
