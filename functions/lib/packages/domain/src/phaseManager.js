@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PhaseManagerImpl = void 0;
+const MAX_ACTION_POINTS = 10;
+const MAX_CREATIVITY = 5;
 class PhaseManagerImpl {
     constructor(deps) {
         this.deps = deps;
@@ -22,8 +24,8 @@ class PhaseManagerImpl {
         const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
         // リソース・行動力初期化
         Object.values(gameState.players).forEach((player) => {
-            player.actionPoints = supplyAp;
-            player.creativity += supplyCreativity;
+            player.actionPoints = Math.min(supplyAp, MAX_ACTION_POINTS);
+            player.creativity = Math.min(MAX_CREATIVITY, player.creativity + supplyCreativity);
             player.hasPassed = false;
             if (player.isRooting) {
                 player.isRooting = false;

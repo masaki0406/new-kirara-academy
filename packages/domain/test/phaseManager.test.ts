@@ -147,7 +147,7 @@ describe('PhaseManagerImpl.preparePhase', () => {
     expect(gameState.players.a.hasPassed).toBe(false);
     expect(gameState.players.a.isRooting).toBeFalsy();
     expect(gameState.players.b.actionPoints).toBe(7);
-    expect(gameState.players.b.creativity).toBe(6);
+    expect(gameState.players.b.creativity).toBe(5);
     expect(gameState.players.b.hasPassed).toBe(false);
     expect(gameState.board.publicDevelopmentCards).toHaveLength(0);
     expect(gameState.board.publicVpCards).toHaveLength(0);

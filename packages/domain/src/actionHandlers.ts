@@ -23,6 +23,22 @@ import {
 } from './characterGrowth';
 
 const DEFAULT_LOBBY_STOCK = 4;
+const MAX_ACTION_POINTS = 10;
+const MAX_CREATIVITY = 5;
+const TOTAL_RESOURCE_LIMIT = 12;
+const RESOURCE_ORDER: ResourceType[] = ['light', 'rainbow', 'stagnation'];
+
+function getTotalResources(wallet: ResourceWallet): number {
+  return RESOURCE_ORDER.reduce((sum, resource) => sum + wallet[resource], 0);
+}
+
+function clampActionPoints(value: number): number {
+  return Math.max(0, Math.min(MAX_ACTION_POINTS, value));
+}
+
+function clampCreativity(value: number): number {
+  return Math.max(0, Math.min(MAX_CREATIVITY, value));
+}
 
 function resolveLabCost(lab: LabDefinition | undefined): LabCostDefinition {
   const base: LabCostDefinition = { actionPoints: 1 };
@@ -809,13 +825,41 @@ function countPlayerLenses(gameState: GameState, player: PlayerState): number {
 
 function resourceRewardEntries(reward: ResourceReward): Array<[ResourceType, number]> {
   const entries: Array<[ResourceType, number]> = [];
-  (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
+  RESOURCE_ORDER.forEach((resource) => {
     const amount = reward[resource];
     if (typeof amount === 'number' && amount > 0) {
       entries.push([resource, amount]);
     }
   });
   return entries;
+}
+
+function addResourcesWithLimits(wallet: ResourceWallet, reward: ResourceReward): void {
+  let totalResources = getTotalResources(wallet);
+  RESOURCE_ORDER.forEach((resource) => {
+    const increment = reward[resource];
+    if (typeof increment !== 'number' || increment <= 0) {
+      return;
+    }
+    if (wallet.unlimited?.[resource]) {
+      wallet[resource] += increment;
+      totalResources += increment;
+      return;
+    }
+    const capacityRemaining = wallet.maxCapacity[resource] - wallet[resource];
+    if (capacityRemaining <= 0) {
+      return;
+    }
+    const totalRemaining = TOTAL_RESOURCE_LIMIT - totalResources;
+    if (totalRemaining <= 0) {
+      return;
+    }
+    const allowed = Math.min(increment, capacityRemaining, totalRemaining);
+    if (allowed > 0) {
+      wallet[resource] += allowed;
+      totalResources += allowed;
+    }
+  });
 }
 
 function applyReward(player: { resources: ResourceWallet; vp: number; actionPoints: number; creativity: number }, reward: {
@@ -830,14 +874,12 @@ function applyReward(player: { resources: ResourceWallet; vp: number; actionPoin
     }
     case 'resource': {
       const value = reward.value as ResourceReward;
-      for (const [resource, amount] of resourceRewardEntries(value)) {
-        player.resources[resource] += amount;
-      }
+      addResourcesWithLimits(player.resources, value);
       if (typeof value.actionPoints === 'number') {
-        player.actionPoints += value.actionPoints;
+        player.actionPoints = clampActionPoints(player.actionPoints + value.actionPoints);
       }
       if (typeof value.creativity === 'number') {
-        player.creativity += value.creativity;
+        player.creativity = clampCreativity(player.creativity + value.creativity);
       }
       break;
     }

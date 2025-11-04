@@ -140,6 +140,28 @@ const baseRuleset: Ruleset = {
         },
       ],
     },
+    'resource-burst': {
+      labId: 'resource-burst',
+      name: '資源供給',
+      cost: { actionPoints: 1 },
+      rewards: [
+        {
+          type: 'resource',
+          value: { light: 6, rainbow: 6, stagnation: 6 },
+        },
+      ],
+    },
+    'reward-boost': {
+      labId: 'reward-boost',
+      name: '精神統一',
+      cost: { actionPoints: 1 },
+      rewards: [
+        {
+          type: 'resource',
+          value: { actionPoints: 5, creativity: 5 },
+        },
+      ],
+    },
   },
   lenses: {},
   developmentCards: {},
@@ -312,6 +334,68 @@ describe('labActivate focus-light', () => {
 
     const errors = await validateLabActivate(action, createContext(gameState));
     expect(errors).toContain('light の上限を超えます');
+  });
+});
+
+describe('labActivate resource handling', () => {
+  it('limits total resources gained to the global cap', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 3,
+          creativity: 0,
+        },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'resource-burst' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toHaveLength(0);
+
+    await applyLabActivate(action, createContext(gameState));
+
+    const resources = gameState.players.a.resources;
+    expect(resources.light).toBe(6);
+    expect(resources.rainbow).toBe(6);
+    expect(resources.stagnation).toBe(0);
+    expect(resources.light + resources.rainbow + resources.stagnation).toBeLessThanOrEqual(12);
+  });
+
+  it('clamps action points and creativity gained from rewards', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 9,
+          creativity: 4,
+        },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'reward-boost' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toHaveLength(0);
+
+    await applyLabActivate(action, createContext(gameState));
+
+    const player = gameState.players.a;
+    expect(player.actionPoints).toBeLessThanOrEqual(10);
+    expect(player.creativity).toBeLessThanOrEqual(5);
+    expect(player.actionPoints).toBe(10);
+    expect(player.creativity).toBe(5);
   });
 });
 

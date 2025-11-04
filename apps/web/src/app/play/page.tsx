@@ -284,6 +284,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
         description ||
         "集光ボードにロビーを配置し、創造力を消費して光トークンを 1 つ得ます。",
       requirement: combineRequirements(requireCreativity(1), requireLobbyStock()),
+      implemented: true,
     };
   })(),
   (() => {
@@ -540,6 +541,7 @@ export default function PlayPage(): JSX.Element {
   const [polishSelectionMap, setPolishSelectionMap] = useState<PolishSelectionMap>({});
   const [polishFoundationChoice, setPolishFoundationChoice] = useState<FoundationCost | null>(null);
   const [isPolishSubmitting, setIsPolishSubmitting] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -998,6 +1000,39 @@ export default function PlayPage(): JSX.Element {
       setIsPolishSubmitting(false);
     }
   }, [polishSummary.canSubmit, closePolishDialog, setFeedback]);
+
+  const handleExecuteLab = useCallback(
+    async (labId: string) => {
+      if (!localPlayer?.id) {
+        setFeedback("先にロビーでプレイヤーとして参加してください。");
+        return;
+      }
+      setPendingActionId(labId);
+      try {
+        await performAction({
+          action: {
+            playerId: localPlayer.id,
+            actionType: "labActivate",
+            payload: { labId },
+          },
+        });
+        setFeedback(
+          labId === "focus-light"
+            ? "集光を実行しました。"
+            : "ラボアクションを実行しました。",
+        );
+        await refresh();
+      } catch (error) {
+        console.error(error);
+        setFeedback(
+          error instanceof Error ? error.message : "ラボアクションの実行に失敗しました。",
+        );
+      } finally {
+        setPendingActionId(null);
+      }
+    },
+    [localPlayer?.id, performAction, refresh],
+  );
 
   const growthNodes = localCharacterProfile?.growthNodes ?? [];
 
@@ -1909,7 +1944,8 @@ export default function PlayPage(): JSX.Element {
                                       polishDevelopmentOptions.length > 0 ||
                                       polishVpOptions.length > 0;
                                     const buttonDisabled =
-                                      !action.available || !implemented || !hasPolishSources;
+                                      !action.available || !implemented || !hasPolishSources ||
+                                      pendingActionId === action.id;
                                     const handleActionClick = () => {
                                       if (!implemented) {
                                         setFeedback("この行動は現在準備中です。");
@@ -1917,6 +1953,8 @@ export default function PlayPage(): JSX.Element {
                                       }
                                       if (action.id === "polish") {
                                         openPolishDialog();
+                                      } else if (action.id === "focus-light") {
+                                        void handleExecuteLab("focus-light");
                                       }
                                     };
                                     return (
