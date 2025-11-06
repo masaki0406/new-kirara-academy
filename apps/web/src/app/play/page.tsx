@@ -244,8 +244,8 @@ interface PolishSelectionDetail {
   card: CatalogDevelopmentCard | null;
   flipped: boolean;
   values: {
-    left: { top: number; bottom: number };
-    right: { top: number; bottom: number };
+    left: { top: CostSlotArray; bottom: CostSlotArray };
+    right: { top: CostSlotArray; bottom: CostSlotArray };
   };
   costItem: string | null;
   costNumber: number | null;
