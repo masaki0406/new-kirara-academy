@@ -2,6 +2,7 @@ import { describe, it, beforeEach, expect } from 'vitest';
 import { RoomService, CreateRoomParams } from '../src/roomService';
 import { FirestoreAdapterImpl, FirestoreLike, DocumentReferenceLike } from '../src/firestoreAdapter';
 import type { GameState } from '../src/types';
+import { DEFAULT_FOUNDATION_STOCK, FOUNDATION_COSTS } from '../src/types';
 
 function createFirestoreLike(): FirestoreLike {
   const store = new Map<string, unknown>();
@@ -32,6 +33,17 @@ function createFirestoreLike(): FirestoreLike {
   };
 }
 
+function createFoundationStock(): Record<number, number> {
+  const stock: Record<number, number> = {};
+  FOUNDATION_COSTS.forEach((cost) => {
+    const value = DEFAULT_FOUNDATION_STOCK[cost];
+    if (typeof value === 'number') {
+      stock[cost] = value;
+    }
+  });
+  return stock;
+}
+
 function createInitialState(): GameState {
   return {
     roomId: 'room-test',
@@ -46,6 +58,7 @@ function createInitialState(): GameState {
       lobbySlots: [],
       publicDevelopmentCards: [],
       publicVpCards: [],
+      foundationStock: createFoundationStock(),
     },
     developmentDeck: [],
     vpDeck: [],

@@ -18,6 +18,7 @@ import {
 import { TurnOrderImpl } from '@domain/turnOrder';
 import {
   ActionContext,
+  DEFAULT_FOUNDATION_STOCK,
   GameState,
   PlayerAction,
   Ruleset,
@@ -209,6 +210,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       },
       collectedDevelopmentCards: [],
       collectedVpCards: [],
+      collectedFoundationCards: {},
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -229,6 +231,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       },
       collectedDevelopmentCards: [],
       collectedVpCards: [],
+      collectedFoundationCards: {},
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -249,6 +252,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       lobbySlots: [],
       publicDevelopmentCards: ['dev-1'],
       publicVpCards: [],
+      foundationStock: { ...DEFAULT_FOUNDATION_STOCK },
     },
     developmentDeck: [],
     vpDeck: [],
@@ -978,9 +982,64 @@ describe('trigger events', () => {
     expect(await validateCollect(action, context)).toHaveLength(0);
     await applyCollect(action, context);
 
-    expect(gameState.players.a.collectedVpCards).toEqual(['vp-2']);
-    expect(gameState.board.publicVpCards.length).toBe(2);
-    expect(gameState.board.publicVpCards[1]).toBe('vp-3');
+  expect(gameState.players.a.collectedVpCards).toEqual(['vp-2']);
+  expect(gameState.board.publicVpCards.length).toBe(2);
+  expect(gameState.board.publicVpCards[1]).toBe('vp-3');
+  });
+
+  it('applies collect on foundation supply', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 4,
+          collectedFoundationCards: {},
+        },
+      },
+      board: {
+        ...baseState.board,
+        foundationStock: { 2: 1 },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'collect',
+      payload: { slotType: 'foundation', foundationCost: 2 },
+    };
+
+    expect(await validateCollect(action, createContext(gameState))).toHaveLength(0);
+    await applyCollect(action, createContext(gameState));
+
+    expect(gameState.players.a.actionPoints).toBe(2);
+    expect(gameState.players.a.collectedFoundationCards?.[2]).toBe(1);
+    expect(gameState.board.foundationStock?.[2]).toBeUndefined();
+  });
+
+  it('rejects foundation collect when stock depleted', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 4,
+        },
+      },
+      board: {
+        ...baseState.board,
+        foundationStock: { 3: 0 },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'collect',
+      payload: { slotType: 'foundation', foundationCost: 3 },
+    };
+
+    const errors = await validateCollect(action, createContext(gameState));
+    expect(errors).toContain('指定された土台カードは在庫がありません');
   });
 });
 

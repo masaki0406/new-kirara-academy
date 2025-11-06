@@ -13,6 +13,7 @@ import type {
   PlayerId,
   Ruleset,
 } from "@domain/types";
+import { DEFAULT_FOUNDATION_STOCK, FOUNDATION_COSTS } from "@domain/types";
 import {
   buildRoomHandlers,
   type HandlersDeps,
@@ -222,6 +223,17 @@ function createGameSession(roomId: string): GameSession {
   });
 }
 
+function createFoundationStock(): Record<number, number> {
+  const stock: Record<number, number> = {};
+  FOUNDATION_COSTS.forEach((cost) => {
+    const value = DEFAULT_FOUNDATION_STOCK[cost];
+    if (typeof value === "number") {
+      stock[cost] = value;
+    }
+  });
+  return stock;
+}
+
 function createInitialState(roomId: string): GameState {
   return {
     roomId,
@@ -236,6 +248,7 @@ function createInitialState(roomId: string): GameState {
       lobbySlots: [],
       publicDevelopmentCards: [],
       publicVpCards: [],
+      foundationStock: createFoundationStock(),
     },
     developmentDeck: [],
     vpDeck: [],

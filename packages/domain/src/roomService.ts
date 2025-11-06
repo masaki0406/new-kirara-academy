@@ -1,5 +1,13 @@
 import { FirestoreAdapter } from './firestoreAdapter';
-import { AdjustPlayerForTestPayload, GameState, LifecycleStage, PlayerId } from './types';
+import {
+  AdjustPlayerForTestPayload,
+  DEFAULT_FOUNDATION_STOCK,
+  FOUNDATION_COSTS,
+  FoundationCardStock,
+  GameState,
+  LifecycleStage,
+  PlayerId,
+} from './types';
 
 export interface CreateRoomParams {
   roomId: string;
@@ -43,9 +51,51 @@ export interface AdjustPlayerForTestParams extends AdjustPlayerForTestPayload {
   roomId: string;
 }
 
+function cloneDefaultFoundationStock(): FoundationCardStock {
+  const stock: FoundationCardStock = {};
+  FOUNDATION_COSTS.forEach((cost) => {
+    const value = DEFAULT_FOUNDATION_STOCK[cost];
+    if (typeof value === 'number') {
+      stock[cost] = value;
+    }
+  });
+  return stock;
+}
+
 function ensureStateDefaults(state: GameState): void {
   if (!Array.isArray(state.labPlacements)) {
     state.labPlacements = [];
+  }
+  if (!state.board) {
+    state.board = {
+      lenses: {},
+      lobbySlots: [],
+      publicDevelopmentCards: [],
+      publicVpCards: [],
+      foundationStock: cloneDefaultFoundationStock(),
+    };
+  } else {
+    const board = state.board as GameState['board'] & {
+      foundationCards?: Record<string, unknown>;
+    };
+    if (!board.foundationStock || typeof board.foundationStock !== 'object') {
+      board.foundationStock = cloneDefaultFoundationStock();
+    } else {
+      const sanitized: FoundationCardStock = {};
+      FOUNDATION_COSTS.forEach((cost) => {
+        const raw = board.foundationStock?.[cost];
+        const fallback = DEFAULT_FOUNDATION_STOCK[cost] ?? 0;
+        const value =
+          typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : fallback;
+        if (value > 0) {
+          sanitized[cost] = value;
+        }
+      });
+      board.foundationStock = sanitized;
+    }
+    if (board.foundationCards) {
+      delete board.foundationCards;
+    }
   }
   if (state.players) {
     Object.values(state.players).forEach((player) => {
@@ -60,6 +110,18 @@ function ensureStateDefaults(state: GameState): void {
       }
       if (!Array.isArray(player.collectedVpCards)) {
         player.collectedVpCards = [];
+      }
+      if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
+        player.collectedFoundationCards = {};
+      } else {
+        const sanitized: FoundationCardStock = {};
+        FOUNDATION_COSTS.forEach((cost) => {
+          const raw = player.collectedFoundationCards?.[cost];
+          if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+            sanitized[cost] = Math.max(0, Math.floor(raw));
+          }
+        });
+        player.collectedFoundationCards = sanitized;
       }
       if (legacyHand) {
         (player as { hand?: string[] }).hand = [];
@@ -101,6 +163,7 @@ export class RoomService {
       },
       collectedDevelopmentCards: [],
       collectedVpCards: [],
+      collectedFoundationCards: {},
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -174,6 +237,7 @@ export class RoomService {
         resources,
         collectedDevelopmentCards: [],
         collectedVpCards: [],
+        collectedFoundationCards: {},
         ownedLenses: [],
         tasksCompleted: [],
         hasPassed: false,

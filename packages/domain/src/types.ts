@@ -6,6 +6,19 @@ export type LensId = string;
 export type LabId = string;
 export type DevelopmentCardId = string;
 export type TaskId = string;
+export type FoundationCost = 0 | 1 | 2 | 3 | 4;
+
+export type FoundationCardStock = Partial<Record<FoundationCost, number>>;
+
+export const FOUNDATION_COSTS: readonly FoundationCost[] = [0, 1, 2, 3, 4];
+
+export const DEFAULT_FOUNDATION_STOCK: FoundationCardStock = {
+  0: 6,
+  1: 5,
+  2: 2,
+  3: 1,
+  4: 1,
+};
 
 export interface GameSession {
   roomId: string;
@@ -101,6 +114,7 @@ export interface PlayerState {
   resources: ResourceWallet;
   collectedDevelopmentCards: DevelopmentCardId[];
   collectedVpCards: DevelopmentCardId[];
+  collectedFoundationCards?: FoundationCardStock;
   ownedLenses: LensId[];
   tasksCompleted: TaskId[];
   hasPassed: boolean;
@@ -132,6 +146,7 @@ export interface BoardState {
   lobbySlots: LobbySlot[];
   publicDevelopmentCards: DevelopmentCardId[];
   publicVpCards: DevelopmentCardId[];
+  foundationStock?: FoundationCardStock;
 }
 
 export interface ResourceCost {

@@ -461,9 +461,9 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "collect",
     label: "収集",
     category: "general",
-    summary: "行動力 2 / 公開カードから 1 枚獲得",
+    summary: "行動力 2 / 公開カード・土台から 1 枚獲得",
     description:
-      "公開中の開発カードまたは VP カードを 1 枚選択し、獲得済みカード置き場に移します。",
+      "公開中の開発カード、VPカード、または土台カードを 1 枚選択し、獲得済みの領域に移します。",
     requirement: combineRequirements(requireActionPoints(2), requireCollectTarget()),
   },
   {
@@ -625,10 +625,20 @@ const FOUNDATION_CARD_COSTS = [0, 1, 2, 3, 4] as const;
 const DEFAULT_LOBBY_STOCK = 4;
 type FoundationCost = (typeof FOUNDATION_CARD_COSTS)[number];
 
-interface FoundationSlot {
+interface FoundationSupplySlot {
   cost: FoundationCost;
-  cardId: string | null;
+  remaining: number;
 }
+
+interface FoundationInventoryEntry {
+  cost: FoundationCost;
+  count: number;
+}
+
+type CollectRequestPayload =
+  | { slotType: "development"; slotIndex: number }
+  | { slotType: "vp"; slotIndex: number }
+  | { slotType: "foundation"; foundationCost: FoundationCost };
 
 interface CharacterGrowthNodeWithStatus extends CharacterGrowthNode {
   isUnlocked: boolean;
@@ -993,19 +1003,34 @@ export default function PlayPage(): JSX.Element {
     };
   }, [gameState, localGamePlayer]);
 
-  const foundationSlots = useMemo<FoundationSlot[]>(() => {
-    const foundationCards =
-      (
-        gameState?.board as {
-          foundationCards?: Partial<Record<FoundationCost, string | null>>;
-        } | null
-      )?.foundationCards ?? {};
+  const foundationSupply = useMemo<FoundationSupplySlot[]>(() => {
+    const foundationStock =
+      (gameState?.board?.foundationStock as Partial<Record<FoundationCost, number>> | undefined) ??
+      {};
+    return FOUNDATION_CARD_COSTS.map((cost) => {
+      const raw = foundationStock[cost];
+      const remaining =
+        typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+      return { cost, remaining };
+    });
+  }, [gameState?.board?.foundationStock]);
 
-    return FOUNDATION_CARD_COSTS.map((cost) => ({
-      cost,
-      cardId: foundationCards[cost] ?? null,
-    }));
-  }, [gameState]);
+  const collectedFoundationEntries = useMemo<FoundationInventoryEntry[]>(() => {
+    const collection =
+      (localGamePlayer?.collectedFoundationCards as Partial<Record<FoundationCost, number>> | undefined) ??
+      {};
+    return FOUNDATION_CARD_COSTS.map((cost) => {
+      const raw = collection[cost];
+      const count =
+        typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+      return { cost, count };
+    });
+  }, [localGamePlayer?.collectedFoundationCards]);
+
+  const totalCollectedFoundation = useMemo(
+    () => collectedFoundationEntries.reduce((sum, entry) => sum + entry.count, 0),
+    [collectedFoundationEntries],
+  );
 
   const openPolishDialog = useCallback(() => {
     setPolishSelectionMap({});
@@ -1089,8 +1114,8 @@ export default function PlayPage(): JSX.Element {
     const foundationRequirement = Math.max(0, diff);
     const selectedFoundation =
       polishFoundationChoice !== null
-        ? foundationSlots.find(
-            (slot) => slot.cost === polishFoundationChoice && slot.cardId !== null,
+        ? collectedFoundationEntries.find(
+            (entry) => entry.cost === polishFoundationChoice && entry.count > 0,
           ) ?? null
         : null;
     const foundationMet = Boolean(
@@ -1108,12 +1133,7 @@ export default function PlayPage(): JSX.Element {
       selectedFoundation,
       canSubmit,
     };
-  }, [
-    polishSelectionDetails,
-    polishFoundationChoice,
-    foundationSlots,
-    isPolishSubmitting,
-  ]);
+  }, [polishSelectionDetails, polishFoundationChoice, collectedFoundationEntries, isPolishSubmitting]);
 
   const handleSubmitPolish = useCallback(async () => {
     if (!polishSummary.canSubmit) {
@@ -1362,9 +1382,17 @@ export default function PlayPage(): JSX.Element {
   const collectableCardCount = useMemo(() => {
     const developmentCards = gameState?.board?.publicDevelopmentCards ?? [];
     const vpCards = gameState?.board?.publicVpCards ?? [];
-    return developmentCards.filter((cardId) => Boolean(cardId)).length +
-      vpCards.filter((cardId) => Boolean(cardId)).length;
-  }, [gameState?.board?.publicDevelopmentCards, gameState?.board?.publicVpCards]);
+    const foundationCount = foundationSupply.reduce((sum, slot) => sum + slot.remaining, 0);
+    return (
+      developmentCards.filter((cardId) => Boolean(cardId)).length +
+      vpCards.filter((cardId) => Boolean(cardId)).length +
+      foundationCount
+    );
+  }, [
+    gameState?.board?.publicDevelopmentCards,
+    gameState?.board?.publicVpCards,
+    foundationSupply,
+  ]);
 
   const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
     if (!localGamePlayer) {
@@ -1488,29 +1516,38 @@ export default function PlayPage(): JSX.Element {
     setFeedback,
   ]);
 
-  const handleCollectCard = useCallback(
-    async (slotType: "development" | "vp", slotIndex: number) => {
+  const handleCollect = useCallback(
+    async (payload: CollectRequestPayload) => {
       if (!localPlayer?.id) {
         setFeedback("先にロビーでプレイヤーとして参加してください。");
         return;
       }
-      const key = `${slotType}-${slotIndex}`;
+      const key =
+        payload.slotType === "foundation"
+          ? `foundation-${payload.foundationCost}`
+          : `${payload.slotType}-${payload.slotIndex}`;
       setPendingCollectKey(key);
       try {
         await performAction({
           action: {
             playerId: localPlayer.id,
             actionType: "collect",
-            payload: { slotType, slotIndex },
+            payload,
           },
         });
-        setFeedback(slotType === "vp" ? "VPカードを獲得しました。" : "開発カードを獲得しました。");
+        let message: string;
+        if (payload.slotType === "foundation") {
+          message = `土台カード（コスト ${payload.foundationCost}）を獲得しました。`;
+        } else {
+          message = payload.slotType === "vp" ? "VPカードを獲得しました。" : "開発カードを獲得しました。";
+        }
+        setFeedback(message);
         await refresh();
       } catch (error) {
         console.error(error);
         setFeedback(
           error instanceof Error ? error.message : "収集アクションの実行に失敗しました。",
-        );
+      );
       } finally {
         setPendingCollectKey(null);
       }
@@ -2309,7 +2346,10 @@ export default function PlayPage(): JSX.Element {
                                 className={styles.collectButton}
                                 disabled={collectDisabled}
                                 onClick={() =>
-                                  void handleCollectCard("development", slot.slotIndex as number)
+                                  void handleCollect({
+                                    slotType: "development",
+                                    slotIndex: slot.slotIndex as number,
+                                  })
                                 }
                               >
                                 カードを収集
@@ -2321,7 +2361,10 @@ export default function PlayPage(): JSX.Element {
                                 className={styles.collectButton}
                                 disabled={collectDisabled}
                                 onClick={() =>
-                                  void handleCollectCard("vp", slot.slotIndex as number)
+                                  void handleCollect({
+                                    slotType: "vp",
+                                    slotIndex: slot.slotIndex as number,
+                                  })
                                 }
                               >
                                 カードを収集
@@ -2338,14 +2381,33 @@ export default function PlayPage(): JSX.Element {
                       コスト 0 〜 4 の土台カードを管理します。
                     </p>
                     <ul className={styles.foundationList}>
-                      {foundationSlots.map(({ cost, cardId }) => (
-                        <li key={cost} className={styles.foundationItem}>
-                          <span className={styles.foundationCost}>コスト {cost}</span>
-                          <span className={styles.foundationLabel}>
-                            {cardId ?? "カード未配置"}
-                          </span>
-                        </li>
-                      ))}
+                      {foundationSupply.map(({ cost, remaining }) => {
+                        const key = `foundation-${cost}`;
+                        const disabled =
+                          !localGamePlayer ||
+                          !isLocalTurn ||
+                          (localGamePlayer.actionPoints ?? 0) < 2 ||
+                          pendingCollectKey !== null ||
+                          remaining <= 0;
+                        return (
+                          <li key={cost} className={styles.foundationItem}>
+                            <div className={styles.foundationRow}>
+                              <span className={styles.foundationCost}>コスト {cost}</span>
+                              <span className={styles.foundationRemaining}>残り {remaining} 枚</span>
+                            </div>
+                            <button
+                              type="button"
+                              className={styles.collectButton}
+                              disabled={disabled}
+                              onClick={() =>
+                                void handleCollect({ slotType: "foundation", foundationCost: cost })
+                              }
+                            >
+                              {pendingCollectKey === key ? "処理中..." : "土台を収集"}
+                            </button>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </aside>
                 </div>
@@ -2442,6 +2504,32 @@ export default function PlayPage(): JSX.Element {
                                 </div>
                               ))}
                             </div>
+                          )}
+                        </section>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            土台カード {totalCollectedFoundation} 枚
+                          </header>
+                          {totalCollectedFoundation === 0 ? (
+                            <p className={styles.collectedEmpty}>まだ獲得していません。</p>
+                          ) : (
+                            <ul className={styles.foundationInventoryList}>
+                              {collectedFoundationEntries.map((entry) =>
+                                entry.count > 0 ? (
+                                  <li
+                                    key={`collected-foundation-${entry.cost}`}
+                                    className={styles.foundationInventoryItem}
+                                  >
+                                    <span className={styles.foundationInventoryCost}>
+                                      コスト {entry.cost}
+                                    </span>
+                                    <span className={styles.foundationInventoryCount}>
+                                      {entry.count} 枚
+                                    </span>
+                                  </li>
+                                ) : null,
+                              )}
+                            </ul>
                           )}
                         </section>
                         <section className={styles.collectedColumn}>
@@ -3181,14 +3269,14 @@ export default function PlayPage(): JSX.Element {
               </section>
               <section className={styles.polishSection}>
                 <h6>土台カードの選択</h6>
-                {foundationSlots.some((slot) => slot.cardId) ? (
+                {collectedFoundationEntries.some((entry) => entry.count > 0) ? (
                   <div className={styles.polishFoundationList} role="radiogroup" aria-label="土台カード">
-                    {foundationSlots.map((slot) => {
-                      const disabled = !slot.cardId;
-                      const checked = polishFoundationChoice === slot.cost;
+                    {collectedFoundationEntries.map((entry) => {
+                      const disabled = entry.count <= 0;
+                      const checked = polishFoundationChoice === entry.cost;
                       return (
                         <label
-                          key={slot.cost}
+                          key={entry.cost}
                           className={classNames(
                             styles.polishFoundationOption,
                             checked ? styles.polishFoundationOptionActive : undefined,
@@ -3198,14 +3286,16 @@ export default function PlayPage(): JSX.Element {
                           <input
                             type="radio"
                             name="polishFoundation"
-                            value={slot.cost}
+                            value={entry.cost}
                             disabled={disabled}
                             checked={checked}
-                            onChange={() => handleSelectPolishFoundation(slot.cost)}
+                            onChange={() => handleSelectPolishFoundation(entry.cost)}
                           />
                           <div>
-                            <span className={styles.polishFoundationLabel}>コスト {slot.cost}</span>
-                            <span className={styles.polishFoundationCard}>{slot.cardId ?? "未配置"}</span>
+                            <span className={styles.polishFoundationLabel}>コスト {entry.cost}</span>
+                            <span className={styles.polishFoundationCard}>
+                              {entry.count > 0 ? `所持 ${entry.count} 枚` : "未所持"}
+                            </span>
                           </div>
                         </label>
                       );

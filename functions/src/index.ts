@@ -4,7 +4,8 @@ import type { Firestore as AdminFirestore, DocumentData } from 'firebase-admin/f
 import { onRequest } from 'firebase-functions/v2/https';
 import { FirestoreAdapterImpl, FirestoreLike } from '../../packages/domain/src/firestoreAdapter';
 import { RoomService } from '../../packages/domain/src/roomService';
-import { GameSession, GameState, PlayerId, Ruleset } from '../../packages/domain/src/types';
+import type { GameSession, GameState, PlayerId, Ruleset } from '../../packages/domain/src/types';
+import { DEFAULT_FOUNDATION_STOCK, FOUNDATION_COSTS } from '../../packages/domain/src/types';
 import { GameSessionImpl } from '../../packages/domain/src/gameSession';
 import { PhaseManagerImpl } from '../../packages/domain/src/phaseManager';
 import { TurnOrderImpl } from '../../packages/domain/src/turnOrder';
@@ -189,6 +190,17 @@ function createGameSession(roomId: string): GameSession {
   });
 }
 
+function createFoundationStock(): Record<number, number> {
+  const stock: Record<number, number> = {};
+  FOUNDATION_COSTS.forEach((cost) => {
+    const value = DEFAULT_FOUNDATION_STOCK[cost];
+    if (typeof value === 'number') {
+      stock[cost] = value;
+    }
+  });
+  return stock;
+}
+
 function createInitialState(roomId: string): GameState {
   return {
     roomId,
@@ -203,6 +215,7 @@ function createInitialState(roomId: string): GameState {
       lobbySlots: [],
       publicDevelopmentCards: [],
       publicVpCards: [],
+      foundationStock: createFoundationStock(),
     },
     developmentDeck: [],
     vpDeck: [],

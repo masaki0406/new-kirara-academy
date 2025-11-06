@@ -3,6 +3,9 @@ import {
   ActionResult,
   ActiveEffectPayload,
   CharacterCost,
+  DEFAULT_FOUNDATION_STOCK,
+  FOUNDATION_COSTS,
+  FoundationCost,
   GameState,
   GrowthReward,
   PlayerAction,
@@ -30,6 +33,39 @@ const RESOURCE_ORDER: ResourceType[] = ['light', 'rainbow', 'stagnation'];
 
 function getTotalResources(wallet: ResourceWallet): number {
   return RESOURCE_ORDER.reduce((sum, resource) => sum + wallet[resource], 0);
+}
+
+function isFoundationCost(value: number): value is FoundationCost {
+  return FOUNDATION_COSTS.includes(value as FoundationCost);
+}
+
+function cloneDefaultFoundationStock(): Partial<Record<FoundationCost, number>> {
+  const stock: Partial<Record<FoundationCost, number>> = {};
+  FOUNDATION_COSTS.forEach((cost) => {
+    const base = DEFAULT_FOUNDATION_STOCK[cost];
+    if (typeof base === 'number') {
+      stock[cost] = base;
+    }
+  });
+  return stock;
+}
+
+function ensureFoundationStockInitialized(board: GameState['board']): void {
+  if (!board.foundationStock || typeof board.foundationStock !== 'object') {
+    board.foundationStock = cloneDefaultFoundationStock();
+  }
+}
+
+function getAvailableFoundationStock(state: GameState, cost: FoundationCost): number {
+  const stock = state.board.foundationStock;
+  if (stock && typeof stock[cost] === 'number' && Number.isFinite(stock[cost]!)) {
+    return stock[cost]!;
+  }
+  if (!stock) {
+    const fallback = DEFAULT_FOUNDATION_STOCK[cost];
+    return typeof fallback === 'number' ? fallback : 0;
+  }
+  return 0;
 }
 
 function clampActionPoints(value: number): number {
@@ -467,10 +503,26 @@ export const validateCollect: Validator = async (action, context) => {
     errors.push('行動力が不足しています');
   }
 
-  const slotType =
-    typeof action.payload.slotType === 'string' ? action.payload.slotType : undefined;
-  if (slotType !== 'development' && slotType !== 'vp') {
+  const slotTypeRaw =
+    typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+  if (slotTypeRaw !== 'development' && slotTypeRaw !== 'vp' && slotTypeRaw !== 'foundation') {
     errors.push('カードの取得先が不正です');
+    return errors;
+  }
+
+  if (slotTypeRaw === 'foundation') {
+    const rawCost = action.payload.foundationCost;
+    const parsedCost =
+      typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+    if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+      errors.push('土台カードのコスト指定が不正です');
+      return errors;
+    }
+    const cost = parsedCost as FoundationCost;
+    const available = getAvailableFoundationStock(gameState, cost);
+    if (available <= 0) {
+      errors.push('指定された土台カードは在庫がありません');
+    }
     return errors;
   }
 
@@ -480,7 +532,7 @@ export const validateCollect: Validator = async (action, context) => {
     return errors;
   }
 
-  if (slotType === 'development') {
+  if (slotTypeRaw === 'development') {
     const cards = gameState.board.publicDevelopmentCards ?? [];
     if (slotIndex >= cards.length || !cards[slotIndex]) {
       errors.push('公開開発カードのスロット番号が不正です');
@@ -504,10 +556,43 @@ export const applyCollect: EffectApplier = async (action, context) => {
 
   player.actionPoints = Math.max(0, player.actionPoints - 2);
 
-  const slotType = (action.payload.slotType as string) ?? 'development';
-  const slotIndex = action.payload.slotIndex as number;
+  const slotTypeRaw =
+    typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
 
-  if (slotType === 'vp') {
+  if (slotTypeRaw === 'foundation') {
+    const rawCost = action.payload.foundationCost;
+    const parsedCost =
+      typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+    if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+      throw new Error('指定された土台カードが存在しません');
+    }
+    const cost = parsedCost as FoundationCost;
+    ensureFoundationStockInitialized(gameState.board);
+    const stock = gameState.board.foundationStock!;
+    const available =
+      typeof stock[cost] === 'number' && Number.isFinite(stock[cost]!) ? stock[cost]! : 0;
+    if (available <= 0) {
+      throw new Error('指定された土台カードは在庫がありません');
+    }
+    const remaining = available - 1;
+    if (remaining > 0) {
+      stock[cost] = remaining;
+    } else {
+      delete stock[cost];
+    }
+    if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
+      player.collectedFoundationCards = {};
+    }
+    const currentCount =
+      typeof player.collectedFoundationCards[cost] === 'number'
+        ? player.collectedFoundationCards[cost]!
+        : 0;
+    player.collectedFoundationCards[cost] = currentCount + 1;
+  } else if (slotTypeRaw === 'vp') {
+    const slotIndex =
+      typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+        ? action.payload.slotIndex
+        : -1;
     const cards = gameState.board.publicVpCards ?? [];
     const cardId = cards[slotIndex];
     if (!cardId) {
@@ -521,6 +606,10 @@ export const applyCollect: EffectApplier = async (action, context) => {
       cards.splice(slotIndex, 0, newCard);
     }
   } else {
+    const slotIndex =
+      typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+        ? action.payload.slotIndex
+        : -1;
     const cards = gameState.board.publicDevelopmentCards ?? [];
     const cardId = cards[slotIndex];
     if (!cardId) {
