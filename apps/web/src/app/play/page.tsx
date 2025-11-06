@@ -170,7 +170,10 @@ interface PolishSelectionDetail {
   type: "development" | "vp";
   card: CatalogDevelopmentCard | null;
   flipped: boolean;
-  values: { left: number; right: number };
+  values: {
+    left: { top: number; bottom: number };
+    right: { top: number; bottom: number };
+  };
   costItem: string | null;
   costNumber: number | null;
   costPosition: number | null;
@@ -550,16 +553,25 @@ function isWillAbilityNode(node: CharacterGrowthNode): boolean {
 }
 
 function getPolishCardValues(card: CatalogDevelopmentCard | null | undefined): {
-  left: number;
-  right: number;
+  left: { top: number; bottom: number };
+  right: { top: number; bottom: number };
 } {
   if (!card) {
-    return { left: 0, right: 0 };
+    return {
+      left: { top: 0, bottom: 0 },
+      right: { top: 0, bottom: 0 },
+    };
   }
-  const leftTotal =
+  const leftTop =
     sumCostRecord(card.costLeftUp) + sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS);
-  const rightTotal = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
-  return { left: leftTotal, right: rightTotal };
+  const leftBottom =
+    sumCostRecord(card.costLeftDown) + sumExtras(card.extras, COST_LEFT_DOWN_EXTRA_KEYS);
+  const rightTop = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
+  const rightBottom = sumExtras(card.extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+  return {
+    left: { top: leftTop, bottom: leftBottom },
+    right: { top: rightTop, bottom: rightBottom },
+  };
 }
 
 function toOptionalNumeric(value: unknown): number | null {
@@ -622,8 +634,8 @@ function buildDraftCraftedLens(
   if (foundationCost === null || details.length === 0) {
     return null;
   }
-  let leftTotal = 0;
-  let rightTotal = 0;
+  let leftTopTotal = 0;
+  let rightTopTotal = 0;
   let vpTotal = 0;
   const leftItems: CraftedLensSideItem[] = [];
   const rightItems: CraftedLensSideItem[] = [];
@@ -634,11 +646,10 @@ function buildDraftCraftedLens(
   }));
   details.forEach((detail) => {
     const useRight = detail.type === "vp" || detail.flipped;
-    const values = detail.values;
     if (useRight) {
-      rightTotal += values.right;
+      rightTopTotal += detail.values.right.top;
     } else {
-      leftTotal += values.left;
+      leftTopTotal += detail.values.left.top;
     }
     vpTotal += extractCardVp(detail.card);
     const item: CraftedLensSideItem = {
@@ -660,8 +671,8 @@ function buildDraftCraftedLens(
     lensId: "draft",
     createdAt: Date.now(),
     foundationCost,
-    leftTotal,
-    rightTotal,
+    leftTotal: leftTopTotal,
+    rightTotal: rightTopTotal,
     vpTotal,
     leftItems,
     rightItems,
@@ -1220,21 +1231,17 @@ export default function PlayPage(): JSX.Element {
   }, [polishSelectionMap, developmentCardCatalog, vpCardCatalog]);
 
   const polishSummary = useMemo(() => {
-    const totals = polishSelectionDetails.reduce(
-      (acc, detail) => {
-        const values = detail.values;
-        const useRight = detail.type === "vp" || detail.flipped;
-        if (useRight) {
-          acc.right += values.right;
-        } else {
-          acc.left += values.left;
-        }
-        return acc;
-      },
-      { left: 0, right: 0 },
-    );
-    const diff = totals.right - totals.left;
-    const foundationRequirement = Math.max(0, Math.ceil(diff));
+    let leftTopTotal = 0;
+    let rightTopTotal = 0;
+    polishSelectionDetails.forEach((detail) => {
+      const useRight = detail.type === "vp" || detail.flipped;
+      if (useRight) {
+        rightTopTotal += detail.values.right.top;
+      } else {
+        leftTopTotal += detail.values.left.top;
+      }
+    });
+    const foundationRequirement = Math.max(0, Math.ceil(rightTopTotal - leftTopTotal));
     const selectedFoundation =
       polishFoundationChoice !== null
         ? collectedFoundationEntries.find(
@@ -1274,10 +1281,7 @@ export default function PlayPage(): JSX.Element {
       }
     });
     const positionConflict = leftConflict || rightConflict;
-    const lensResult = buildDraftCraftedLens(
-      polishSelectionDetails,
-      polishFoundationChoice,
-    );
+    const lensResult = buildDraftCraftedLens(polishSelectionDetails, polishFoundationChoice);
     const canSubmit =
       polishSelectionDetails.length > 0 &&
       foundationMet &&
@@ -1286,8 +1290,6 @@ export default function PlayPage(): JSX.Element {
       lensResult !== null;
 
     return {
-      totals,
-      diff,
       foundationRequirement,
       foundationMet,
       selectedFoundation,
@@ -3364,24 +3366,9 @@ export default function PlayPage(): JSX.Element {
               </button>
             </div>
             <div className={styles.polishModalBody}>
-              <div className={styles.polishSummary}>
-                <div className={styles.polishSummaryRow}>
-                  <span>左コスト合計</span>
-                  <strong>{polishSummary.totals.left}</strong>
-                </div>
-                <div className={styles.polishSummaryRow}>
-                  <span>右コスト合計</span>
-                  <strong>{polishSummary.totals.right}</strong>
-                </div>
-                <div className={styles.polishSummaryRow}>
-                  <span>差分 (右 - 左)</span>
-                  <strong>{polishSummary.diff}</strong>
-                </div>
-                <div className={styles.polishSummaryRow}>
-                  <span>必要土台コスト</span>
-                  <strong>{polishSummary.foundationRequirement}</strong>
-                </div>
-              </div>
+              <p className={styles.polishSummaryHint}>
+                必要土台コスト: {polishSummary.foundationRequirement}
+              </p>
               {polishSummary.positionConflict ? (
                 <p className={styles.polishWarning}>
                   左右それぞれで同じPOSを使用しないようにしてください。
@@ -3402,8 +3389,8 @@ export default function PlayPage(): JSX.Element {
                       {polishDevelopmentOptions.map(({ cardId, card }) => {
                         const entry = polishSelectionMap[cardId];
                         const selected = Boolean(entry);
-                        const values = getPolishCardValues(card);
                         const orientationRight = Boolean(entry?.flipped);
+                        const orientationLabel = orientationRight ? "右側で使用" : "左側で使用";
                         return (
                           <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
                             <div className={styles.polishOptionHeader}>
@@ -3415,9 +3402,15 @@ export default function PlayPage(): JSX.Element {
                                 />
                                 <span>{card?.cardId ?? cardId}</span>
                               </label>
-                              <span className={styles.polishTotals}>
-                                左 {values.left} / 右 {values.right}
-                              </span>
+                              {selected ? (
+                                <button
+                                  type="button"
+                                  className={styles.polishToggleButton}
+                                  onClick={() => handleTogglePolishFlip(cardId)}
+                                >
+                                  {orientationLabel}
+                                </button>
+                              ) : null}
                             </div>
                             {card ? (
                               <div className={styles.polishOptionPreview}>
@@ -3429,17 +3422,6 @@ export default function PlayPage(): JSX.Element {
                             ) : (
                               <p className={styles.polishWarning}>カード情報が未登録です。</p>
                             )}
-                            {selected ? (
-                              <div className={styles.polishOptionControls}>
-                                <button
-                                  type="button"
-                                  className={styles.polishToggleButton}
-                                  onClick={() => handleTogglePolishFlip(cardId)}
-                                >
-                                  {orientationRight ? "右側で使用中" : "左側で使用中"}
-                                </button>
-                              </div>
-                            ) : null}
                           </li>
                         );
                       })}
@@ -3455,7 +3437,6 @@ export default function PlayPage(): JSX.Element {
                       {polishVpOptions.map(({ cardId, card }) => {
                         const entry = polishSelectionMap[cardId];
                         const selected = Boolean(entry);
-                        const values = getPolishCardValues(card);
                         return (
                           <li key={`vp-${cardId}`} className={styles.polishOptionItem}>
                             <div className={styles.polishOptionHeader}>
@@ -3467,9 +3448,6 @@ export default function PlayPage(): JSX.Element {
                                 />
                                 <span>{card?.cardId ?? cardId}</span>
                               </label>
-                              <span className={styles.polishTotals}>
-                                左 {values.left} / 右 {values.right}
-                              </span>
                             </div>
                             {card ? (
                               <div className={styles.polishOptionPreview}>
@@ -3479,9 +3457,7 @@ export default function PlayPage(): JSX.Element {
                               <p className={styles.polishWarning}>カード情報が未登録です。</p>
                             )}
                             {selected ? (
-                              <div className={styles.polishOptionControls}>
-                                <span className={styles.polishHint}>VPカードは右側で使用します。</span>
-                              </div>
+                              <p className={styles.polishHint}>VPカードは右側で使用します。</p>
                             ) : null}
                           </li>
                         );
@@ -3508,9 +3484,6 @@ export default function PlayPage(): JSX.Element {
                                 {useRight ? "（右側配置）" : "（左側配置）"}
                               </span>
                             </div>
-                            <span className={styles.polishTotals}>
-                              左 {detail.values.left} / 右 {detail.values.right}
-                            </span>
                           </div>
                           {detail.card ? (
                             <div className={styles.polishSelectionPreview}>

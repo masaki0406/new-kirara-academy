@@ -193,10 +193,16 @@ function aggregateCosts(
           ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"],
         );
       } else {
-        const hasLeftUp = card.costLeftUp !== undefined && card.costLeftUp !== null;
-        const hasLeftDown = card.costLeftDown !== undefined && card.costLeftDown !== null;
         collectCostEntries(leftTop, card.costLeftUp);
         collectCostEntries(leftBottom, card.costLeftDown);
+        const hasLeftUp =
+          card.costLeftUp !== undefined &&
+          card.costLeftUp !== null &&
+          Object.values(card.costLeftUp).some((value) => toFiniteNumber(value) !== null);
+        const hasLeftDown =
+          card.costLeftDown !== undefined &&
+          card.costLeftDown !== null &&
+          Object.values(card.costLeftDown).some((value) => toFiniteNumber(value) !== null);
         if (!hasLeftUp) {
           collectFromExtras(leftTop, card.extras, ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"]);
         }
@@ -300,8 +306,6 @@ function renderItemSide(label: string, items: string[]): JSX.Element {
 }
 
 export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Element {
-  const diff = lens.rightTotal - lens.leftTotal;
-  const requirement = Math.max(0, Math.ceil(diff));
   const composedClassName = [styles.card, className].filter(Boolean).join(" ");
   const aggregatedCosts = aggregateCosts(lens, getCard);
   const aggregatedItems = aggregateItems(lens);
@@ -310,30 +314,11 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
     <article className={composedClassName}>
       <header className={styles.header}>
         <span className={styles.lensId}>{lens.lensId}</span>
-        <span className={styles.foundation}>土台コスト: {lens.foundationCost}</span>
+        <div className={styles.headerMeta}>
+          <span className={styles.foundation}>土台 {lens.foundationCost}</span>
+          <span className={styles.vpMeta}>VP {lens.vpTotal ?? 0}</span>
+        </div>
       </header>
-      <div className={styles.summary}>
-        <div>
-          <span className={styles.summaryLabel}>左合計</span>
-          <strong className={styles.summaryValue}>{lens.leftTotal}</strong>
-        </div>
-        <div>
-          <span className={styles.summaryLabel}>右合計</span>
-          <strong className={styles.summaryValue}>{lens.rightTotal}</strong>
-        </div>
-        <div>
-          <span className={styles.summaryLabel}>差分</span>
-          <strong className={styles.summaryValue}>{diff}</strong>
-        </div>
-        <div>
-          <span className={styles.summaryLabel}>必要土台</span>
-          <strong className={styles.summaryValue}>{requirement}</strong>
-        </div>
-        <div>
-          <span className={styles.summaryLabel}>VP</span>
-          <strong className={styles.summaryValue}>{lens.vpTotal ?? 0}</strong>
-        </div>
-      </div>
       <div className={styles.costLayout}>
         <div className={styles.costColumn}>
           {renderCostSlot(aggregatedCosts.leftTop, "left", "top")}
@@ -369,24 +354,6 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
           {renderCostSlot(aggregatedCosts.rightBottom, "right", "bottom")}
         </div>
       </div>
-      <footer className={styles.footer}>
-        <h6 className={styles.sourceTitle}>使用カード</h6>
-        {lens.sourceCards.length === 0 ? (
-          <p className={styles.sourceEmpty}>情報なし</p>
-        ) : (
-          <ul className={styles.sourceList}>
-            {lens.sourceCards.map((source) => (
-              <li key={`${source.cardType}-${source.cardId}`} className={styles.sourceItem}>
-                <span className={styles.sourceBadge}>{source.cardType === "vp" ? "VP" : "DEV"}</span>
-                <span className={styles.sourceLabel}>
-                  {source.cardId}
-                  {source.flipped ? "（右配置）" : "（左配置）"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </footer>
     </article>
   );
 }
