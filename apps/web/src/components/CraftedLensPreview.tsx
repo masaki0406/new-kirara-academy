@@ -84,7 +84,7 @@ function formatCostLabel(key: CostPositionKey): string {
   if (key === "total") {
     return "合計";
   }
-  return key.toUpperCase();
+  return (key as string).toUpperCase();
 }
 
 function addCostValue(store: Map<CostPositionKey, number>, key: string, raw: unknown): void {
