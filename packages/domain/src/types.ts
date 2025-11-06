@@ -9,6 +9,7 @@ export type TaskId = string;
 export type FoundationCost = 0 | 1 | 2 | 3 | 4;
 
 export type FoundationCardStock = Partial<Record<FoundationCost, number>>;
+export type PolishCardType = 'development' | 'vp';
 
 export const FOUNDATION_COSTS: readonly FoundationCost[] = [0, 1, 2, 3, 4];
 
@@ -19,6 +20,38 @@ export const DEFAULT_FOUNDATION_STOCK: FoundationCardStock = {
   3: 1,
   4: 1,
 };
+
+export interface CraftedLensSideItem {
+  cardId: DevelopmentCardId;
+  cardType: PolishCardType;
+  position?: number | null;
+  item?: string | null;
+  quantity?: number | null;
+}
+
+export interface CraftedLensSourceCard {
+  cardId: DevelopmentCardId;
+  cardType: PolishCardType;
+  flipped: boolean;
+}
+
+export interface CraftedLens {
+  lensId: string;
+  createdAt: number;
+  foundationCost: FoundationCost;
+  leftTotal: number;
+  rightTotal: number;
+  vpTotal?: number;
+  leftItems: CraftedLensSideItem[];
+  rightItems: CraftedLensSideItem[];
+  sourceCards: CraftedLensSourceCard[];
+}
+
+export interface PolishActionPayload {
+  selection: CraftedLensSourceCard[];
+  foundationCost: FoundationCost;
+  result: CraftedLens;
+}
 
 export interface GameSession {
   roomId: string;
@@ -115,6 +148,7 @@ export interface PlayerState {
   collectedDevelopmentCards: DevelopmentCardId[];
   collectedVpCards: DevelopmentCardId[];
   collectedFoundationCards?: FoundationCardStock;
+  craftedLenses?: CraftedLens[];
   ownedLenses: LensId[];
   tasksCompleted: TaskId[];
   hasPassed: boolean;

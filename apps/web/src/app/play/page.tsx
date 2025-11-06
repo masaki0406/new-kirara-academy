@@ -24,7 +24,11 @@ import type {
   ResourceCost,
   RewardDefinition,
   ResourceReward,
+  CraftedLens,
+  CraftedLensSideItem,
+  PolishActionPayload,
 } from "@domain/types";
+import { CraftedLensPreview } from "../../components/CraftedLensPreview";
 
 type LabActionSide = "left" | "right";
 
@@ -169,6 +173,9 @@ interface PolishSelectionDetail {
   card: CatalogDevelopmentCard | null;
   flipped: boolean;
   totals: { left: number; right: number };
+  costItem: string | null;
+  costNumber: number | null;
+  costPosition: number | null;
 }
 
 interface LabPlacementView {
@@ -551,18 +558,113 @@ function getPolishCardTotals(
   if (!card) {
     return { left: 0, right: 0 };
   }
-  const leftBase =
-    sumCostRecord(card.costLeftUp) +
-    sumCostRecord(card.costLeftDown) +
-    sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS) +
-    sumExtras(card.extras, COST_LEFT_DOWN_EXTRA_KEYS);
-  const rightBase =
-    sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS) +
-    sumExtras(card.extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+  const leftTop =
+    sumCostRecord(card.costLeftUp) + sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS);
+  const rightTop = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
   if (flipped) {
-    return { left: rightBase, right: leftBase };
+    return { left: rightTop, right: leftTop };
   }
-  return { left: leftBase, right: rightBase };
+  return { left: leftTop, right: rightTop };
+}
+
+function toOptionalNumeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function getCardCostNumber(card: CatalogDevelopmentCard | null): number | null {
+  if (!card) {
+    return null;
+  }
+  return toOptionalNumeric(card.costNumber);
+}
+
+function getCardCostPosition(card: CatalogDevelopmentCard | null): number | null {
+  if (!card) {
+    return null;
+  }
+  const value = card.costPosition;
+  const parsed = toOptionalNumeric(value);
+  return parsed !== null ? Math.trunc(parsed) : null;
+}
+
+function normalizeItemLabel(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return String(value);
+}
+
+function extractCardVp(card: CatalogDevelopmentCard | null): number {
+  if (!card || !card.extras) {
+    return 0;
+  }
+  return Object.entries(card.extras).reduce<number>((total, [key, value]) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedKey.includes("vp")) {
+      return total;
+    }
+    const parsed = toOptionalNumeric(value);
+    return parsed !== null ? total + parsed : total;
+  }, 0);
+}
+
+function buildDraftCraftedLens(
+  details: PolishSelectionDetail[],
+  foundationCost: FoundationCost | null,
+): CraftedLens | null {
+  if (foundationCost === null || details.length === 0) {
+    return null;
+  }
+  let leftTotal = 0;
+  let rightTotal = 0;
+  let vpTotal = 0;
+  const leftItems: CraftedLensSideItem[] = [];
+  const rightItems: CraftedLensSideItem[] = [];
+  const sourceCards = details.map((detail) => ({
+    cardId: detail.cardId,
+    cardType: detail.type,
+    flipped: detail.flipped,
+  }));
+  details.forEach((detail) => {
+    leftTotal += detail.totals.left;
+    rightTotal += detail.totals.right;
+    vpTotal += extractCardVp(detail.card);
+    const item: CraftedLensSideItem = {
+      cardId: detail.cardId,
+      cardType: detail.type,
+      position: detail.costPosition,
+      item: detail.costItem,
+      quantity: detail.costNumber ?? undefined,
+    };
+    if (detail.flipped) {
+      rightItems.push(item);
+    } else {
+      leftItems.push(item);
+    }
+  });
+  return {
+    lensId: "draft",
+    createdAt: Date.now(),
+    foundationCost,
+    leftTotal,
+    rightTotal,
+    vpTotal,
+    leftItems,
+    rightItems,
+    sourceCards,
+  };
 }
 
 type JournalSlotRole = "development" | "developmentDeck" | "vp" | "vpDeck";
@@ -1090,12 +1192,16 @@ export default function PlayPage(): JSX.Element {
         entry.type === "development"
           ? developmentCardCatalog.get(cardId) ?? null
           : vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null;
+      const totals = getPolishCardTotals(card, entry.flipped ?? false);
       return {
         cardId,
         type: entry.type,
         card,
         flipped: entry.flipped,
-        totals: getPolishCardTotals(card, entry.flipped),
+        totals,
+        costItem: normalizeItemLabel(card?.costItem ?? null),
+        costNumber: getCardCostNumber(card),
+        costPosition: getCardCostPosition(card),
       };
     });
   }, [polishSelectionMap, developmentCardCatalog, vpCardCatalog]);
@@ -1110,46 +1216,133 @@ export default function PlayPage(): JSX.Element {
       { left: 0, right: 0 },
     );
     const diff = totals.right - totals.left;
-    const diffLimit = diff <= 4;
-    const foundationRequirement = Math.max(0, diff);
+    const foundationRequirement = Math.max(0, Math.ceil(diff));
     const selectedFoundation =
       polishFoundationChoice !== null
         ? collectedFoundationEntries.find(
             (entry) => entry.cost === polishFoundationChoice && entry.count > 0,
           ) ?? null
         : null;
-    const foundationMet = Boolean(
-      selectedFoundation && selectedFoundation.cost >= foundationRequirement,
-    );
+    const foundationMet =
+      foundationRequirement <= 0
+        ? Boolean(selectedFoundation && selectedFoundation.count > 0)
+        : Boolean(
+            selectedFoundation &&
+            selectedFoundation.count > 0 &&
+            selectedFoundation.cost >= foundationRequirement,
+          );
+    const leftPositions = new Set<number>();
+    const rightPositions = new Set<number>();
+    let leftConflict = false;
+    let rightConflict = false;
+    polishSelectionDetails.forEach((detail) => {
+      const position = detail.costPosition;
+      if (position === null || position === undefined || Number.isNaN(position)) {
+        return;
+      }
+      if (detail.flipped) {
+        if (rightPositions.has(position)) {
+          rightConflict = true;
+        } else {
+          rightPositions.add(position);
+        }
+      } else {
+        if (leftPositions.has(position)) {
+          leftConflict = true;
+        } else {
+          leftPositions.add(position);
+        }
+      }
+    });
+    const positionConflict = leftConflict || rightConflict;
+    const lensResult = buildDraftCraftedLens(polishSelectionDetails, polishFoundationChoice);
     const canSubmit =
-      polishSelectionDetails.length > 0 && diffLimit && foundationMet && !isPolishSubmitting;
+      polishSelectionDetails.length > 0 &&
+      foundationMet &&
+      !positionConflict &&
+      !isPolishSubmitting &&
+      lensResult !== null;
 
     return {
       totals,
       diff,
-      diffLimit,
       foundationRequirement,
       foundationMet,
       selectedFoundation,
+      positionConflict,
+      lensResult,
       canSubmit,
     };
-  }, [polishSelectionDetails, polishFoundationChoice, collectedFoundationEntries, isPolishSubmitting]);
+  }, [
+    polishSelectionDetails,
+    polishFoundationChoice,
+    collectedFoundationEntries,
+    isPolishSubmitting,
+  ]);
 
   const handleSubmitPolish = useCallback(async () => {
-    if (!polishSummary.canSubmit) {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
       return;
     }
+    if (!polishSummary.canSubmit || !polishSummary.lensResult || polishFoundationChoice === null) {
+      return;
+    }
+    const selection = polishSelectionDetails.map((detail) => ({
+      cardId: detail.cardId,
+      cardType: detail.type,
+      flipped: detail.flipped,
+    }));
+    const lensId = `lens-${Date.now()}`;
+    const baseLens = polishSummary.lensResult;
+    const resultLens: CraftedLens = {
+      ...baseLens,
+      lensId,
+      createdAt: Date.now(),
+      foundationCost: polishFoundationChoice,
+      leftItems: baseLens.leftItems.map((item) => ({ ...item })),
+      rightItems: baseLens.rightItems.map((item) => ({ ...item })),
+      sourceCards: baseLens.sourceCards.map((card) => ({ ...card })),
+    };
+    const polishPayload: PolishActionPayload = {
+      selection,
+      foundationCost: polishFoundationChoice,
+      result: resultLens,
+    };
     setIsPolishSubmitting(true);
     try {
-      setFeedback("研磨アクションの送信処理はまだ実装されていません。");
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "labActivate",
+          payload: {
+            labId: "polish",
+            polish: polishPayload,
+          },
+        },
+      });
+      setFeedback("研磨を実行しました。");
       closePolishDialog();
+      await refresh();
     } catch (error) {
       console.error(error);
-      setFeedback("研磨アクションの実行に失敗しました。");
+      const message =
+        error instanceof Error ? error.message : "研磨アクションの実行に失敗しました。";
+      setFeedback(message);
     } finally {
       setIsPolishSubmitting(false);
     }
-  }, [polishSummary.canSubmit, closePolishDialog, setFeedback]);
+  }, [
+    localPlayer?.id,
+    polishSummary.canSubmit,
+    polishSummary.lensResult,
+    polishSelectionDetails,
+    polishFoundationChoice,
+    performAction,
+    closePolishDialog,
+    refresh,
+    setFeedback,
+  ]);
 
   const handleExecuteLab = useCallback(
     async (labId: string, extraPayload?: Record<string, unknown>) => {
@@ -2530,11 +2723,11 @@ export default function PlayPage(): JSX.Element {
                                 ) : null,
                               )}
                             </ul>
-                          )}
-                        </section>
-                        <section className={styles.collectedColumn}>
-                          <header className={styles.collectedSummary}>
-                            VPカード {polishVpOptions.length} 枚
+                        )}
+                      </section>
+                      <section className={styles.collectedColumn}>
+                        <header className={styles.collectedSummary}>
+                          VPカード {polishVpOptions.length} 枚
                           </header>
                           {polishVpOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
@@ -2559,6 +2752,24 @@ export default function PlayPage(): JSX.Element {
                                 </div>
                               ))}
                             </div>
+                          )}
+                        </section>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            完成レンズ {(localGamePlayer.craftedLenses ?? []).length} 枚
+                          </header>
+                          {localGamePlayer.craftedLenses && localGamePlayer.craftedLenses.length > 0 ? (
+                            <div className={styles.craftedLensGrid}>
+                              {localGamePlayer.craftedLenses.map((lens) => (
+                                <CraftedLensPreview
+                                  key={lens.lensId}
+                                  lens={lens}
+                                  className={styles.craftedLensCard}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <p className={styles.collectedEmpty}>まだ作成していません。</p>
                           )}
                         </section>
                       </div>
@@ -3148,8 +3359,10 @@ export default function PlayPage(): JSX.Element {
                   <strong>{polishSummary.foundationRequirement}</strong>
                 </div>
               </div>
-              {!polishSummary.diffLimit ? (
-                <p className={styles.polishWarning}>右側の合計は左側より 4 以内にしてください。</p>
+              {polishSummary.positionConflict ? (
+                <p className={styles.polishWarning}>
+                  左右それぞれで同じPOSを使用しないようにしてください。
+                </p>
               ) : null}
               {polishSelectionDetails.length > 0 && !polishSummary.foundationMet ? (
                 <p className={styles.polishWarning}>
@@ -3267,6 +3480,12 @@ export default function PlayPage(): JSX.Element {
                   </ul>
                 )}
               </section>
+              {polishSummary.lensResult ? (
+                <section className={styles.polishSection}>
+                  <h6>完成レンズプレビュー</h6>
+                  <CraftedLensPreview lens={polishSummary.lensResult} />
+                </section>
+              ) : null}
               <section className={styles.polishSection}>
                 <h6>土台カードの選択</h6>
                 {collectedFoundationEntries.some((entry) => entry.count > 0) ? (

@@ -3,6 +3,9 @@ import {
   ActionResult,
   ActiveEffectPayload,
   CharacterCost,
+  CraftedLens,
+  CraftedLensSideItem,
+  CraftedLensSourceCard,
   DEFAULT_FOUNDATION_STOCK,
   FOUNDATION_COSTS,
   FoundationCost,
@@ -10,6 +13,8 @@ import {
   GrowthReward,
   PlayerAction,
   PlayerState,
+  PolishActionPayload,
+  PolishCardType,
   ResourceCost,
   ResourceReward,
   ResourceType,
@@ -37,6 +42,279 @@ function getTotalResources(wallet: ResourceWallet): number {
 
 function isFoundationCost(value: number): value is FoundationCost {
   return FOUNDATION_COSTS.includes(value as FoundationCost);
+}
+
+function parseFoundationCost(value: unknown): FoundationCost | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+  const numeric = Math.floor(value);
+  return isFoundationCost(numeric) ? numeric : null;
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function normalizePolishCardType(value: unknown): PolishCardType | null {
+  if (value === 'development' || value === 'vp') {
+    return value;
+  }
+  return null;
+}
+
+function normalizeCraftedLensSideItems(value: unknown): CraftedLensSideItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const items: CraftedLensSideItem[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+    const cardType = normalizePolishCardType(record.cardType);
+    if (!cardId || !cardType) {
+      return;
+    }
+    const positionNumber = toFiniteNumber(record.position);
+    const position = positionNumber !== null ? Math.floor(positionNumber) : null;
+    let item: string | null = null;
+    if (typeof record.item === 'string') {
+      item = record.item;
+    } else if (record.item !== undefined && record.item !== null) {
+      item = String(record.item);
+    }
+    const quantityNumber = toFiniteNumber(record.quantity);
+    const quantity =
+      quantityNumber !== null && Number.isFinite(quantityNumber) ? quantityNumber : undefined;
+    items.push({
+      cardId,
+      cardType,
+      position,
+      item,
+      quantity,
+    });
+  });
+  return items;
+}
+
+function normalizeCraftedLensSourceCards(value: unknown): CraftedLensSourceCard[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const sources: CraftedLensSourceCard[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+    const cardType = normalizePolishCardType(record.cardType);
+    const flipped = typeof record.flipped === 'boolean' ? record.flipped : false;
+    if (!cardId || !cardType) {
+      return;
+    }
+    sources.push({
+      cardId,
+      cardType,
+      flipped,
+    });
+  });
+  return sources;
+}
+
+function normalizeCraftedLens(value: unknown): CraftedLens | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const foundationCost = parseFoundationCost(record.foundationCost);
+  const leftTotalNumber = toFiniteNumber(record.leftTotal);
+  const rightTotalNumber = toFiniteNumber(record.rightTotal);
+  if (foundationCost === null || leftTotalNumber === null || rightTotalNumber === null) {
+    return null;
+  }
+  const vpTotalNumber = toFiniteNumber(record.vpTotal) ?? 0;
+  const createdAtNumber = toFiniteNumber(record.createdAt);
+  const lensId =
+    typeof record.lensId === 'string' && record.lensId.trim().length > 0 ? record.lensId : '';
+  const leftItems = normalizeCraftedLensSideItems(record.leftItems);
+  const rightItems = normalizeCraftedLensSideItems(record.rightItems);
+  const sourceCards = normalizeCraftedLensSourceCards(record.sourceCards);
+  return {
+    lensId,
+    createdAt:
+      createdAtNumber !== null && Number.isFinite(createdAtNumber)
+        ? Math.max(0, Math.floor(createdAtNumber))
+        : Date.now(),
+    foundationCost,
+    leftTotal: leftTotalNumber,
+    rightTotal: rightTotalNumber,
+    vpTotal: vpTotalNumber,
+    leftItems,
+    rightItems,
+    sourceCards,
+  };
+}
+
+interface NormalizedPolishPayload extends PolishActionPayload {
+  foundationCost: FoundationCost;
+  selection: CraftedLensSourceCard[];
+  result: CraftedLens;
+}
+
+function normalizePolishPayload(raw: unknown): NormalizedPolishPayload | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  const selection = normalizeCraftedLensSourceCards(record.selection);
+  const foundationCost = parseFoundationCost(record.foundationCost);
+  const result = normalizeCraftedLens(record.result);
+  if (!selection.length || foundationCost === null || !result) {
+    return null;
+  }
+  if (!result.sourceCards.length) {
+    result.sourceCards = selection.map((entry) => ({ ...entry }));
+  }
+  result.foundationCost = foundationCost;
+  return {
+    selection,
+    foundationCost,
+    result,
+  };
+}
+
+function findDuplicatePositions(items: CraftedLensSideItem[]): number | null {
+  const seen = new Set<number>();
+  for (const item of items) {
+    if (item.position === null || item.position === undefined) {
+      continue;
+    }
+    const position = Math.floor(item.position);
+    if (seen.has(position)) {
+      return position;
+    }
+    seen.add(position);
+  }
+  return null;
+}
+
+function buildSelectionKey(cardId: string, cardType: PolishCardType, flipped: boolean): string {
+  return `${cardType}:${cardId}:${flipped ? '1' : '0'}`;
+}
+
+function removeCardFromList(cards: string[], cardId: string): void {
+  const index = cards.indexOf(cardId);
+  if (index === -1) {
+    throw new Error('指定されたカードが見つかりません');
+  }
+  cards.splice(index, 1);
+}
+
+function consumeFoundationCard(
+  player: PlayerState,
+  foundationCost: FoundationCost,
+): void {
+  if (!player.collectedFoundationCards) {
+    throw new Error('土台カードの在庫が不足しています');
+  }
+  const current = player.collectedFoundationCards[foundationCost] ?? 0;
+  if (!Number.isFinite(current) || current <= 0) {
+    throw new Error('土台カードの在庫が不足しています');
+  }
+  const remaining = current - 1;
+  if (remaining > 0) {
+    player.collectedFoundationCards[foundationCost] = remaining;
+  } else {
+    delete player.collectedFoundationCards[foundationCost];
+  }
+}
+
+function generateCraftedLensId(playerId: string, timestamp: number | undefined): string {
+  const timeSeed = typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : Date.now();
+  const randomSeed = Math.random().toString(36).slice(2, 8);
+  return `crafted-lens-${playerId}-${timeSeed}-${randomSeed}`;
+}
+
+function cloneSideItems(items: CraftedLensSideItem[]): CraftedLensSideItem[] {
+  return items.map((item) => ({
+    cardId: item.cardId,
+    cardType: item.cardType,
+    position:
+      item.position === null || item.position === undefined
+        ? null
+        : Math.floor(item.position),
+    item: item.item ?? null,
+    quantity: item.quantity,
+  }));
+}
+
+function cloneSourceCards(cards: CraftedLensSourceCard[]): CraftedLensSourceCard[] {
+  return cards.map((card) => ({
+    cardId: card.cardId,
+    cardType: card.cardType,
+    flipped: card.flipped,
+  }));
+}
+
+function applyPolishResult(
+  action: PlayerAction,
+  context: ActionContext,
+  player: PlayerState,
+  payload: NormalizedPolishPayload,
+): void {
+  consumeFoundationCard(player, payload.foundationCost);
+  player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
+  player.collectedVpCards = player.collectedVpCards ?? [];
+  const developmentCards = player.collectedDevelopmentCards;
+  const vpCards = player.collectedVpCards;
+  payload.selection.forEach((selection) => {
+    if (selection.cardType === 'development') {
+      removeCardFromList(developmentCards, selection.cardId);
+    } else {
+      removeCardFromList(vpCards, selection.cardId);
+    }
+  });
+  if (!player.craftedLenses) {
+    player.craftedLenses = [];
+  }
+  const createdAt =
+    typeof payload.result.createdAt === 'number' && Number.isFinite(payload.result.createdAt)
+      ? Math.max(0, Math.floor(payload.result.createdAt))
+      : context.timestamp ?? Date.now();
+  const lensId =
+    payload.result.lensId && payload.result.lensId.trim().length > 0
+      ? payload.result.lensId
+      : generateCraftedLensId(action.playerId, context.timestamp);
+  const lens: CraftedLens = {
+    lensId,
+    createdAt,
+    foundationCost: payload.foundationCost,
+    leftTotal: payload.result.leftTotal,
+    rightTotal: payload.result.rightTotal,
+    vpTotal:
+      typeof payload.result.vpTotal === 'number' && Number.isFinite(payload.result.vpTotal)
+        ? payload.result.vpTotal
+        : payload.result.vpTotal ?? 0,
+    leftItems: cloneSideItems(payload.result.leftItems),
+    rightItems: cloneSideItems(payload.result.rightItems),
+    sourceCards: cloneSourceCards(
+      payload.result.sourceCards.length ? payload.result.sourceCards : payload.selection,
+    ),
+  };
+  player.craftedLenses.push(lens);
 }
 
 function cloneDefaultFoundationStock(): Partial<Record<FoundationCost, number>> {
@@ -214,6 +492,94 @@ export const validateLabActivate: Validator = async (action, context) => {
       }
     });
 
+  if (labId === 'polish') {
+    const rawPayload =
+      action.payload && typeof action.payload === 'object'
+        ? (action.payload as Record<string, unknown>).polish
+        : undefined;
+    const normalized = normalizePolishPayload(rawPayload);
+    if (!normalized) {
+      errors.push('研磨の設定が不正です');
+      return errors;
+    }
+    if (!normalized.selection.length) {
+      errors.push('研磨で使用するカードを選択してください');
+    }
+    const foundationAvailable =
+      player.collectedFoundationCards?.[normalized.foundationCost] ?? 0;
+    if (foundationAvailable <= 0) {
+      errors.push('指定された土台カードを所持していません');
+    }
+    const developmentCounts = new Map<string, number>();
+    (player.collectedDevelopmentCards ?? []).forEach((cardId) => {
+      developmentCounts.set(cardId, (developmentCounts.get(cardId) ?? 0) + 1);
+    });
+    const vpCounts = new Map<string, number>();
+    (player.collectedVpCards ?? []).forEach((cardId) => {
+      vpCounts.set(cardId, (vpCounts.get(cardId) ?? 0) + 1);
+    });
+    normalized.selection.forEach((selection) => {
+      if (selection.cardType === 'development') {
+        const remaining = developmentCounts.get(selection.cardId) ?? 0;
+        if (remaining <= 0) {
+          errors.push(`開発カード ${selection.cardId} を所持していません`);
+        } else {
+          developmentCounts.set(selection.cardId, remaining - 1);
+        }
+      } else {
+        const remaining = vpCounts.get(selection.cardId) ?? 0;
+        if (remaining <= 0) {
+          errors.push(`VPカード ${selection.cardId} を所持していません`);
+        } else {
+          vpCounts.set(selection.cardId, remaining - 1);
+        }
+      }
+    });
+    const diff = Math.max(0, normalized.result.rightTotal - normalized.result.leftTotal);
+    if (diff > normalized.foundationCost) {
+      errors.push('土台カードのコストが不足しています');
+    }
+    const leftDuplicate = findDuplicatePositions(normalized.result.leftItems);
+    if (leftDuplicate !== null) {
+      errors.push('左側のPOSが重複しています');
+    }
+    const rightDuplicate = findDuplicatePositions(normalized.result.rightItems);
+    if (rightDuplicate !== null) {
+      errors.push('右側のPOSが重複しています');
+    }
+    const selectionCountMap = new Map<string, number>();
+    normalized.selection.forEach((selection) => {
+      const key = buildSelectionKey(selection.cardId, selection.cardType, selection.flipped);
+      selectionCountMap.set(key, (selectionCountMap.get(key) ?? 0) + 1);
+    });
+    const resultCountMap = new Map<string, number>();
+    normalized.result.sourceCards.forEach((source) => {
+      const key = buildSelectionKey(source.cardId, source.cardType, source.flipped);
+      resultCountMap.set(key, (resultCountMap.get(key) ?? 0) + 1);
+    });
+    if (selectionCountMap.size !== resultCountMap.size) {
+      errors.push('研磨結果の参照カードが一致しません');
+    } else {
+      selectionCountMap.forEach((count, key) => {
+        if (resultCountMap.get(key) !== count) {
+          errors.push('研磨結果の参照カードが一致しません');
+        }
+      });
+    }
+    normalized.result.leftItems.forEach((item) => {
+      const key = buildSelectionKey(item.cardId, item.cardType, false);
+      if (!selectionCountMap.has(key)) {
+        errors.push('左側のアイテム割り当てが不正です');
+      }
+    });
+    normalized.result.rightItems.forEach((item) => {
+      const key = buildSelectionKey(item.cardId, item.cardType, true);
+      if (!selectionCountMap.has(key)) {
+        errors.push('右側のアイテム割り当てが不正です');
+      }
+    });
+  }
+
   return errors;
 };
 
@@ -258,6 +624,18 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
 
   for (const reward of lab.rewards) {
     applyReward(player, reward);
+  }
+
+  if (labId === 'polish') {
+    const rawPayload =
+      action.payload && typeof action.payload === 'object'
+        ? (action.payload as Record<string, unknown>).polish
+        : undefined;
+    const normalized = normalizePolishPayload(rawPayload);
+    if (!normalized) {
+      throw new Error('研磨の設定が不正です');
+    }
+    applyPolishResult(action, context, player, normalized);
   }
 
   if (labId === 'negotiation') {

@@ -4,6 +4,10 @@ import {
   DEFAULT_FOUNDATION_STOCK,
   FOUNDATION_COSTS,
   FoundationCardStock,
+  FoundationCost,
+  CraftedLens,
+  CraftedLensSideItem,
+  CraftedLensSourceCard,
   GameState,
   LifecycleStage,
   PlayerId,
@@ -60,6 +64,132 @@ function cloneDefaultFoundationStock(): FoundationCardStock {
     }
   });
   return stock;
+}
+
+function normalizeFoundationCost(value: unknown): FoundationCost | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return null;
+  }
+  const numeric = Math.floor(value);
+  if (!FOUNDATION_COSTS.includes(numeric as (typeof FOUNDATION_COSTS)[number])) {
+    return null;
+  }
+  return numeric as FoundationCost;
+}
+
+function sanitizeCraftedLensSideItems(value: unknown): CraftedLensSideItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const items: CraftedLensSideItem[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+    const cardType =
+      record.cardType === 'development' || record.cardType === 'vp' ? record.cardType : null;
+    if (!cardId || !cardType) {
+      return;
+    }
+    const position =
+      typeof record.position === 'number' && Number.isFinite(record.position)
+        ? Math.floor(record.position)
+        : null;
+    const item =
+      typeof record.item === 'string'
+        ? record.item
+        : record.item === null || record.item === undefined
+          ? null
+          : String(record.item);
+    const quantity =
+      typeof record.quantity === 'number' && Number.isFinite(record.quantity)
+        ? record.quantity
+        : undefined;
+    items.push({
+      cardId,
+      cardType,
+      position,
+      item,
+      quantity,
+    });
+  });
+  return items;
+}
+
+function sanitizeCraftedLensSources(value: unknown): CraftedLensSourceCard[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const sources: CraftedLensSourceCard[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+    const cardType =
+      record.cardType === 'development' || record.cardType === 'vp' ? record.cardType : null;
+    const flipped = typeof record.flipped === 'boolean' ? record.flipped : false;
+    if (!cardId || !cardType) {
+      return;
+    }
+    sources.push({
+      cardId,
+      cardType,
+      flipped,
+    });
+  });
+  return sources;
+}
+
+function sanitizeCraftedLenses(value: unknown): CraftedLens[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const lenses: CraftedLens[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const record = entry as Record<string, unknown>;
+    const lensId =
+      typeof record.lensId === 'string' && record.lensId.trim().length > 0 ? record.lensId : null;
+    const foundationCost = normalizeFoundationCost(record.foundationCost);
+    const leftTotal =
+      typeof record.leftTotal === 'number' && Number.isFinite(record.leftTotal)
+        ? record.leftTotal
+        : null;
+    const rightTotal =
+      typeof record.rightTotal === 'number' && Number.isFinite(record.rightTotal)
+        ? record.rightTotal
+        : null;
+    if (!lensId || foundationCost === null || leftTotal === null || rightTotal === null) {
+      return;
+    }
+    const createdAt =
+      typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
+        ? Math.max(0, Math.floor(record.createdAt))
+        : Date.now();
+    const vpTotal =
+      typeof record.vpTotal === 'number' && Number.isFinite(record.vpTotal) ? record.vpTotal : 0;
+    const leftItems = sanitizeCraftedLensSideItems(record.leftItems);
+    const rightItems = sanitizeCraftedLensSideItems(record.rightItems);
+    const sourceCards = sanitizeCraftedLensSources(record.sourceCards);
+    lenses.push({
+      lensId,
+      createdAt,
+      foundationCost,
+      leftTotal,
+      rightTotal,
+      vpTotal,
+      leftItems,
+      rightItems,
+      sourceCards,
+    });
+  });
+  return lenses;
 }
 
 function ensureStateDefaults(state: GameState): void {
@@ -123,6 +253,11 @@ function ensureStateDefaults(state: GameState): void {
         });
         player.collectedFoundationCards = sanitized;
       }
+      if (!Array.isArray(player.craftedLenses)) {
+        player.craftedLenses = [];
+      } else {
+        player.craftedLenses = sanitizeCraftedLenses(player.craftedLenses);
+      }
       if (legacyHand) {
         (player as { hand?: string[] }).hand = [];
       }
@@ -164,6 +299,7 @@ export class RoomService {
       collectedDevelopmentCards: [],
       collectedVpCards: [],
       collectedFoundationCards: {},
+      craftedLenses: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -238,6 +374,7 @@ export class RoomService {
         collectedDevelopmentCards: [],
         collectedVpCards: [],
         collectedFoundationCards: {},
+        craftedLenses: [],
         ownedLenses: [],
         tasksCompleted: [],
         hasPassed: false,

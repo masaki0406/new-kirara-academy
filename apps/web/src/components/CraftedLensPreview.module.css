@@ -1,0 +1,170 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.lensId {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.foundation {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.summaryLabel {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.summaryValue {
+  display: block;
+  font-size: 14px;
+  color: #111827;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.sideTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.sideEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.itemList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.itemPosition {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: rgba(30, 64, 175, 0.12);
+  color: #1e3a8a;
+  font-weight: 600;
+}
+
+.itemLabel {
+  flex: 1;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sourceTitle {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.sourceEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.sourceList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sourceItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.sourceBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(2, 132, 199, 0.1);
+  color: #0369a1;
+  font-weight: 700;
+}
+
+.sourceLabel {
+  color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .body {
+    grid-template-columns: 1fr;
+  }
+}

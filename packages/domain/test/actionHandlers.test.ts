@@ -132,6 +132,12 @@ const baseRuleset: Ruleset = {
         },
       ],
     },
+    polish: {
+      labId: 'polish',
+      name: '研磨',
+      cost: { actionPoints: 1, lobby: 1 },
+      rewards: [],
+    },
     'focus-light': {
       labId: 'focus-light',
       name: '集光',
@@ -211,6 +217,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       collectedDevelopmentCards: [],
       collectedVpCards: [],
       collectedFoundationCards: {},
+      craftedLenses: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -232,6 +239,7 @@ function createGameState(overrides?: Partial<GameState>): GameState {
       collectedDevelopmentCards: [],
       collectedVpCards: [],
       collectedFoundationCards: {},
+      craftedLenses: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -364,6 +372,189 @@ describe('labActivate focus-light', () => {
 
     const errors = await validateLabActivate(action, createContext(gameState));
     expect(errors).toContain('light の上限を超えます');
+  });
+});
+
+describe('labActivate polish', () => {
+  it('creates a crafted lens and consumes resources', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 3,
+          lobbyStock: 2,
+          collectedDevelopmentCards: ['dev-a'],
+          collectedVpCards: ['vp-a'],
+          collectedFoundationCards: { 2: 1 },
+          craftedLenses: [],
+        },
+      },
+      labPlacements: [],
+    });
+
+    const polishPayload = {
+      selection: [
+        { cardId: 'dev-a', cardType: 'development', flipped: false },
+        { cardId: 'vp-a', cardType: 'vp', flipped: true },
+      ],
+      foundationCost: 2,
+      result: {
+        lensId: 'lens-a',
+        createdAt: 123456,
+        foundationCost: 2,
+        leftTotal: 1,
+        rightTotal: 3,
+        vpTotal: 4,
+        leftItems: [
+          {
+            cardId: 'dev-a',
+            cardType: 'development',
+            position: 1,
+            item: 'item-left',
+            quantity: 1,
+          },
+        ],
+        rightItems: [
+          {
+            cardId: 'vp-a',
+            cardType: 'vp',
+            position: 2,
+            item: 'item-right',
+            quantity: 2,
+          },
+        ],
+        sourceCards: [
+          { cardId: 'dev-a', cardType: 'development', flipped: false },
+          { cardId: 'vp-a', cardType: 'vp', flipped: true },
+        ],
+      },
+    };
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'polish', polish: polishPayload },
+    };
+
+    const context = createContext(gameState);
+    const errors = await validateLabActivate(action, context);
+    expect(errors).toHaveLength(0);
+
+    await applyLabActivate(action, context);
+
+    const player = gameState.players.a;
+    expect(player.actionPoints).toBe(2);
+    expect(player.lobbyStock).toBe(1);
+    expect(player.collectedDevelopmentCards).toEqual([]);
+    expect(player.collectedVpCards).toEqual([]);
+    expect(player.collectedFoundationCards?.[2]).toBeUndefined();
+    expect(player.craftedLenses?.length).toBe(1);
+    const lens = player.craftedLenses?.[0];
+    expect(lens?.foundationCost).toBe(2);
+    expect(lens?.leftTotal).toBe(1);
+    expect(lens?.rightTotal).toBe(3);
+    expect(lens?.vpTotal).toBe(4);
+    expect(lens?.leftItems).toHaveLength(1);
+    expect(lens?.rightItems).toHaveLength(1);
+    expect(gameState.labPlacements).toEqual([{ labId: 'polish', playerId: 'a', count: 1 }]);
+  });
+
+  it('rejects when foundation cost is insufficient', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 3,
+          lobbyStock: 1,
+          collectedDevelopmentCards: ['dev-a'],
+          collectedFoundationCards: { 2: 1 },
+        },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: {
+        labId: 'polish',
+        polish: {
+          selection: [{ cardId: 'dev-a', cardType: 'development', flipped: false }],
+          foundationCost: 2,
+          result: {
+            lensId: 'lens-b',
+            createdAt: 0,
+            foundationCost: 2,
+            leftTotal: 1,
+            rightTotal: 5,
+            vpTotal: 0,
+            leftItems: [
+              {
+                cardId: 'dev-a',
+                cardType: 'development',
+                position: 1,
+              },
+            ],
+            rightItems: [],
+            sourceCards: [{ cardId: 'dev-a', cardType: 'development', flipped: false }],
+          },
+        },
+      },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('土台カードのコストが不足しています');
+  });
+
+  it('rejects duplicate positions on the same side', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 3,
+          lobbyStock: 1,
+          collectedDevelopmentCards: ['dev-a', 'dev-b'],
+          collectedFoundationCards: { 3: 1 },
+        },
+      },
+    });
+
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: {
+        labId: 'polish',
+        polish: {
+          selection: [
+            { cardId: 'dev-a', cardType: 'development', flipped: false },
+            { cardId: 'dev-b', cardType: 'development', flipped: false },
+          ],
+          foundationCost: 3,
+          result: {
+            lensId: 'lens-c',
+            createdAt: 0,
+            foundationCost: 3,
+            leftTotal: 2,
+            rightTotal: 3,
+            vpTotal: 0,
+            leftItems: [
+              { cardId: 'dev-a', cardType: 'development', position: 1 },
+              { cardId: 'dev-b', cardType: 'development', position: 1 },
+            ],
+            rightItems: [],
+            sourceCards: [
+              { cardId: 'dev-a', cardType: 'development', flipped: false },
+              { cardId: 'dev-b', cardType: 'development', flipped: false },
+            ],
+          },
+        },
+      },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('左側のPOSが重複しています');
   });
 });
 
