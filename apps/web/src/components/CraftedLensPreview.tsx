@@ -13,9 +13,9 @@ interface Props {
   getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null;
 }
 
-const COST_POSITION_KEYS = ["costa", "costb", "costc"] as const;
-type StandardCostKey = (typeof COST_POSITION_KEYS)[number];
-type CostPositionKey = StandardCostKey | "total";
+const STANDARD_COST_KEYS = ["costa", "costb", "costc"] as const;
+type StandardCostKey = (typeof STANDARD_COST_KEYS)[number];
+type CostPositionKey = string;
 type ItemSlotKey = "top" | "middle" | "bottom";
 
 interface CostEntry {
@@ -41,7 +41,7 @@ function normalizeKeyword(value: string): string {
 }
 
 function isStandardCostKey(value: string): value is StandardCostKey {
-  return (COST_POSITION_KEYS as readonly string[]).includes(value);
+  return (STANDARD_COST_KEYS as readonly string[]).includes(value as StandardCostKey);
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -80,7 +80,7 @@ function formatCostLabel(key: CostPositionKey): string {
   if (key === "total") {
     return "合計";
   }
-  return key.toString().toUpperCase();
+  return key.toUpperCase();
 }
 
 function addCostValue(store: Map<CostPositionKey, number>, key: string, raw: unknown): void {
@@ -147,9 +147,9 @@ function mapToCostEntries(
   fallbackTotal: number | null,
 ): CostEntry[] {
   const entries: CostEntry[] = [];
-  COST_POSITION_KEYS.forEach((key) => {
+  STANDARD_COST_KEYS.forEach((key) => {
     if (store.has(key)) {
-      const value = store.get(key)!;
+      const value = store.get(key) ?? 0;
       if (value !== 0) {
         entries.push({ key, label: formatCostLabel(key), value });
       }
