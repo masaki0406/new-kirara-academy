@@ -1427,13 +1427,11 @@
 
 .collectedColumns {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 16px;
 }
 
 .collectedColumn {
-  flex: 1;
-  min-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1453,7 +1451,7 @@
 
 .collectedCardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -2636,6 +2634,10 @@
   }
 
   .journalGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .collectedCardGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
