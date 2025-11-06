@@ -1451,17 +1451,14 @@
   color: #64748b;
 }
 
-.collectedCardList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.collectedCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
 }
 
-.collectedCardItem {
-  flex: 0 0 120px;
+.collectedCardFrame {
+  padding: 10px;
 }
 
 .collectedFallback {

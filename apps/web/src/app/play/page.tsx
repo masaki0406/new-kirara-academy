@@ -2422,17 +2422,26 @@ export default function PlayPage(): JSX.Element {
                           {polishDevelopmentOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
                           ) : (
-                            <ul className={styles.collectedCardList}>
+                            <div className={styles.collectedCardGrid}>
                               {polishDevelopmentOptions.map(({ cardId, card }) => (
-                                <li key={`collected-dev-${cardId}`} className={styles.collectedCardItem}>
-                                  {card ? (
-                                    <DevelopmentCardPreview card={card} />
-                                  ) : (
-                                    <span className={styles.collectedFallback}>{cardId}</span>
-                                  )}
-                                </li>
+                                <div
+                                  key={`collected-dev-${cardId}`}
+                                  className={`${styles.journalSlot} ${styles.collectedCardFrame}`}
+                                >
+                                  <div className={styles.journalSlotHeader}>
+                                    <span className={styles.journalSlotIndex}>DEV</span>
+                                    <span className={styles.journalSlotType}>獲得カード</span>
+                                  </div>
+                                  <div className={styles.journalSlotBody}>
+                                    {card ? (
+                                      <DevelopmentCardPreview card={card} />
+                                    ) : (
+                                      <span className={styles.collectedFallback}>{cardId}</span>
+                                    )}
+                                  </div>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           )}
                         </section>
                         <section className={styles.collectedColumn}>
@@ -2442,17 +2451,26 @@ export default function PlayPage(): JSX.Element {
                           {polishVpOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
                           ) : (
-                            <ul className={styles.collectedCardList}>
+                            <div className={styles.collectedCardGrid}>
                               {polishVpOptions.map(({ cardId, card }) => (
-                                <li key={`collected-vp-${cardId}`} className={styles.collectedCardItem}>
-                                  {card ? (
-                                    <DevelopmentCardPreview card={card} orientation="right" />
-                                  ) : (
-                                    <span className={styles.collectedFallback}>{cardId}</span>
-                                  )}
-                                </li>
+                                <div
+                                  key={`collected-vp-${cardId}`}
+                                  className={`${styles.journalSlot} ${styles.collectedCardFrame}`}
+                                >
+                                  <div className={styles.journalSlotHeader}>
+                                    <span className={styles.journalSlotIndex}>VP</span>
+                                    <span className={styles.journalSlotType}>獲得カード</span>
+                                  </div>
+                                  <div className={styles.journalSlotBody}>
+                                    {card ? (
+                                      <DevelopmentCardPreview card={card} orientation="right" />
+                                    ) : (
+                                      <span className={styles.collectedFallback}>{cardId}</span>
+                                    )}
+                                  </div>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           )}
                         </section>
                       </div>
