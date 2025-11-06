@@ -2546,16 +2546,18 @@ export default function PlayPage(): JSX.Element {
                                         ? styles.playerActionStatusAvailable
                                         : styles.playerActionStatusBlocked,
                                     );
-                                    const implemented = action.implemented ?? false;
+                                    const implemented = action.implemented !== false;
                                     const hasPolishSources =
                                       action.id !== "polish" ||
                                       polishDevelopmentOptions.length > 0 ||
                                       polishVpOptions.length > 0;
                                     const buttonDisabled =
-                                      !action.available || !implemented || !hasPolishSources ||
+                                      !action.available ||
+                                      action.implemented === false ||
+                                      !hasPolishSources ||
                                       pendingActionId === action.id;
                                     const handleActionClick = () => {
-                                      if (!implemented) {
+                                      if (action.implemented === false) {
                                         setFeedback("この行動は現在準備中です。");
                                         return;
                                       }
@@ -2597,7 +2599,7 @@ export default function PlayPage(): JSX.Element {
                                             獲得済みのカードがありません。
                                           </p>
                                         ) : null}
-                                        {!implemented ? (
+                                        {action.implemented === false ? (
                                           <p className={styles.playerActionHint}>この行動は現在準備中です。</p>
                                         ) : null}
                                         <div className={styles.playerActionFooter}>
