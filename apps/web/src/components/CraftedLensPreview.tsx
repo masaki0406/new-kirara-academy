@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import type { CraftedLens, CraftedLensSideItem } from "@domain/types";
 import styles from "./CraftedLensPreview.module.css";
 
