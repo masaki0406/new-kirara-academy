@@ -467,9 +467,29 @@ export const validateCollect: Validator = async (action, context) => {
     errors.push('行動力が不足しています');
   }
 
+  const slotType =
+    typeof action.payload.slotType === 'string' ? action.payload.slotType : undefined;
+  if (slotType !== 'development' && slotType !== 'vp') {
+    errors.push('カードの取得先が不正です');
+    return errors;
+  }
+
   const slotIndex = typeof action.payload.slotIndex === 'number' ? action.payload.slotIndex : NaN;
-  if (Number.isNaN(slotIndex) || slotIndex < 0 || slotIndex >= gameState.board.publicDevelopmentCards.length) {
-    errors.push('公開開発カードのスロット番号が不正です');
+  if (Number.isNaN(slotIndex) || slotIndex < 0) {
+    errors.push('カードのスロット番号が不正です');
+    return errors;
+  }
+
+  if (slotType === 'development') {
+    const cards = gameState.board.publicDevelopmentCards ?? [];
+    if (slotIndex >= cards.length || !cards[slotIndex]) {
+      errors.push('公開開発カードのスロット番号が不正です');
+    }
+  } else {
+    const cards = gameState.board.publicVpCards ?? [];
+    if (slotIndex >= cards.length || !cards[slotIndex]) {
+      errors.push('公開VPカードのスロット番号が不正です');
+    }
   }
 
   return errors;
@@ -482,28 +502,45 @@ export const applyCollect: EffectApplier = async (action, context) => {
     throw new Error('プレイヤーが存在しません');
   }
 
-  const slotIndex = action.payload.slotIndex as number;
-  const cardId = gameState.board.publicDevelopmentCards[slotIndex];
-  if (!cardId) {
-    throw new Error('指定された開発カードが存在しません');
-  }
-
   player.actionPoints = Math.max(0, player.actionPoints - 2);
-  player.hand.push(cardId);
 
-  gameState.board.publicDevelopmentCards.splice(slotIndex, 1);
-  const newCard = gameState.developmentDeck.shift();
-  if (newCard) {
-    gameState.board.publicDevelopmentCards.splice(slotIndex, 0, newCard);
+  const slotType = (action.payload.slotType as string) ?? 'development';
+  const slotIndex = action.payload.slotIndex as number;
+
+  if (slotType === 'vp') {
+    const cards = gameState.board.publicVpCards ?? [];
+    const cardId = cards[slotIndex];
+    if (!cardId) {
+      throw new Error('指定されたVPカードが存在しません');
+    }
+    player.collectedVpCards = player.collectedVpCards ?? [];
+    player.collectedVpCards.push(cardId);
+    cards.splice(slotIndex, 1);
+    const newCard = gameState.vpDeck.shift();
+    if (newCard) {
+      cards.splice(slotIndex, 0, newCard);
+    }
+  } else {
+    const cards = gameState.board.publicDevelopmentCards ?? [];
+    const cardId = cards[slotIndex];
+    if (!cardId) {
+      throw new Error('指定された開発カードが存在しません');
+    }
+    player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
+    player.collectedDevelopmentCards.push(cardId);
+    cards.splice(slotIndex, 1);
+    const newCard = gameState.developmentDeck.shift();
+    if (newCard) {
+      cards.splice(slotIndex, 0, newCard);
+    }
+    triggerEvent(gameState, context.ruleset, 'developmentSlotFreed', {
+      actorId: action.playerId,
+    });
   }
 
   triggerEvent(gameState, context.ruleset, 'actionPerformed', {
     actorId: action.playerId,
     actionType: 'collect',
-  });
-
-  triggerEvent(gameState, context.ruleset, 'developmentSlotFreed', {
-    actorId: action.playerId,
   });
 };
 

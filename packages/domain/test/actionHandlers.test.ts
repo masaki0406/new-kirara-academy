@@ -207,7 +207,8 @@ function createGameState(overrides?: Partial<GameState>): GameState {
         stagnation: 0,
         maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
       },
-      hand: [],
+      collectedDevelopmentCards: [],
+      collectedVpCards: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -226,7 +227,8 @@ function createGameState(overrides?: Partial<GameState>): GameState {
         stagnation: 0,
         maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
       },
-      hand: [],
+      collectedDevelopmentCards: [],
+      collectedVpCards: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -914,7 +916,7 @@ describe('trigger events', () => {
     expect(base.players.a.vp).toBe(2);
   });
 
-  it('applies collect and slot triggers', async () => {
+  it('applies collect on development row and triggers effects', async () => {
     const gameState = createGameState({
       players: {
         a: {
@@ -936,14 +938,49 @@ describe('trigger events', () => {
     const action: PlayerAction = {
       playerId: 'a',
       actionType: 'collect',
-      payload: { slotIndex: 0 },
+      payload: { slotIndex: 0, slotType: 'development' },
     };
 
     expect(await validateCollect(action, context)).toHaveLength(0);
     await applyCollect(action, context);
 
     expect(gameState.players.a.vp).toBe(2);
+    expect(gameState.players.a.actionPoints).toBe(0);
+    expect(gameState.players.a.collectedDevelopmentCards).toEqual(['dev-1']);
     expect(gameState.board.publicDevelopmentCards.length).toBe(2);
+    expect(gameState.board.publicDevelopmentCards[0]).toBe('dev-3');
+  });
+
+  it('applies collect on VP row', async () => {
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...createGameState().players.a,
+          actionPoints: 4,
+        },
+      },
+      board: {
+        lenses: {},
+        lobbySlots: [],
+        publicDevelopmentCards: [],
+        publicVpCards: ['vp-1', 'vp-2'],
+      },
+      vpDeck: ['vp-3'],
+    });
+
+    const context = createContext(gameState);
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'collect',
+      payload: { slotIndex: 1, slotType: 'vp' },
+    };
+
+    expect(await validateCollect(action, context)).toHaveLength(0);
+    await applyCollect(action, context);
+
+    expect(gameState.players.a.collectedVpCards).toEqual(['vp-2']);
+    expect(gameState.board.publicVpCards.length).toBe(2);
+    expect(gameState.board.publicVpCards[1]).toBe('vp-3');
   });
 });
 

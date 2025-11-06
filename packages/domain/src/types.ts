@@ -99,7 +99,8 @@ export interface PlayerState {
   creativity: number;
   vp: number;
   resources: ResourceWallet;
-  hand: DevelopmentCardId[];
+  collectedDevelopmentCards: DevelopmentCardId[];
+  collectedVpCards: DevelopmentCardId[];
   ownedLenses: LensId[];
   tasksCompleted: TaskId[];
   hasPassed: boolean;

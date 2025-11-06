@@ -134,6 +134,7 @@ interface PlayerActionContext {
   willAbilityCount: number;
   negotiationAvailable: boolean;
   persuasionTargetCount: number;
+  collectableCardCount: number;
 }
 
 interface PlayerActionAvailability {
@@ -301,13 +302,6 @@ function requireCreativity(amount: number): PlayerActionRequirement {
       : { available: false, reason: `創造力が ${amount} 必要です` };
 }
 
-function requireResource(resource: ResourceKey, amount: number): PlayerActionRequirement {
-  return ({ resources }) =>
-    resources[resource] >= amount
-      ? { available: true }
-      : { available: false, reason: `${RESOURCE_LABELS[resource]}が ${amount} 必要です` };
-}
-
 function requireOwnedLens(): PlayerActionRequirement {
   return ({ player }) =>
     player.ownedLenses.length > 0
@@ -354,6 +348,13 @@ function requirePersuasionTarget(): PlayerActionRequirement {
     persuasionTargetCount > 0
       ? { available: true }
       : { available: false, reason: "説得できるロビーがありません" };
+}
+
+function requireCollectTarget(): PlayerActionRequirement {
+  return ({ collectableCardCount }) =>
+    collectableCardCount > 0
+      ? { available: true }
+      : { available: false, reason: "獲得可能なカードがありません" };
 }
 
 function requireNotPassed(): PlayerActionRequirement {
@@ -460,9 +461,10 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "collect",
     label: "収集",
     category: "general",
-    summary: "行動力 1 / 資源を獲得",
-    description: "共有ボードやカードの効果を利用して、追加の資源を獲得します。",
-    requirement: requireActionPoints(1),
+    summary: "行動力 2 / 公開カードから 1 枚獲得",
+    description:
+      "公開中の開発カードまたは VP カードを 1 枚選択し、獲得済みカード置き場に移します。",
+    requirement: combineRequirements(requireActionPoints(2), requireCollectTarget()),
   },
   {
     id: "will",
@@ -575,6 +577,7 @@ interface JournalSlotData extends JournalSlotDefinition {
   cardId: string | null;
   card?: CatalogDevelopmentCard | null;
   count?: number;
+  slotIndex?: number | null;
 }
 
 interface LobbySummary {
@@ -684,6 +687,7 @@ export default function PlayPage(): JSX.Element {
   const [isPersuasionDialogOpen, setIsPersuasionDialogOpen] = useState(false);
   const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
+  const [pendingCollectKey, setPendingCollectKey] = useState<string | null>(null);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -1355,6 +1359,13 @@ export default function PlayPage(): JSX.Element {
     return !placementUsed && !alreadyRooting;
   }, [gameState]);
 
+  const collectableCardCount = useMemo(() => {
+    const developmentCards = gameState?.board?.publicDevelopmentCards ?? [];
+    const vpCards = gameState?.board?.publicVpCards ?? [];
+    return developmentCards.filter((cardId) => Boolean(cardId)).length +
+      vpCards.filter((cardId) => Boolean(cardId)).length;
+  }, [gameState?.board?.publicDevelopmentCards, gameState?.board?.publicVpCards]);
+
   const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
     if (!localGamePlayer) {
       return [];
@@ -1367,6 +1378,7 @@ export default function PlayPage(): JSX.Element {
       willAbilityCount,
       negotiationAvailable,
       persuasionTargetCount,
+      collectableCardCount,
     };
     const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
 
@@ -1407,6 +1419,7 @@ export default function PlayPage(): JSX.Element {
     willAbilityCount,
     negotiationAvailable,
     persuasionTargetCount,
+    collectableCardCount,
   ]);
 
   const openPersuasionDialog = useCallback(() => {
@@ -1474,6 +1487,36 @@ export default function PlayPage(): JSX.Element {
     closePersuasionDialog,
     setFeedback,
   ]);
+
+  const handleCollectCard = useCallback(
+    async (slotType: "development" | "vp", slotIndex: number) => {
+      if (!localPlayer?.id) {
+        setFeedback("先にロビーでプレイヤーとして参加してください。");
+        return;
+      }
+      const key = `${slotType}-${slotIndex}`;
+      setPendingCollectKey(key);
+      try {
+        await performAction({
+          action: {
+            playerId: localPlayer.id,
+            actionType: "collect",
+            payload: { slotType, slotIndex },
+          },
+        });
+        setFeedback(slotType === "vp" ? "VPカードを獲得しました。" : "開発カードを獲得しました。");
+        await refresh();
+      } catch (error) {
+        console.error(error);
+        setFeedback(
+          error instanceof Error ? error.message : "収集アクションの実行に失敗しました。",
+        );
+      } finally {
+        setPendingCollectKey(null);
+      }
+    },
+    [localPlayer?.id, performAction, refresh, setFeedback],
+  );
 
   const formatPrerequisites = useCallback(
     (definition?: GrowthNodeDefinition) => {
@@ -1666,10 +1709,11 @@ export default function PlayPage(): JSX.Element {
 
     return JOURNAL_SLOT_LAYOUT.map((slot) => {
       if (slot.role === "development") {
-        const cardId = developmentCards[developmentIndex] ?? null;
+        const slotIndex = developmentIndex;
+        const cardId = developmentCards[slotIndex] ?? null;
         developmentIndex += 1;
         const card = resolveCard(cardId, [developmentCardCatalog]);
-        return { ...slot, cardId, card };
+        return { ...slot, cardId, card, slotIndex };
       }
 
       if (slot.role === "developmentDeck") {
@@ -1677,10 +1721,11 @@ export default function PlayPage(): JSX.Element {
       }
 
       if (slot.role === "vp") {
-        const cardId = vpCards[vpIndex] ?? null;
+        const slotIndex = vpIndex;
+        const cardId = vpCards[slotIndex] ?? null;
         vpIndex += 1;
         const card = resolveCard(cardId, [vpCardCatalog, developmentCardCatalog]);
-        return { ...slot, cardId, card };
+        return { ...slot, cardId, card, slotIndex };
       }
 
       if (slot.role === "vpDeck") {
@@ -1708,23 +1753,21 @@ export default function PlayPage(): JSX.Element {
 
   const polishDevelopmentOptions = useMemo(
     () =>
-      localGamePlayer
-        ? localGamePlayer.hand.map((cardId) => ({
-            cardId,
-            card: developmentCardCatalog.get(cardId) ?? null,
-          }))
-        : [],
-    [localGamePlayer, developmentCardCatalog],
+      (localGamePlayer?.collectedDevelopmentCards ?? []).map((cardId) => ({
+        cardId,
+        card: developmentCardCatalog.get(cardId) ?? null,
+      })),
+    [localGamePlayer?.collectedDevelopmentCards, developmentCardCatalog],
   );
 
-  const polishVpOptions = useMemo(() => {
-    const vpIds = gameState?.board?.publicVpCards ?? [];
-    const unique = Array.from(new Set(vpIds));
-    return unique.map((cardId) => ({
-      cardId,
-      card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
-    }));
-  }, [gameState?.board?.publicVpCards, vpCardCatalog, developmentCardCatalog]);
+  const polishVpOptions = useMemo(
+    () =>
+      (localGamePlayer?.collectedVpCards ?? []).map((cardId) => ({
+        cardId,
+        card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
+      })),
+    [localGamePlayer?.collectedVpCards, vpCardCatalog, developmentCardCatalog],
+  );
 
   const labPlacementSummary = useMemo(() => {
     const summary = new Map<string, LabPlacementView[]>();
@@ -2241,6 +2284,12 @@ export default function PlayPage(): JSX.Element {
                         }
                       }
 
+                      const collectDisabled =
+                        !localGamePlayer ||
+                        !isLocalTurn ||
+                        (localGamePlayer.actionPoints ?? 0) < 2 ||
+                        pendingCollectKey !== null;
+
                       return (
                         <div key={slot.position} className={className}>
                           <div className={styles.journalSlotHeader}>
@@ -2253,6 +2302,30 @@ export default function PlayPage(): JSX.Element {
                             {bodyContent}
                             {hint ? (
                               <span className={styles.journalSlotHint}>{hint}</span>
+                            ) : null}
+                            {slot.role === "development" && slot.cardId && slot.slotIndex != null ? (
+                              <button
+                                type="button"
+                                className={styles.collectButton}
+                                disabled={collectDisabled}
+                                onClick={() =>
+                                  void handleCollectCard("development", slot.slotIndex as number)
+                                }
+                              >
+                                カードを収集
+                              </button>
+                            ) : null}
+                            {slot.role === "vp" && slot.cardId && slot.slotIndex != null ? (
+                              <button
+                                type="button"
+                                className={styles.collectButton}
+                                disabled={collectDisabled}
+                                onClick={() =>
+                                  void handleCollectCard("vp", slot.slotIndex as number)
+                                }
+                              >
+                                カードを収集
+                              </button>
                             ) : null}
                           </div>
                         </div>
@@ -2338,6 +2411,51 @@ export default function PlayPage(): JSX.Element {
                       <span className={styles.characterValue}>
                         {(localGamePlayer.unlockedCharacterNodes?.length ?? 0).toString()}
                       </span>
+                    </div>
+                    <div className={styles.collectedSection}>
+                      <h5 className={styles.collectedHeading}>獲得済みカード</h5>
+                      <div className={styles.collectedColumns}>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            開発カード {polishDevelopmentOptions.length} 枚
+                          </header>
+                          {polishDevelopmentOptions.length === 0 ? (
+                            <p className={styles.collectedEmpty}>まだ獲得していません。</p>
+                          ) : (
+                            <ul className={styles.collectedCardList}>
+                              {polishDevelopmentOptions.map(({ cardId, card }) => (
+                                <li key={`collected-dev-${cardId}`} className={styles.collectedCardItem}>
+                                  {card ? (
+                                    <DevelopmentCardPreview card={card} />
+                                  ) : (
+                                    <span className={styles.collectedFallback}>{cardId}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </section>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            VPカード {polishVpOptions.length} 枚
+                          </header>
+                          {polishVpOptions.length === 0 ? (
+                            <p className={styles.collectedEmpty}>まだ獲得していません。</p>
+                          ) : (
+                            <ul className={styles.collectedCardList}>
+                              {polishVpOptions.map(({ cardId, card }) => (
+                                <li key={`collected-vp-${cardId}`} className={styles.collectedCardItem}>
+                                  {card ? (
+                                    <DevelopmentCardPreview card={card} orientation="right" />
+                                  ) : (
+                                    <span className={styles.collectedFallback}>{cardId}</span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </section>
+                      </div>
                     </div>
                     {localCharacterProfile ? (
                       <>
@@ -2476,7 +2594,7 @@ export default function PlayPage(): JSX.Element {
                                         ) : null}
                                         {action.id === "polish" && implemented && !hasPolishSources ? (
                                           <p className={styles.playerActionHint}>
-                                            手札または利用可能な VP カードがありません。
+                                            獲得済みのカードがありません。
                                           </p>
                                         ) : null}
                                         {!implemented ? (
@@ -2934,7 +3052,7 @@ export default function PlayPage(): JSX.Element {
                 <section className={styles.polishSection}>
                   <h6>手札の開発カード</h6>
                   {polishDevelopmentOptions.length === 0 ? (
-                    <p className={styles.polishEmpty}>手札に開発カードがありません。</p>
+                    <p className={styles.polishEmpty}>獲得済みの開発カードがありません。</p>
                   ) : (
                     <ul className={styles.polishOptionList}>
                       {polishDevelopmentOptions.map(({ cardId, card }) => {
@@ -2977,7 +3095,7 @@ export default function PlayPage(): JSX.Element {
                 <section className={styles.polishSection}>
                   <h6>利用可能な VP カード</h6>
                   {polishVpOptions.length === 0 ? (
-                    <p className={styles.polishEmpty}>利用可能な VP カードがありません。</p>
+                    <p className={styles.polishEmpty}>獲得済みの VP カードがありません。</p>
                   ) : (
                     <ul className={styles.polishOptionList}>
                       {polishVpOptions.map(({ cardId, card }) => {

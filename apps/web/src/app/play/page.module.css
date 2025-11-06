@@ -1236,9 +1236,32 @@
 }
 
 .journalSlotBody {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.collectButton {
+  margin-top: 4px;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.collectButton:hover {
+  border-color: rgba(37, 99, 235, 0.6);
+  background: rgba(37, 99, 235, 0.22);
+}
+
+.collectButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .journalSlotValue {
@@ -1386,6 +1409,70 @@
 .characterValue {
   font-weight: 600;
   color: #0f172a;
+}
+
+.collectedSection {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.collectedHeading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.collectedColumns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.collectedColumn {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.collectedSummary {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.collectedEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.collectedCardList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.collectedCardItem {
+  flex: 0 0 120px;
+}
+
+.collectedFallback {
+  display: inline-block;
+  width: 100%;
+  padding: 8px;
+  border-radius: 10px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 12px;
+  text-align: center;
 }
 
 .characterOverview {

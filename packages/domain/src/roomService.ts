@@ -54,6 +54,16 @@ function ensureStateDefaults(state: GameState): void {
       } else {
         player.lobbyUsed = Math.max(0, Math.floor(player.lobbyUsed));
       }
+      const legacyHand = (player as { hand?: string[] }).hand;
+      if (!Array.isArray(player.collectedDevelopmentCards)) {
+        player.collectedDevelopmentCards = Array.isArray(legacyHand) ? [...legacyHand] : [];
+      }
+      if (!Array.isArray(player.collectedVpCards)) {
+        player.collectedVpCards = [];
+      }
+      if (legacyHand) {
+        (player as { hand?: string[] }).hand = [];
+      }
     });
   }
 }
@@ -89,7 +99,8 @@ export class RoomService {
         stagnation: 0,
         maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
       },
-      hand: [],
+      collectedDevelopmentCards: [],
+      collectedVpCards: [],
       ownedLenses: [],
       tasksCompleted: [],
       hasPassed: false,
@@ -161,7 +172,8 @@ export class RoomService {
         creativity: 0,
         vp: 0,
         resources,
-        hand: [],
+        collectedDevelopmentCards: [],
+        collectedVpCards: [],
         ownedLenses: [],
         tasksCompleted: [],
         hasPassed: false,
