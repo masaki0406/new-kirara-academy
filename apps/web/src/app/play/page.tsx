@@ -17,7 +17,14 @@ import {
   type GrowthNodeDefinition,
 } from "@domain/characterGrowth";
 import { FunctionsGateway } from "@domain/client/functionsGateway";
-import type { CatalogDevelopmentCard, PlayerState, ResourceWallet } from "@domain/types";
+import type {
+  CatalogDevelopmentCard,
+  PlayerState,
+  ResourceWallet,
+  ResourceCost,
+  RewardDefinition,
+  ResourceReward,
+} from "@domain/types";
 
 type LabActionSide = "left" | "right";
 
@@ -38,7 +45,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "POLISH",
     side: "left",
     material: "共有設備が揃う研究棟で、レンズ改良を進めるための研磨機を利用できます。",
-    cost: ["行動力 1", "淀みトークン ×1", "ロビー ×1 (研磨スペースへ配置)"],
+    cost: ["行動力 1", "ロビー ×1 (研磨スペースへ配置)"],
     result: ["未完成のレンズを研究進捗 +1", "共有レンズのロビーを整理"],
   },
   {
@@ -56,8 +63,8 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "NEGOTIATION",
     side: "right",
     material: "講義棟で教員と調整し、次の研究予定に優先枠を確保します。",
-    cost: ["行動力 1", "創造力 ×1", "ロビー ×1 (交渉スペースへ配置)"],
-    result: ["次ラウンド開始時の手番候補に登録", "ロビー 1 体を即時再配置"],
+    cost: ["ロビー ×1 (交渉スペースへ配置)"],
+    result: ["光トークン ×1 を得る", "次ラウンドの先手番を予約"],
   },
   {
     id: "spirit",
@@ -65,8 +72,8 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "SPIRIT",
     side: "right",
     material: "学生ラウンジで気持ちを整え、集中力と士気を高めます。",
-    cost: ["行動力 1", "創造力 ×1", "ロビー ×1 (ラウンジへ配置)"],
-    result: ["創造力 +1", "淀みトークン ×1 を浄化して光へ変換"],
+    cost: ["ロビー ×1 (ラウンジへ配置)"],
+    result: ["行動力 +1 を得る", "淀みトークン ×1 を得る"],
   },
 ];
 
@@ -124,6 +131,9 @@ interface PlayerActionContext {
   player: PlayerState;
   resources: ResourceWallet;
   lobby: LobbySummary;
+  willAbilityCount: number;
+  negotiationAvailable: boolean;
+  persuasionTargetCount: number;
 }
 
 interface PlayerActionAvailability {
@@ -212,6 +222,57 @@ function getLabActionText(id: string): { summary: string; description: string } 
   return { summary, description };
 }
 
+function describeResourceCost(cost: ResourceCost): string[] {
+  const parts: string[] = [];
+  if (cost.actionPoints) {
+    parts.push(`行動力 ${cost.actionPoints}`);
+  }
+  if (cost.creativity) {
+    parts.push(`創造力 ${cost.creativity}`);
+  }
+  (["light", "rainbow", "stagnation"] as ResourceKey[]).forEach((resource) => {
+    const amount = cost[resource];
+    if (amount) {
+      parts.push(`${RESOURCE_LABELS[resource]} ×${amount}`);
+    }
+  });
+  return parts;
+}
+
+function describeResourceReward(reward: ResourceReward): string[] {
+  const parts: string[] = [];
+  if (reward.actionPoints) {
+    parts.push(`行動力 +${reward.actionPoints}`);
+  }
+  if (reward.creativity) {
+    parts.push(`創造力 +${reward.creativity}`);
+  }
+  (["light", "rainbow", "stagnation"] as ResourceKey[]).forEach((resource) => {
+    const amount = reward[resource];
+    if (amount) {
+      parts.push(`${RESOURCE_LABELS[resource]} +${amount}`);
+    }
+  });
+  return parts;
+}
+
+function describeRewardDefinition(reward: RewardDefinition): string {
+  switch (reward.type) {
+    case "resource": {
+      const rows = describeResourceReward(reward.value as ResourceReward);
+      return rows.join(" / ") || "資源を獲得";
+    }
+    case "vp":
+      return `VP +${reward.value as number}`;
+    case "growth":
+      return "成長効果を解決";
+    case "trigger":
+      return `トリガー効果: ${(reward.value as { triggerType?: string })?.triggerType ?? "発動"}`;
+    default:
+      return "効果を解決";
+  }
+}
+
 function combineRequirements(
   ...requirements: PlayerActionRequirement[]
 ): PlayerActionRequirement {
@@ -256,9 +317,43 @@ function requireOwnedLens(): PlayerActionRequirement {
 
 function requireLobbyStock(): PlayerActionRequirement {
   return ({ lobby }) =>
-    lobby.stock > 0
+    lobby.reserveUnused > 0
       ? { available: true }
       : { available: false, reason: "ロビー在庫が不足しています" };
+}
+
+function requireWillAbility(): PlayerActionRequirement {
+  return ({ willAbilityCount }) =>
+    willAbilityCount > 0
+      ? { available: true }
+      : { available: false, reason: "使用可能な意思能力がありません" };
+}
+
+function requireResourceCapacity(resource: ResourceKey, amount: number): PlayerActionRequirement {
+  return ({ resources }) => {
+    if (resources.unlimited?.[resource]) {
+      return { available: true };
+    }
+    const capacity = resources.maxCapacity[resource];
+    const current = resources[resource];
+    return current + amount <= capacity
+      ? { available: true }
+      : { available: false, reason: `${RESOURCE_LABELS[resource]}の上限を超えます` };
+  };
+}
+
+function requireNegotiationAvailable(): PlayerActionRequirement {
+  return ({ negotiationAvailable }) =>
+    negotiationAvailable
+      ? { available: true }
+      : { available: false, reason: "このラボは既に利用されています" };
+}
+
+function requirePersuasionTarget(): PlayerActionRequirement {
+  return ({ persuasionTargetCount }) =>
+    persuasionTargetCount > 0
+      ? { available: true }
+      : { available: false, reason: "説得できるロビーがありません" };
 }
 
 function requireNotPassed(): PlayerActionRequirement {
@@ -282,15 +377,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       id: "polish",
       label: "研磨",
       category: "lab",
-      summary: summary || "行動力 1 / 淀みトークン ×1",
+      summary: summary || "行動力 1 / ロビー ×1",
       description:
         description ||
         "共有設備を使いレンズの研磨とロビー整理を進めます。研究の基礎アクションです。",
-      requirement: combineRequirements(
-        requireActionPoints(1),
-        requireResource("stagnation", 1),
-        requireLobbyStock(),
-      ),
+      requirement: combineRequirements(requireActionPoints(1), requireLobbyStock()),
       highlight: "primary",
       implemented: true,
     };
@@ -315,14 +406,14 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       id: "negotiation",
       label: "根回し",
       category: "student",
-      summary: summary || "行動力 1 / 創造力 ×1",
+      summary: summary || "ロビー ×1 / 光 +1 / 次ラウンド先手",
       description:
         description ||
-        "講義棟で教員と調整し、次ラウンドの優先枠やロビー再配置のチャンスを得ます。",
+        "講義棟で教員と調整し、光を得ながら次ラウンドの先手番を確保します。",
       requirement: combineRequirements(
-        requireActionPoints(1),
-        requireCreativity(1),
         requireLobbyStock(),
+        requireNegotiationAvailable(),
+        requireResourceCapacity("light", 1),
       ),
       highlight: "primary",
     };
@@ -333,15 +424,11 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       id: "spirit",
       label: "気合",
       category: "student",
-      summary: summary || "行動力 1 / 創造力 ×1",
+      summary: summary || "ロビー ×1 / 行動力 +1 / 淀み +1",
       description:
         description ||
-        "学生ラウンジで士気を高め、創造力の回復や淀みの浄化を行います。",
-      requirement: combineRequirements(
-        requireActionPoints(1),
-        requireCreativity(1),
-        requireLobbyStock(),
-      ),
+        "学生ラウンジで士気を高め、行動力を回復しながら淀みを蓄えます。",
+      requirement: requireLobbyStock(),
     };
   })(),
   {
@@ -383,15 +470,18 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     category: "student",
     summary: "創造力 1 / 意思を固める",
     description: "意思力を整え、キャラクター固有の効果を発動するための準備を行います。",
-    requirement: requireCreativity(1),
+    requirement: combineRequirements(requireCreativity(1), requireWillAbility()),
+    implemented: true,
   },
   {
     id: "persuasion",
     label: "説得",
     category: "student",
-    summary: "創造力 2 / 相手との交渉",
-    description: "追加コストを支払いながら、他プレイヤーとの交渉や共有枠の獲得を狙います。",
-    requirement: requireCreativity(2),
+    summary: "行動力 2 / 対象レンズの起動コストを支払う",
+    description:
+      "相手のロビーを使ってレンズを起動し、効果を得たあとロビーを使用済みとして戻します。",
+    requirement: combineRequirements(requireActionPoints(2), requirePersuasionTarget()),
+    implemented: true,
   },
   {
     id: "pass",
@@ -448,6 +538,10 @@ function sumExtras(
   }, 0);
 }
 
+function isWillAbilityNode(node: CharacterGrowthNode): boolean {
+  return node.name.startsWith("意思");
+}
+
 function getPolishCardTotals(
   card: CatalogDevelopmentCard | null | undefined,
   flipped: boolean,
@@ -484,11 +578,24 @@ interface JournalSlotData extends JournalSlotDefinition {
 }
 
 interface LobbySummary {
-  stock: number;
-  unused: number;
-  used: number;
+  reserveUnused: number;
+  reserveUsed: number;
+  boardActive: number;
+  boardFatigued: number;
+  labCommitted: number;
   totalDeployed: number;
-  totalTokens?: number;
+  totalTokens: number;
+}
+
+interface LensTargetOption {
+  lensId: string;
+  ownerId: string;
+  ownerName: string;
+  occupantId: string;
+  occupantName: string;
+  slotActive: boolean;
+  cost: ResourceCost;
+  rewards: RewardDefinition[];
 }
 
 const JOURNAL_SLOT_LAYOUT: JournalSlotDefinition[] = [
@@ -513,8 +620,6 @@ const JOURNAL_DEVELOPMENT_SLOT_COUNT = JOURNAL_SLOT_LAYOUT.filter(
 const FOUNDATION_CARD_COSTS = [0, 1, 2, 3, 4] as const;
 // デザイン資料の初期セットアップに基づき、ロビーマーカーの基本ストック数を 4 と想定
 const DEFAULT_LOBBY_STOCK = 4;
-const BASE_LOBBY_STOCK_DISPLAY = 4;
-
 type FoundationCost = (typeof FOUNDATION_CARD_COSTS)[number];
 
 interface FoundationSlot {
@@ -572,6 +677,13 @@ export default function PlayPage(): JSX.Element {
   const [polishFoundationChoice, setPolishFoundationChoice] = useState<FoundationCost | null>(null);
   const [isPolishSubmitting, setIsPolishSubmitting] = useState(false);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [labConfirmDialog, setLabConfirmDialog] = useState<LabActionDefinition | null>(null);
+  const [isWillDialogOpen, setIsWillDialogOpen] = useState(false);
+  const [selectedWillNodeId, setSelectedWillNodeId] = useState<string | null>(null);
+  const [isWillSubmitting, setIsWillSubmitting] = useState(false);
+  const [isPersuasionDialogOpen, setIsPersuasionDialogOpen] = useState(false);
+  const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
+  const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -825,39 +937,55 @@ export default function PlayPage(): JSX.Element {
 
   const lobbySummary = useMemo<LobbySummary>(() => {
     if (!gameState || !localGamePlayer) {
-      return { stock: 0, unused: 0, used: 0, totalDeployed: 0 };
+      return {
+        reserveUnused: 0,
+        reserveUsed: 0,
+        boardActive: 0,
+        boardFatigued: 0,
+        labCommitted: 0,
+        totalDeployed: 0,
+        totalTokens: 0,
+      };
     }
 
     const lobbySlots = gameState.board?.lobbySlots ?? [];
     const playerSlots = lobbySlots.filter(
       (slot) => slot.occupantId === localGamePlayer.playerId,
     );
-    const unused = playerSlots.filter((slot) => slot.isActive).length;
-    const used = playerSlots.length - unused;
+    const boardActive = playerSlots.filter((slot) => slot.isActive).length;
+    const boardFatigued = playerSlots.length - boardActive;
 
-    const dynamicStockSource = localGamePlayer as Partial<{
-      lobbyStock: number;
-      lobbyReserve: number;
-      lobbyTokens: number;
-    }>;
-    const configuredStock =
-      typeof dynamicStockSource.lobbyStock === "number"
-        ? dynamicStockSource.lobbyStock
-        : typeof dynamicStockSource.lobbyReserve === "number"
-          ? dynamicStockSource.lobbyReserve
-          : typeof dynamicStockSource.lobbyTokens === "number"
-            ? dynamicStockSource.lobbyTokens
-            : undefined;
+    const labCommitted = (gameState.labPlacements ?? []).reduce((sum, placement) => {
+      if (placement.playerId === localGamePlayer.playerId) {
+        return sum + (placement.count ?? 0);
+      }
+      return sum;
+    }, 0);
 
-    const baselineStock = configuredStock ?? DEFAULT_LOBBY_STOCK;
-    const displayStock = Math.max(0, BASE_LOBBY_STOCK_DISPLAY - playerSlots.length);
+    const reserveUsed =
+      typeof localGamePlayer.lobbyUsed === "number" && Number.isFinite(localGamePlayer.lobbyUsed)
+        ? Math.max(0, localGamePlayer.lobbyUsed)
+        : 0;
+
+    const hasConfiguredStock =
+      typeof localGamePlayer.lobbyStock === "number" && Number.isFinite(localGamePlayer.lobbyStock);
+    const reserveUnused = hasConfiguredStock
+      ? Math.max(0, localGamePlayer.lobbyStock!)
+      : Math.max(
+          0,
+          DEFAULT_LOBBY_STOCK - reserveUsed - playerSlots.length - labCommitted,
+        );
+
+    const totalTokens = reserveUnused + reserveUsed + playerSlots.length + labCommitted;
 
     return {
-      stock: displayStock,
-      unused,
-      used,
+      reserveUnused,
+      reserveUsed,
+      boardActive,
+      boardFatigued,
+      labCommitted,
       totalDeployed: playerSlots.length,
-      totalTokens: baselineStock,
+      totalTokens,
     };
   }, [gameState, localGamePlayer]);
 
@@ -888,6 +1016,18 @@ export default function PlayPage(): JSX.Element {
     setIsPolishSubmitting(false);
   }, []);
 
+  const openLabConfirmDialog = useCallback((labId: string) => {
+    const definition = LAB_ACTION_LOOKUP.get(labId);
+    if (!definition) {
+      return;
+    }
+    setLabConfirmDialog(definition);
+  }, []);
+
+  const closeLabConfirmDialog = useCallback(() => {
+    setLabConfirmDialog(null);
+  }, []);
+
   const handleTogglePolishCard = useCallback((cardId: string, type: "development" | "vp") => {
     setPolishSelectionMap((prev) => {
       const next = { ...prev };
@@ -914,50 +1054,6 @@ export default function PlayPage(): JSX.Element {
   const handleSelectPolishFoundation = useCallback((cost: FoundationCost | null) => {
     setPolishFoundationChoice(cost);
   }, []);
-
-  const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
-    if (!localGamePlayer) {
-      return [];
-    }
-    const resources = effectiveResources ?? localGamePlayer.resources;
-    const context: PlayerActionContext = {
-      player: localGamePlayer,
-      resources,
-      lobby: lobbySummary,
-    };
-    const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
-
-    PLAYER_ACTIONS.forEach((action) => {
-      const availability = (action.requirement ?? (() => ({ available: true })))(context);
-      const view: PlayerActionViewModel = {
-        ...action,
-        available: availability.available,
-        reason: availability.available ? undefined : availability.reason,
-      };
-      const existing = groups.get(action.category);
-      if (existing) {
-        existing.actions.push(view);
-      } else {
-        groups.set(action.category, {
-          category: action.category,
-          label: PLAYER_ACTION_CATEGORY_LABELS[action.category],
-          actions: [view],
-        });
-      }
-    });
-
-    const ordered = Array.from(groups.values()).sort(
-      (a, b) =>
-        PLAYER_ACTION_CATEGORY_ORDER.indexOf(a.category) -
-        PLAYER_ACTION_CATEGORY_ORDER.indexOf(b.category),
-    );
-
-    ordered.forEach((group) => {
-      group.actions.sort((a, b) => a.label.localeCompare(b.label, "ja"));
-    });
-
-    return ordered;
-  }, [localGamePlayer, effectiveResources, lobbySummary]);
 
   const polishSelectionDetails = useMemo<PolishSelectionDetail[]>(() => {
     return Object.entries(polishSelectionMap).map(([cardId, entry]) => {
@@ -1032,18 +1128,19 @@ export default function PlayPage(): JSX.Element {
   }, [polishSummary.canSubmit, closePolishDialog, setFeedback]);
 
   const handleExecuteLab = useCallback(
-    async (labId: string) => {
+    async (labId: string, extraPayload?: Record<string, unknown>) => {
       if (!localPlayer?.id) {
         setFeedback("先にロビーでプレイヤーとして参加してください。");
         return;
       }
       setPendingActionId(labId);
       try {
+        const payload: Record<string, unknown> = { labId, ...(extraPayload ?? {}) };
         await performAction({
           action: {
             playerId: localPlayer.id,
             actionType: "labActivate",
-            payload: { labId },
+            payload,
           },
         });
         setFeedback(
@@ -1052,6 +1149,7 @@ export default function PlayPage(): JSX.Element {
             : "ラボアクションを実行しました。",
         );
         await refresh();
+        closeLabConfirmDialog();
       } catch (error) {
         console.error(error);
         setFeedback(
@@ -1061,7 +1159,7 @@ export default function PlayPage(): JSX.Element {
         setPendingActionId(null);
       }
     },
-    [localPlayer?.id, performAction, refresh],
+    [localPlayer?.id, performAction, refresh, closeLabConfirmDialog],
   );
 
   const growthNodes = localCharacterProfile?.growthNodes ?? [];
@@ -1107,6 +1205,275 @@ export default function PlayPage(): JSX.Element {
     });
     return map;
   }, [growthNodesWithStatus]);
+
+  const availableWillNodes = useMemo(
+    () =>
+      growthNodesWithStatus.filter(
+        (node) => node.isUnlocked && isWillAbilityNode(node),
+      ),
+    [growthNodesWithStatus],
+  );
+  const willAbilityCount = availableWillNodes.length;
+
+  const openWillDialog = useCallback(() => {
+    if (availableWillNodes.length === 0) {
+      setFeedback("使用可能な意思能力がありません。");
+      return;
+    }
+    setSelectedWillNodeId((prev) => {
+      if (prev && availableWillNodes.some((node) => node.id === prev)) {
+        return prev;
+      }
+      return availableWillNodes[0]?.id ?? null;
+    });
+    setIsWillDialogOpen(true);
+  }, [availableWillNodes, setFeedback]);
+
+  const closeWillDialog = useCallback(() => {
+    setIsWillDialogOpen(false);
+    setSelectedWillNodeId(null);
+    setIsWillSubmitting(false);
+  }, []);
+
+  const handleSubmitWill = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    const nodeId =
+      selectedWillNodeId && availableWillNodes.some((node) => node.id === selectedWillNodeId)
+        ? selectedWillNodeId
+        : availableWillNodes[0]?.id ?? null;
+    if (!nodeId) {
+      setFeedback("意思能力を選択してください。");
+      return;
+    }
+
+    setIsWillSubmitting(true);
+    setPendingActionId("will");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "will",
+          payload: { nodeId },
+        },
+      });
+      const executedNode = availableWillNodes.find((node) => node.id === nodeId);
+      setFeedback(
+        executedNode
+          ? `意思能力「${executedNode.name}」を実行しました。`
+          : "意思能力を実行しました。",
+      );
+      await refresh();
+      closeWillDialog();
+    } catch (error) {
+      console.error(error);
+      setFeedback(error instanceof Error ? error.message : "意思アクションの実行に失敗しました。");
+    } finally {
+      setIsWillSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
+    localPlayer?.id,
+    selectedWillNodeId,
+    availableWillNodes,
+    performAction,
+    refresh,
+    closeWillDialog,
+    setFeedback,
+  ]);
+
+
+  const lensOpponentTargets = useMemo<LensTargetOption[]>(() => {
+    if (!gameState || !localGamePlayer) {
+      return [];
+    }
+    const lenses = gameState.board?.lenses ?? {};
+    const slots = gameState.board?.lobbySlots ?? [];
+    const map = new Map<string, LensTargetOption>();
+
+    slots.forEach((slot) => {
+      if (!slot.occupantId || slot.occupantId === localGamePlayer.playerId) {
+        return;
+      }
+      const lens = lenses[slot.lensId];
+      if (!lens || lens.status !== "available") {
+        return;
+      }
+      const occupant = gameState.players[slot.occupantId];
+      const owner = gameState.players[lens.ownerId];
+      const existing = map.get(lens.lensId);
+      if (!existing || (!existing.slotActive && slot.isActive)) {
+        map.set(lens.lensId, {
+          lensId: lens.lensId,
+          ownerId: lens.ownerId,
+          ownerName: owner?.displayName ?? lens.ownerId,
+          occupantId: slot.occupantId,
+          occupantName: occupant?.displayName ?? slot.occupantId,
+          slotActive: slot.isActive,
+          cost: lens.cost,
+          rewards: lens.rewards,
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [gameState, localGamePlayer]);
+
+  const persuasionTargetCount = lensOpponentTargets.length;
+  const selectedPersuasionTarget = useMemo(
+    () =>
+      lensOpponentTargets.find((target) => target.lensId === selectedPersuasionLensId) ??
+      lensOpponentTargets[0] ??
+      null,
+    [lensOpponentTargets, selectedPersuasionLensId],
+  );
+  const persuasionLensCostDescriptions = useMemo(
+    () =>
+      selectedPersuasionTarget ? describeResourceCost(selectedPersuasionTarget.cost) : [],
+    [selectedPersuasionTarget],
+  );
+  const persuasionLensRewardDescriptions = useMemo(
+    () =>
+      selectedPersuasionTarget
+        ? selectedPersuasionTarget.rewards.map((reward) => describeRewardDefinition(reward))
+        : [],
+    [selectedPersuasionTarget],
+  );
+
+  const negotiationAvailable = useMemo(() => {
+    if (!gameState) {
+      return true;
+    }
+    const placements = Array.isArray(gameState.labPlacements) ? gameState.labPlacements : [];
+    const placementUsed = placements.some(
+      (placement) => placement.labId === "negotiation" && placement.count > 0,
+    );
+    const players = Object.values(gameState.players ?? {});
+    const alreadyRooting = players.some((player) => player.isRooting);
+    return !placementUsed && !alreadyRooting;
+  }, [gameState]);
+
+  const playerActionsByCategory = useMemo<PlayerActionGroupViewModel[]>(() => {
+    if (!localGamePlayer) {
+      return [];
+    }
+    const resources = effectiveResources ?? localGamePlayer.resources;
+    const context: PlayerActionContext = {
+      player: localGamePlayer,
+      resources,
+      lobby: lobbySummary,
+      willAbilityCount,
+      negotiationAvailable,
+      persuasionTargetCount,
+    };
+    const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
+
+    PLAYER_ACTIONS.forEach((action) => {
+      const availability = (action.requirement ?? (() => ({ available: true })))(context);
+      const view: PlayerActionViewModel = {
+        ...action,
+        available: availability.available,
+        reason: availability.available ? undefined : availability.reason,
+      };
+      const existing = groups.get(action.category);
+      if (existing) {
+        existing.actions.push(view);
+      } else {
+        groups.set(action.category, {
+          category: action.category,
+          label: PLAYER_ACTION_CATEGORY_LABELS[action.category],
+          actions: [view],
+        });
+      }
+    });
+
+    const ordered = Array.from(groups.values()).sort(
+      (a, b) =>
+        PLAYER_ACTION_CATEGORY_ORDER.indexOf(a.category) -
+        PLAYER_ACTION_CATEGORY_ORDER.indexOf(b.category),
+    );
+
+    ordered.forEach((group) => {
+      group.actions.sort((a, b) => a.label.localeCompare(b.label, "ja"));
+    });
+
+    return ordered;
+  }, [
+    localGamePlayer,
+    effectiveResources,
+    lobbySummary,
+    willAbilityCount,
+    negotiationAvailable,
+    persuasionTargetCount,
+  ]);
+
+  const openPersuasionDialog = useCallback(() => {
+    if (lensOpponentTargets.length === 0) {
+      setFeedback("説得できるレンズがありません。");
+      return;
+    }
+    setSelectedPersuasionLensId((prev) => {
+      if (prev && lensOpponentTargets.some((target) => target.lensId === prev)) {
+        return prev;
+      }
+      return lensOpponentTargets[0]?.lensId ?? null;
+    });
+    setIsPersuasionDialogOpen(true);
+  }, [lensOpponentTargets, setFeedback]);
+
+  const closePersuasionDialog = useCallback(() => {
+    setIsPersuasionDialogOpen(false);
+    setSelectedPersuasionLensId(null);
+    setIsPersuasionSubmitting(false);
+  }, []);
+
+  const handleSubmitPersuasion = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    const lensId =
+      selectedPersuasionLensId &&
+      lensOpponentTargets.some((target) => target.lensId === selectedPersuasionLensId)
+        ? selectedPersuasionLensId
+        : lensOpponentTargets[0]?.lensId ?? null;
+    if (!lensId) {
+      setFeedback("説得対象のレンズを選択してください。");
+      return;
+    }
+    setIsPersuasionSubmitting(true);
+    setPendingActionId("persuasion");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "persuasion",
+          payload: { lensId },
+        },
+      });
+      setFeedback(`説得でレンズ ${lensId} を起動しました。`);
+      await refresh();
+      closePersuasionDialog();
+    } catch (error) {
+      console.error(error);
+      setFeedback(
+        error instanceof Error ? error.message : "説得アクションの実行に失敗しました。",
+      );
+    } finally {
+      setIsPersuasionSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
+    localPlayer?.id,
+    selectedPersuasionLensId,
+    lensOpponentTargets,
+    performAction,
+    refresh,
+    closePersuasionDialog,
+    setFeedback,
+  ]);
 
   const formatPrerequisites = useCallback(
     (definition?: GrowthNodeDefinition) => {
@@ -1961,7 +2328,9 @@ export default function PlayPage(): JSX.Element {
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>ロビー管理</span>
                       <span className={styles.characterValue}>
-                        ストック {lobbySummary.stock} / ロビー {lobbySummary.totalTokens}
+                        シート 未使用 {lobbySummary.reserveUnused} / 使用済み {lobbySummary.reserveUsed} ｜ レンズ
+                        未使用 {lobbySummary.boardActive} / 使用済み {lobbySummary.boardFatigued} ｜ ラボ配置{" "}
+                        {lobbySummary.labCommitted} ｜ 合計 {lobbySummary.totalTokens}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
@@ -2074,8 +2443,12 @@ export default function PlayPage(): JSX.Element {
                                       }
                                       if (action.id === "polish") {
                                         openPolishDialog();
-                                      } else if (action.id === "focus-light") {
-                                        void handleExecuteLab("focus-light");
+                                      } else if (action.id === "will") {
+                                        openWillDialog();
+                                      } else if (action.id === "persuasion") {
+                                        openPersuasionDialog();
+                                      } else if (LAB_ACTION_LOOKUP.has(action.id)) {
+                                        openLabConfirmDialog(action.id);
                                       }
                                     };
                                     return (
@@ -2257,6 +2630,265 @@ export default function PlayPage(): JSX.Element {
           </pre>
         </details>
       </section>
+
+      {labConfirmDialog ? (
+        <div
+          className={styles.actionConfirmOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`${labConfirmDialog.name}の実行確認`}
+          onClick={
+            pendingActionId === labConfirmDialog.id ? undefined : () => closeLabConfirmDialog()
+          }
+        >
+          <div
+            className={styles.actionConfirmModal}
+            role="document"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className={styles.actionConfirmTitle}>
+              {labConfirmDialog.name}を実行しますか？
+            </h4>
+            <p className={styles.actionConfirmDescription}>{labConfirmDialog.material}</p>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>コスト</h5>
+              <ul className={styles.actionConfirmList}>
+                {labConfirmDialog.cost.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>効果</h5>
+              <ul className={styles.actionConfirmList}>
+                {labConfirmDialog.result.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className={styles.actionConfirmActions}>
+              <button
+                type="button"
+                className={styles.actionConfirmButtonSecondary}
+                onClick={closeLabConfirmDialog}
+                disabled={pendingActionId === labConfirmDialog.id}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.actionConfirmButtonPrimary}
+                onClick={() => void handleExecuteLab(labConfirmDialog.id)}
+                disabled={pendingActionId === labConfirmDialog.id}
+              >
+                {pendingActionId === labConfirmDialog.id ? "実行中..." : "実行する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isWillDialogOpen ? (
+        <div
+          className={styles.willOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="意思能力の選択"
+          onClick={isWillSubmitting ? undefined : closeWillDialog}
+        >
+          <div
+            className={styles.willModal}
+            role="document"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.willHeader}>
+              <h4>意思能力を選択</h4>
+              <button
+                type="button"
+                className={styles.willCloseButton}
+                onClick={closeWillDialog}
+                aria-label="閉じる"
+                disabled={isWillSubmitting}
+              >
+                ×
+              </button>
+            </div>
+            <p className={styles.willHelp}>起動する意思能力を選択してください。</p>
+            <div
+              className={styles.willList}
+              role="radiogroup"
+              aria-label="意思能力の選択肢"
+            >
+              {availableWillNodes.length > 0 ? (
+                availableWillNodes.map((node) => {
+                  const checked = selectedWillNodeId === node.id;
+                  return (
+                    <label
+                      key={node.id}
+                      className={classNames(
+                        styles.willOption,
+                        checked ? styles.willOptionActive : undefined,
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="willAbility"
+                        value={node.id}
+                        checked={checked}
+                        onChange={() => setSelectedWillNodeId(node.id)}
+                        disabled={isWillSubmitting}
+                      />
+                      <div>
+                        <span className={styles.willAbilityTitle}>
+                          {node.position} {node.name}
+                        </span>
+                        <p className={styles.willAbilityDescription}>{node.description}</p>
+                      </div>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.willEmpty}>使用可能な意思能力がありません。</p>
+              )}
+            </div>
+            <div className={styles.willFooter}>
+              <button
+                type="button"
+                className={styles.willSecondaryButton}
+                onClick={closeWillDialog}
+                disabled={isWillSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.willPrimaryButton}
+                onClick={() => void handleSubmitWill()}
+                disabled={
+                  isWillSubmitting || !selectedWillNodeId || availableWillNodes.length === 0
+                }
+              >
+                {isWillSubmitting ? "送信中..." : "意思を実行"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isPersuasionDialogOpen ? (
+        <div
+          className={styles.willOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="説得の対象を選択"
+          onClick={isPersuasionSubmitting ? undefined : closePersuasionDialog}
+        >
+          <div
+            className={styles.willModal}
+            role="document"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.willHeader}>
+              <h4>説得の対象レンズを選択</h4>
+              <button
+                type="button"
+                className={styles.willCloseButton}
+                onClick={closePersuasionDialog}
+                aria-label="閉じる"
+                disabled={isPersuasionSubmitting}
+              >
+                ×
+              </button>
+            </div>
+            <p className={styles.willHelp}>
+              相手のロビーが配置されたレンズを選び、起動コストを支払って効果を得ます。
+            </p>
+            <div
+              className={styles.willList}
+              role="radiogroup"
+              aria-label="説得対象レンズ"
+            >
+              {lensOpponentTargets.length > 0 ? (
+                lensOpponentTargets.map((target) => {
+                  const checked = selectedPersuasionLensId === target.lensId;
+                  return (
+                    <label
+                      key={target.lensId}
+                      className={classNames(
+                        styles.willOption,
+                        checked ? styles.willOptionActive : undefined,
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="persuasionLens"
+                        value={target.lensId}
+                        checked={checked}
+                        onChange={() => setSelectedPersuasionLensId(target.lensId)}
+                        disabled={isPersuasionSubmitting}
+                      />
+                      <div>
+                        <span className={styles.willAbilityTitle}>
+                          レンズ {target.lensId}（所有者: {target.ownerName}）
+                        </span>
+                        <p className={styles.willAbilityDescription}>
+                          ロビー配置: {target.occupantName} / 状態:{" "}
+                          {target.slotActive ? "未使用" : "使用済み"}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.willAbilityDescription}>説得できるレンズがありません。</p>
+              )}
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
+              <ul className={styles.actionConfirmList}>
+                {persuasionLensCostDescriptions.length > 0 ? (
+                  persuasionLensCostDescriptions.map((item) => <li key={item}>{item}</li>)
+                ) : (
+                  <li>追加コストなし</li>
+                )}
+              </ul>
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
+              <ul className={styles.actionConfirmList}>
+                {persuasionLensRewardDescriptions.length > 0 ? (
+                  persuasionLensRewardDescriptions.map((item) => <li key={item}>{item}</li>)
+                ) : (
+                  <li>即時効果なし</li>
+                )}
+              </ul>
+            </div>
+            <div className={styles.willFooter}>
+              <button
+                type="button"
+                className={styles.willSecondaryButton}
+                onClick={closePersuasionDialog}
+                disabled={isPersuasionSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.willPrimaryButton}
+                onClick={() => void handleSubmitPersuasion()}
+                disabled={
+                  isPersuasionSubmitting ||
+                  lensOpponentTargets.length === 0 ||
+                  !selectedPersuasionTarget
+                }
+              >
+                {isPersuasionSubmitting ? "送信中..." : "説得を実行"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {isPolishDialogOpen && (
         <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="研磨アクション">
           <div className={styles.polishModal}>

@@ -71,17 +71,19 @@ const defaultLabs: Ruleset['labs'] = {
   negotiation: {
     labId: 'negotiation',
     name: '根回し',
-    description: '教員との調整で次の展開に備えます。',
-    cost: { actionPoints: 1, creativity: 1, lobby: 1 },
-    rewards: [],
+    description: '教員との調整で光を得つつ次の展開の先手番を確保します。',
+    cost: { lobby: 1 },
+    rewards: [
+      { type: 'resource', value: { light: 1 } },
+    ],
   },
   spirit: {
     labId: 'spirit',
     name: '気合',
-    description: '士気を高め、創造力を取り戻します。',
-    cost: { actionPoints: 1, creativity: 1, lobby: 1 },
+    description: '士気を高め、行動力を回復しながら淀みを整えます。',
+    cost: { lobby: 1 },
     rewards: [
-      { type: 'resource', value: { creativity: 1 } },
+      { type: 'resource', value: { actionPoints: 1, stagnation: 1 } },
     ],
   },
 };

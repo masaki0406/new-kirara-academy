@@ -12,6 +12,8 @@ import {
   applyCollect,
   validateWill,
   applyWill,
+  validatePersuasion,
+  applyPersuasion,
 } from '@domain/actionHandlers';
 import { TurnOrderImpl } from '@domain/turnOrder';
 import {
@@ -159,6 +161,28 @@ const baseRuleset: Ruleset = {
         {
           type: 'resource',
           value: { actionPoints: 5, creativity: 5 },
+        },
+      ],
+    },
+    negotiation: {
+      labId: 'negotiation',
+      name: '根回し',
+      cost: { lobby: 1 },
+      rewards: [
+        {
+          type: 'resource',
+          value: { light: 1 },
+        },
+      ],
+    },
+    spirit: {
+      labId: 'spirit',
+      name: '気合',
+      cost: { lobby: 1 },
+      rewards: [
+        {
+          type: 'resource',
+          value: { actionPoints: 1, stagnation: 1 },
         },
       ],
     },
@@ -334,6 +358,233 @@ describe('labActivate focus-light', () => {
 
     const errors = await validateLabActivate(action, createContext(gameState));
     expect(errors).toContain('light の上限を超えます');
+  });
+});
+
+describe('labActivate negotiation', () => {
+  it('grants light and rooting when available', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          lobbyStock: 3,
+        },
+      },
+      labPlacements: [],
+    });
+    const turnOrder = new TurnOrderImpl();
+    turnOrder.setInitialOrder(['a', 'b']);
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'labActivate',
+      payload: { labId: 'negotiation' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState, turnOrder));
+    expect(errors).toHaveLength(0);
+
+    await applyLabActivate(action, createContext(gameState, turnOrder));
+
+    const player = gameState.players.a;
+    expect(player.isRooting).toBe(true);
+    expect(player.resources.light).toBe(1);
+    expect(player.lobbyStock).toBe(2);
+    expect(gameState.labPlacements).toEqual([
+      { labId: 'negotiation', playerId: 'a', count: 1 },
+    ]);
+  });
+
+  it('rejects when negotiation already used', async () => {
+    const gameState = createGameState({
+      labPlacements: [{ labId: 'negotiation', playerId: 'a', count: 1 }],
+    });
+    const action: PlayerAction = {
+      playerId: 'b',
+      actionType: 'labActivate',
+      payload: { labId: 'negotiation' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('根回しは既に利用されています');
+  });
+
+  it('rejects when another player already rooted', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        ...baseState.players,
+        a: {
+          ...baseState.players.a,
+          isRooting: true,
+        },
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'b',
+      actionType: 'labActivate',
+      payload: { labId: 'negotiation' },
+    };
+
+    const errors = await validateLabActivate(action, createContext(gameState));
+    expect(errors).toContain('根回しはこのラウンドで既に行われています');
+  });
+});
+
+describe('persuasion action', () => {
+  it('activates a lens using an opponent lobby', async () => {
+    const baseState = createGameState();
+    const gameState = createGameState({
+      players: {
+        a: {
+          ...baseState.players.a,
+          actionPoints: 5,
+          resources: {
+            ...baseState.players.a.resources,
+            light: 2,
+          },
+        },
+        b: {
+          ...baseState.players.b,
+          lobbyUsed: 0,
+        },
+      },
+      board: {
+        ...baseState.board,
+        lenses: {
+          'lens-1': {
+            lensId: 'lens-1',
+            ownerId: 'b',
+            cost: { light: 1 },
+            rewards: [
+              {
+                type: 'resource',
+                value: { rainbow: 1 },
+              },
+            ],
+            slots: 1,
+            tags: [],
+            status: 'available',
+          },
+        },
+        lobbySlots: [
+          {
+            lensId: 'lens-1',
+            ownerId: 'b',
+            occupantId: 'b',
+            isActive: true,
+          },
+        ],
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'persuasion',
+      payload: { lensId: 'lens-1' },
+    };
+
+    const errors = await validatePersuasion(action, createContext(gameState));
+    expect(errors).toHaveLength(0);
+
+    await applyPersuasion(action, createContext(gameState));
+
+    const player = gameState.players.a;
+    expect(player.actionPoints).toBe(3);
+    expect(player.resources.light).toBe(1);
+    expect(player.resources.rainbow).toBe(1);
+
+    const lens = gameState.board.lenses['lens-1'];
+    expect(lens.status).toBe('exhausted');
+
+    const slot = gameState.board.lobbySlots.find((item) => item.lensId === 'lens-1');
+    expect(slot?.occupantId).toBeUndefined();
+
+    const opponent = gameState.players.b;
+    expect(opponent.lobbyUsed).toBe(1);
+  });
+
+  it('rejects when no opponent lobby is present', async () => {
+    const baseState = createGameState({
+      board: {
+        lenses: {
+          'lens-1': {
+            lensId: 'lens-1',
+            ownerId: 'b',
+            cost: {},
+            rewards: [],
+            slots: 1,
+            tags: [],
+            status: 'available',
+          },
+        },
+        lobbySlots: [],
+        publicDevelopmentCards: [],
+        publicVpCards: [],
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'persuasion',
+      payload: { lensId: 'lens-1' },
+    };
+
+    const errors = await validatePersuasion(action, createContext(baseState));
+    expect(errors).toContain('相手のロビーが配置されていません');
+  });
+
+  it('rejects when action points are insufficient', async () => {
+    const baseState = createGameState({
+      players: {
+        a: {
+          actionPoints: 1,
+          creativity: 0,
+          vp: 0,
+          resources: {
+            light: 0,
+            rainbow: 0,
+            stagnation: 0,
+            maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
+          },
+          hand: [],
+          ownedLenses: [],
+          tasksCompleted: [],
+          hasPassed: false,
+          unlockedCharacterNodes: [],
+        },
+        b: createGameState().players.b,
+      },
+      board: {
+        lenses: {
+          'lens-1': {
+            lensId: 'lens-1',
+            ownerId: 'b',
+            cost: {},
+            rewards: [],
+            slots: 1,
+            tags: [],
+            status: 'available',
+          },
+        },
+        lobbySlots: [
+          {
+            lensId: 'lens-1',
+            ownerId: 'b',
+            occupantId: 'b',
+            isActive: true,
+          },
+        ],
+        publicDevelopmentCards: [],
+        publicVpCards: [],
+      },
+    });
+    const action: PlayerAction = {
+      playerId: 'a',
+      actionType: 'persuasion',
+      payload: { lensId: 'lens-1' },
+    };
+
+    const errors = await validatePersuasion(action, createContext(baseState));
+    expect(errors).toContain('行動力が不足しています');
   });
 });
 

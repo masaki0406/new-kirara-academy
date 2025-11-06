@@ -47,6 +47,15 @@ function ensureStateDefaults(state: GameState): void {
   if (!Array.isArray(state.labPlacements)) {
     state.labPlacements = [];
   }
+  if (state.players) {
+    Object.values(state.players).forEach((player) => {
+      if (typeof player.lobbyUsed !== 'number' || Number.isNaN(player.lobbyUsed)) {
+        player.lobbyUsed = 0;
+      } else {
+        player.lobbyUsed = Math.max(0, Math.floor(player.lobbyUsed));
+      }
+    });
+  }
 }
 
 export class RoomService {
@@ -267,6 +276,10 @@ export class RoomService {
 
     if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
       player.lobbyStock = Math.max(0, Math.floor(params.lobbyStock));
+    }
+
+    if (typeof params.lobbyUsed === 'number' && Number.isFinite(params.lobbyUsed)) {
+      player.lobbyUsed = Math.max(0, Math.floor(params.lobbyUsed));
     }
 
     if (typeof params.lensCount === 'number' && Number.isFinite(params.lensCount)) {

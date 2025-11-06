@@ -55,9 +55,23 @@ function resolveLabCost(lab: LabDefinition | undefined): LabCostDefinition {
 
 function getPlayerLobbyStock(player: PlayerState): number {
   if (typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)) {
-    return player.lobbyStock;
+    return Math.max(0, player.lobbyStock);
   }
-  return DEFAULT_LOBBY_STOCK;
+  const used = getPlayerLobbyUsed(player);
+  return Math.max(0, DEFAULT_LOBBY_STOCK - used);
+}
+
+function getPlayerLobbyUsed(player: PlayerState): number {
+  if (typeof player.lobbyUsed === 'number' && Number.isFinite(player.lobbyUsed)) {
+    return Math.max(0, player.lobbyUsed);
+  }
+  return 0;
+}
+
+function incrementPlayerLobbyUsed(player: PlayerState, amount: number): void {
+  const current = getPlayerLobbyUsed(player);
+  const next = Math.max(0, current + amount);
+  player.lobbyUsed = Math.min(DEFAULT_LOBBY_STOCK, next);
 }
 
 export type Validator = (
@@ -117,6 +131,19 @@ export const validateLabActivate: Validator = async (action, context) => {
   if (!lab) {
     errors.push('指定されたラボが存在しません');
     return errors;
+  }
+
+  if (labId === 'negotiation') {
+    const existingPlacement = gameState.labPlacements.some(
+      (placement) => placement.labId === labId && placement.count > 0,
+    );
+    if (existingPlacement) {
+      errors.push('根回しは既に利用されています');
+    }
+    const alreadyRooting = Object.values(gameState.players).some((p) => p.isRooting);
+    if (alreadyRooting) {
+      errors.push('根回しはこのラウンドで既に行われています');
+    }
   }
 
   const cost = resolveLabCost(lab);
@@ -195,6 +222,11 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
 
   for (const reward of lab.rewards) {
     applyReward(player, reward);
+  }
+
+  if (labId === 'negotiation') {
+    player.isRooting = true;
+    context.turnOrder?.registerRooting(action.playerId);
   }
 };
 
@@ -742,6 +774,128 @@ export const applyRooting: EffectApplier = async (action, context) => {
 
   player.isRooting = true;
   player.resources.light += 1;
+};
+
+export const validatePersuasion: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.currentPlayerId !== action.playerId) {
+    errors.push('現在の手番プレイヤーではありません');
+  }
+
+  const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+  if (!lensId) {
+    errors.push('レンズIDが指定されていません');
+    return errors;
+  }
+
+  const lens = gameState.board.lenses[lensId];
+  if (!lens) {
+    errors.push('指定されたレンズが存在しません');
+    return errors;
+  }
+
+  if (lens.status !== 'available') {
+    errors.push('レンズは使用済みです');
+  }
+
+  const slot = gameState.board.lobbySlots.find(
+    (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
+  );
+  if (!slot) {
+    errors.push('相手のロビーが配置されていません');
+  } else if (slot.occupantId === action.playerId) {
+    errors.push('自分のロビーには説得できません');
+  }
+
+  const requiredActionPoints = 2 + (lens.cost.actionPoints ?? 0);
+  if (player.actionPoints < requiredActionPoints) {
+    errors.push('行動力が不足しています');
+  }
+
+  if (!canPayResourceCost(player.resources, lens.cost)) {
+    errors.push('必要な資源が不足しています');
+  }
+
+  if ((lens.cost.creativity ?? 0) > player.creativity) {
+    errors.push('創造力が不足しています');
+  }
+
+  lens.rewards
+    .filter((reward) => reward.type === 'resource')
+    .forEach((reward) => {
+      const value = reward.value as ResourceReward;
+      for (const [resource, amount] of resourceRewardEntries(value)) {
+        if (!hasCapacity(player.resources, resource, amount)) {
+          errors.push(`${resource} の上限を超えます`);
+        }
+      }
+    });
+
+  return errors;
+};
+
+export const applyPersuasion: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+
+  const lensId = action.payload.lensId as string;
+  const lens = gameState.board.lenses[lensId];
+  if (!lens) {
+    throw new Error('指定されたレンズが存在しません');
+  }
+
+  const slot = gameState.board.lobbySlots.find(
+    (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
+  );
+  if (!slot || !slot.occupantId) {
+    throw new Error('相手のロビーが配置されていません');
+  }
+
+  const occupantId = slot.occupantId;
+  const occupantPlayer = gameState.players[occupantId];
+
+  player.actionPoints = Math.max(0, player.actionPoints - 2);
+  const extraAction = lens.cost.actionPoints ?? 0;
+  if (extraAction > 0) {
+    player.actionPoints = Math.max(0, player.actionPoints - extraAction);
+  }
+  payResourceCost(player.resources, lens.cost);
+  if (lens.cost.creativity) {
+    player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
+  }
+
+  for (const reward of lens.rewards) {
+    applyReward(player, reward);
+  }
+
+  lens.status = 'exhausted';
+  if (lens.ownerId !== action.playerId) {
+    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
+      actorId: action.playerId,
+      ownerId: lens.ownerId,
+      actionType: 'persuasion',
+    });
+  }
+  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+    actorId: action.playerId,
+    actionType: 'persuasion',
+  });
+
+  slot.occupantId = undefined;
+  slot.isActive = true;
+  if (occupantPlayer) {
+    incrementPlayerLobbyUsed(occupantPlayer, 1);
+  }
 };
 
 export const validatePass: Validator = async (action, context) => {

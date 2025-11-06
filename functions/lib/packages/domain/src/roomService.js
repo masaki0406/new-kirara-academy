@@ -5,6 +5,16 @@ function ensureStateDefaults(state) {
     if (!Array.isArray(state.labPlacements)) {
         state.labPlacements = [];
     }
+    if (state.players) {
+        Object.values(state.players).forEach((player) => {
+            if (typeof player.lobbyUsed !== 'number' || Number.isNaN(player.lobbyUsed)) {
+                player.lobbyUsed = 0;
+            }
+            else {
+                player.lobbyUsed = Math.max(0, Math.floor(player.lobbyUsed));
+            }
+        });
+    }
 }
 class RoomService {
     constructor(adapter) {
@@ -40,6 +50,7 @@ class RoomService {
             isRooting: false,
             unlockedCharacterNodes: [],
             lobbyStock: state.players[params.hostId]?.lobbyStock ?? RoomService.DEFAULT_LOBBY_STOCK,
+            lobbyUsed: state.players[params.hostId]?.lobbyUsed ?? 0,
         };
         if (!state.currentPlayerId) {
             state.currentPlayerId = params.hostId;
@@ -104,6 +115,7 @@ class RoomService {
                 isRooting: false,
                 unlockedCharacterNodes: [],
                 lobbyStock: RoomService.DEFAULT_LOBBY_STOCK,
+                lobbyUsed: 0,
             };
         }
         if (!state.turnOrder.includes(params.playerId)) {
@@ -195,6 +207,9 @@ class RoomService {
         }
         if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
             player.lobbyStock = Math.max(0, Math.floor(params.lobbyStock));
+        }
+        if (typeof params.lobbyUsed === 'number' && Number.isFinite(params.lobbyUsed)) {
+            player.lobbyUsed = Math.max(0, Math.floor(params.lobbyUsed));
         }
         if (typeof params.lensCount === 'number' && Number.isFinite(params.lensCount)) {
             const target = Math.max(0, Math.floor(params.lensCount));

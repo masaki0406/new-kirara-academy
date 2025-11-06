@@ -68,6 +68,16 @@ const validateLabActivate = async (action, context) => {
         errors.push('指定されたラボが存在しません');
         return errors;
     }
+    if (labId === 'negotiation') {
+        const existingPlacement = gameState.labPlacements.some((placement) => placement.labId === labId && placement.count > 0);
+        if (existingPlacement) {
+            errors.push('根回しは既に利用されています');
+        }
+        const alreadyRooting = Object.values(gameState.players).some((p) => p.isRooting);
+        if (alreadyRooting) {
+            errors.push('根回しはこのラウンドで既に行われています');
+        }
+    }
     const cost = resolveLabCost(lab);
     const actionPointCost = cost.actionPoints ?? 0;
     if (player.actionPoints < actionPointCost) {
@@ -135,6 +145,10 @@ const applyLabActivate = async (action, context) => {
     }
     for (const reward of lab.rewards) {
         applyReward(player, reward);
+    }
+    if (labId === 'negotiation') {
+        player.isRooting = true;
+        context.turnOrder?.registerRooting(action.playerId);
     }
 };
 exports.applyLabActivate = applyLabActivate;

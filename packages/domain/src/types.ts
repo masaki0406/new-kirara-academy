@@ -45,6 +45,7 @@ export type ActionType =
   | 'refresh'
   | 'collect'
   | 'will'
+  | 'persuasion'
   | 'task'
   | 'rooting'
   | 'pass';
@@ -105,6 +106,7 @@ export interface PlayerState {
   isRooting?: boolean;
   unlockedCharacterNodes?: string[];
   lobbyStock?: number;
+  lobbyUsed?: number;
 }
 
 export interface LobbySlot {
@@ -183,6 +185,7 @@ export interface AdjustPlayerForTestPayload {
   playerId: PlayerId;
   resources?: Partial<Record<ResourceType, number>>;
   lobbyStock?: number;
+  lobbyUsed?: number;
   lensCount?: number;
 }
 

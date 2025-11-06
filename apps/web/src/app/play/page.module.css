@@ -782,6 +782,257 @@
   color: #64748b;
 }
 
+.actionConfirmOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1100;
+}
+
+.actionConfirmModal {
+  width: min(400px, 100%);
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.28);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.actionConfirmTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.actionConfirmDescription {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.actionConfirmSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionConfirmHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.actionConfirmList {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #1f2937;
+}
+
+.actionConfirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.actionConfirmButtonSecondary,
+.actionConfirmButtonPrimary {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.actionConfirmButtonSecondary {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.7);
+  color: #475569;
+}
+
+.actionConfirmButtonSecondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.actionConfirmButtonPrimary {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.actionConfirmButtonPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.willOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 1200;
+}
+
+.willModal {
+  width: min(460px, 100%);
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.28);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.willHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.willHeader h4 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.willCloseButton {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: #475569;
+  border-radius: 6px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.willCloseButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.willCloseButton:not(:disabled):hover {
+  background: rgba(148, 163, 184, 0.25);
+  color: #1f2937;
+}
+
+.willHelp {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.willList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.willOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.96);
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.willOption input {
+  margin-top: 2px;
+  accent-color: #2563eb;
+}
+
+.willOptionActive {
+  border-color: rgba(37, 99, 235, 0.6);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.willAbilityTitle {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.willAbilityDescription {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.willEmpty {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.willFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.willSecondaryButton,
+.willPrimaryButton {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.willSecondaryButton {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.7);
+  color: #475569;
+}
+
+.willSecondaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.willPrimaryButton {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.willPrimaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .taskRewardOverlay {
   position: fixed;
   inset: 0;
