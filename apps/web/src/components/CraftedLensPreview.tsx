@@ -14,7 +14,8 @@ interface Props {
 }
 
 const COST_POSITION_KEYS = ["costa", "costb", "costc"] as const;
-type CostPositionKey = (typeof COST_POSITION_KEYS)[number] | "total";
+type StandardCostKey = (typeof COST_POSITION_KEYS)[number];
+type CostPositionKey = StandardCostKey | "total";
 type ItemSlotKey = "top" | "middle" | "bottom";
 
 interface CostEntry {
@@ -39,13 +40,8 @@ function normalizeKeyword(value: string): string {
   return value.replace(/[\s_-]/g, "").toLowerCase();
 }
 
-function isCostPositionKey(value: string): value is CostPositionKey {
-  return (
-    value === "costa" ||
-    value === "costb" ||
-    value === "costc" ||
-    value === "total"
-  );
+function isStandardCostKey(value: string): value is StandardCostKey {
+  return (COST_POSITION_KEYS as readonly string[]).includes(value);
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -84,7 +80,7 @@ function formatCostLabel(key: CostPositionKey): string {
   if (key === "total") {
     return "合計";
   }
-  return (key as string).toUpperCase();
+  return key.toUpperCase();
 }
 
 function addCostValue(store: Map<CostPositionKey, number>, key: string, raw: unknown): void {
@@ -93,7 +89,7 @@ function addCostValue(store: Map<CostPositionKey, number>, key: string, raw: unk
     return;
   }
   const normalized = normalizeKeyword(key);
-  const costKey: CostPositionKey = isCostPositionKey(normalized) ? (normalized as CostPositionKey) : "total";
+  const costKey: CostPositionKey = isStandardCostKey(normalized) ? normalized : "total";
   store.set(costKey, (store.get(costKey) ?? 0) + numeric);
 }
 
@@ -161,7 +157,7 @@ function mapToCostEntries(
   });
   const others: CostEntry[] = [];
   store.forEach((value, key) => {
-    if (!COST_POSITION_KEYS.includes(key as CostPositionKey) && key !== "total") {
+    if (!isStandardCostKey(key) && key !== "total") {
       others.push({ key, label: formatCostLabel(key), value });
     }
   });
