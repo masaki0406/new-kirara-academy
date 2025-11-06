@@ -787,6 +787,17 @@ export default function PlayPage(): JSX.Element {
   const [vpCardCatalog, setVpCardCatalog] = useState<Map<string, CatalogDevelopmentCard>>(
     new Map(),
   );
+
+  const getCardDefinition = useCallback(
+    (cardId: string, cardType: "development" | "vp") => {
+      const trimmed = cardId.trim();
+      if (cardType === "vp") {
+        return vpCardCatalog.get(trimmed) ?? developmentCardCatalog.get(trimmed) ?? null;
+      }
+      return developmentCardCatalog.get(trimmed) ?? vpCardCatalog.get(trimmed) ?? null;
+    },
+    [developmentCardCatalog, vpCardCatalog],
+  );
   const [isLoadingVpCards, setIsLoadingVpCards] = useState(false);
   const [vpCardError, setVpCardError] = useState<string | null>(null);
   const [isPolishDialogOpen, setIsPolishDialogOpen] = useState(false);
@@ -2776,6 +2787,7 @@ export default function PlayPage(): JSX.Element {
                                   key={lens.lensId}
                                   lens={lens}
                                   className={styles.craftedLensCard}
+                                  getCard={getCardDefinition}
                                 />
                               ))}
                             </div>
@@ -3519,7 +3531,7 @@ export default function PlayPage(): JSX.Element {
               {polishSummary.lensResult ? (
                 <section className={styles.polishSection}>
                   <h6>完成レンズプレビュー</h6>
-                  <CraftedLensPreview lens={polishSummary.lensResult} />
+                  <CraftedLensPreview lens={polishSummary.lensResult} getCard={getCardDefinition} />
                 </section>
               ) : null}
               <section className={styles.polishSection}>
