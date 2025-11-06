@@ -14,7 +14,6 @@ interface Props {
 }
 
 const STANDARD_COST_KEYS = ["costa", "costb", "costc"] as const;
-type StandardCostKey = (typeof STANDARD_COST_KEYS)[number];
 type CostSlotArray = [number, number, number];
 type ItemSlotKey = "top" | "middle" | "bottom";
 
@@ -28,19 +27,6 @@ interface AggregatedCostData {
 interface AggregatedItemData {
   left: Record<ItemSlotKey, string[]>;
   right: Record<ItemSlotKey, string[]>;
-}
-
-function toFiniteNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    if (!Number.isNaN(parsed)) {
-      return parsed;
-    }
-  }
-  return null;
 }
 
 function toSlotFromPosition(position: number | undefined | null): ItemSlotKey {

@@ -165,10 +165,6 @@ function sumSlots(slots: CostSlotArray): number {
   return slots[0] + slots[1] + slots[2];
 }
 
-function reverseSlots(slots: CostSlotArray): CostSlotArray {
-  return [slots[2], slots[1], slots[0]];
-}
-
 function flipPosition(position: number | null | undefined): number | null {
   if (position === null || position === undefined || Number.isNaN(position)) {
     return position ?? null;
