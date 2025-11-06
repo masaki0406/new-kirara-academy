@@ -121,6 +121,16 @@ const COST_SLOT_KEYS = ["costa", "costb", "costc"] as const;
 type CostSlotIndex = 0 | 1 | 2;
 type CostSlotArray = [number, number, number];
 
+function toSlotFromPosition(value: number | null | undefined): "top" | "middle" | "bottom" {
+  if (value === 1) {
+    return "top";
+  }
+  if (value === 3) {
+    return "bottom";
+  }
+  return "middle";
+}
+
 function addSlotValue(slots: CostSlotArray, index: CostSlotIndex, value: number | null): void {
   if (value === null) {
     return;
