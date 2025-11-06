@@ -15,33 +15,19 @@ interface Props {
 
 const STANDARD_COST_KEYS = ["costa", "costb", "costc"] as const;
 type StandardCostKey = (typeof STANDARD_COST_KEYS)[number];
-type CostPositionKey = string;
+type CostSlotArray = [number, number, number];
 type ItemSlotKey = "top" | "middle" | "bottom";
 
-interface CostEntry {
-  key: CostPositionKey;
-  label: string;
-  value: number;
-}
-
 interface AggregatedCostData {
-  leftTop: CostEntry[];
-  leftBottom: CostEntry[];
-  rightTop: CostEntry[];
-  rightBottom: CostEntry[];
+  leftTop: CostSlotArray;
+  leftBottom: CostSlotArray;
+  rightTop: CostSlotArray;
+  rightBottom: CostSlotArray;
 }
 
 interface AggregatedItemData {
   left: Record<ItemSlotKey, string[]>;
   right: Record<ItemSlotKey, string[]>;
-}
-
-function normalizeKeyword(value: string): string {
-  return value.replace(/[\s_-]/g, "").toLowerCase();
-}
-
-function isStandardCostKey(value: string): value is StandardCostKey {
-  return (STANDARD_COST_KEYS as readonly string[]).includes(value as StandardCostKey);
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -67,158 +53,136 @@ function toSlotFromPosition(position: number | undefined | null): ItemSlotKey {
   return "middle";
 }
 
-function formatCostLabel(key: CostPositionKey): string {
-  if (key === "costa") {
-    return "A";
+function toNumeric(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
   }
-  if (key === "costb") {
-    return "B";
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
   }
-  if (key === "costc") {
-    return "C";
-  }
-  if (key === "total") {
-    return "合計";
-  }
-  return key.toUpperCase();
+  return null;
 }
 
-function addCostValue(store: Map<CostPositionKey, number>, key: string, raw: unknown): void {
-  const numeric = toFiniteNumber(raw);
-  if (numeric === null) {
-    return;
-  }
-  const normalized = normalizeKeyword(key);
-  const costKey: CostPositionKey = isStandardCostKey(normalized) ? normalized : "total";
-  store.set(costKey, (store.get(costKey) ?? 0) + numeric);
-}
+type CostSlotArray = [number, number, number];
 
-function collectCostEntries(store: Map<CostPositionKey, number>, data: unknown): void {
-  if (data === null || data === undefined) {
-    return;
-  }
-  if (typeof data === "number" || typeof data === "string") {
-    addCostValue(store, "total", data);
-    return;
-  }
-  if (Array.isArray(data)) {
-    data.forEach((value, index) => {
-      addCostValue(store, `costa-${index}`, value);
-    });
-    return;
-  }
-  if (typeof data === "object") {
-    Object.entries(data as Record<string, unknown>).forEach(([key, value]) => {
-      collectCostEntriesForKey(store, key, value);
-    });
-  }
-}
-
-function collectCostEntriesForKey(
-  store: Map<CostPositionKey, number>,
-  key: string,
-  value: unknown,
-): void {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    collectCostEntries(store, value);
-    return;
-  }
-  addCostValue(store, key, value);
-}
-
-function collectFromExtras(
-  store: Map<CostPositionKey, number>,
+function accumulateSlots(
+  slots: CostSlotArray,
+  record: Record<string, unknown> | undefined,
   extras: Record<string, unknown> | undefined,
   keys: readonly string[],
 ): void {
-  if (!extras) {
-    return;
+  if (record && typeof record === "object") {
+    STANDARD_COST_KEYS.forEach((key, index) => {
+      const numeric = toNumeric((record as Record<string, unknown>)[key]);
+      if (numeric !== null) {
+        slots[index] += numeric;
+      }
+    });
+  } else {
+    const numeric = toNumeric(record);
+    if (numeric !== null) {
+      slots[1] += numeric;
+    }
   }
-  const normalizedTargets = keys.map((key) => key.toLowerCase());
-  Object.entries(extras).forEach(([key, value]) => {
-    if (normalizedTargets.includes(key.toLowerCase())) {
-      collectCostEntries(store, value);
+
+  keys.forEach((extraKey) => {
+    const value = extras?.[extraKey];
+    if (!value) {
+      return;
+    }
+    if (typeof value === "object" && !Array.isArray(value)) {
+      STANDARD_COST_KEYS.forEach((key, index) => {
+        const numeric = toNumeric((value as Record<string, unknown>)[key]);
+        if (numeric !== null) {
+          slots[index] += numeric;
+        }
+      });
+    } else {
+      const numeric = toNumeric(value);
+      if (numeric !== null) {
+        slots[1] += numeric;
+      }
     }
   });
 }
 
-function mapToCostEntries(
-  store: Map<CostPositionKey, number>,
-  fallbackTotal: number | null,
-): CostEntry[] {
-  const entries: CostEntry[] = [];
-  STANDARD_COST_KEYS.forEach((key) => {
-    if (store.has(key)) {
-      const value = store.get(key) ?? 0;
-      if (value !== 0) {
-        entries.push({ key, label: formatCostLabel(key), value });
-      }
-    }
-  });
-  const others: CostEntry[] = [];
-  store.forEach((value, key) => {
-    if (!isStandardCostKey(key) && key !== "total") {
-      others.push({ key, label: formatCostLabel(key), value });
-    }
-  });
-  others.sort((a, b) => a.label.localeCompare(b.label, "ja"));
-  entries.push(...others);
-  if (!entries.length && fallbackTotal !== null && fallbackTotal !== 0) {
-    entries.push({ key: "total", label: formatCostLabel("total"), value: fallbackTotal });
+function getCostSnapshot(card: CatalogDevelopmentCard | null): CostSnapshot {
+  if (!card) {
+    return {
+      left: { top: [0, 0, 0], bottom: [0, 0, 0] },
+      right: { top: [0, 0, 0], bottom: [0, 0, 0] },
+    };
   }
-  return entries;
+  const extras = card.extras ?? {};
+  const leftTop: CostSlotArray = [0, 0, 0];
+  const leftBottom: CostSlotArray = [0, 0, 0];
+  const rightTop: CostSlotArray = [0, 0, 0];
+  const rightBottom: CostSlotArray = [0, 0, 0];
+
+  accumulateSlots(leftTop, card.costLeftUp as Record<string, unknown> | undefined, extras, COST_LEFT_UP_EXTRA_KEYS);
+  accumulateSlots(leftBottom, card.costLeftDown as Record<string, unknown> | undefined, extras, COST_LEFT_DOWN_EXTRA_KEYS);
+  accumulateSlots(rightTop, undefined, extras, COST_RIGHT_UP_EXTRA_KEYS);
+  accumulateSlots(rightBottom, undefined, extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+
+  return {
+    left: { top: leftTop, bottom: leftBottom },
+    right: { top: rightTop, bottom: rightBottom },
+  };
+}
+
+function addSlots(target: CostSlotArray, source: CostSlotArray): void {
+  target[0] += source[0];
+  target[1] += source[1];
+  target[2] += source[2];
+}
+
+function reverseSlots(slots: CostSlotArray): CostSlotArray {
+  return [slots[2], slots[1], slots[0]];
 }
 
 function aggregateCosts(
   lens: CraftedLens,
   getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
 ): AggregatedCostData {
-  const leftTop = new Map<CostPositionKey, number>();
-  const leftBottom = new Map<CostPositionKey, number>();
-  const rightTop = new Map<CostPositionKey, number>();
-  const rightBottom = new Map<CostPositionKey, number>();
+  const aggregated: AggregatedCostData = {
+    leftTop: [0, 0, 0],
+    leftBottom: [0, 0, 0],
+    rightTop: [0, 0, 0],
+    rightBottom: [0, 0, 0],
+  };
 
-  if (getCard) {
-    lens.sourceCards.forEach((source) => {
-      const card = getCard(source.cardId, source.cardType);
-      if (!card) {
-        return;
-      }
-      const useRight = source.cardType === "vp" || source.flipped;
-      if (useRight) {
-        collectFromExtras(rightTop, card.extras, ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"]);
-        collectFromExtras(
-          rightBottom,
-          card.extras,
-          ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"],
-        );
-      } else {
-        collectCostEntries(leftTop, card.costLeftUp);
-        collectCostEntries(leftBottom, card.costLeftDown);
-        const hasLeftUp =
-          card.costLeftUp !== undefined &&
-          card.costLeftUp !== null &&
-          Object.values(card.costLeftUp).some((value) => toFiniteNumber(value) !== null);
-        const hasLeftDown =
-          card.costLeftDown !== undefined &&
-          card.costLeftDown !== null &&
-          Object.values(card.costLeftDown).some((value) => toFiniteNumber(value) !== null);
-        if (!hasLeftUp) {
-          collectFromExtras(leftTop, card.extras, ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"]);
-        }
-        if (!hasLeftDown) {
-          collectFromExtras(leftBottom, card.extras, ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"]);
-        }
-      }
-    });
+  if (!getCard) {
+    return aggregated;
   }
 
-  return {
-    leftTop: mapToCostEntries(leftTop, lens.leftTotal || null),
-    leftBottom: mapToCostEntries(leftBottom, null),
-    rightTop: mapToCostEntries(rightTop, lens.rightTotal || null),
-    rightBottom: mapToCostEntries(rightBottom, null),
-  };
+  lens.sourceCards.forEach((source) => {
+    const card = getCard(source.cardId, source.cardType);
+    const snapshot = getCostSnapshot(card);
+
+    if (source.cardType === "vp") {
+      addSlots(aggregated.rightTop, snapshot.right.top);
+      addSlots(aggregated.rightBottom, snapshot.right.bottom);
+      return;
+    }
+
+    if (!source.flipped) {
+      addSlots(aggregated.leftTop, snapshot.left.top);
+      addSlots(aggregated.leftBottom, snapshot.left.bottom);
+      addSlots(aggregated.rightTop, snapshot.right.top);
+      addSlots(aggregated.rightBottom, snapshot.right.bottom);
+      return;
+    }
+
+    addSlots(aggregated.rightBottom, reverseSlots(snapshot.left.top));
+    addSlots(aggregated.rightTop, reverseSlots(snapshot.left.bottom));
+    addSlots(aggregated.leftBottom, reverseSlots(snapshot.right.top));
+    addSlots(aggregated.leftTop, reverseSlots(snapshot.right.bottom));
+  });
+
+  return aggregated;
 }
 
 function aggregateItems(lens: CraftedLens): AggregatedItemData {
@@ -257,7 +221,7 @@ function formatNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function renderCostSlot(entries: CostEntry[], alignment: "left" | "right", position: ItemSlotKey): JSX.Element {
+function renderCostSlot(slots: CostSlotArray, alignment: "left" | "right", position: ItemSlotKey): JSX.Element {
   return (
     <div
       className={[
@@ -272,16 +236,11 @@ function renderCostSlot(entries: CostEntry[], alignment: "left" | "right", posit
         .filter(Boolean)
         .join(" ")}
     >
-      {entries.length === 0 ? (
-        <span className={styles.costPlaceholder}>-</span>
-      ) : (
-        entries.map((entry) => (
-          <div key={entry.key} className={styles.costEntry}>
-            <span className={styles.costKey}>{entry.label}</span>
-            <span className={styles.costValue}>{formatNumber(entry.value)}</span>
-          </div>
-        ))
-      )}
+      {slots.map((value, index) => (
+        <div key={`${position}-${alignment}-${index}`} className={styles.costCell}>
+          {value === 0 ? "−" : formatNumber(value)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -322,7 +281,7 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
       <div className={styles.costLayout}>
         <div className={styles.costColumn}>
           {renderCostSlot(aggregatedCosts.leftTop, "left", "top")}
-          {renderCostSlot([], "left", "middle")}
+          {renderCostSlot([0, 0, 0], "left", "middle")}
           {renderCostSlot(aggregatedCosts.leftBottom, "left", "bottom")}
         </div>
         <div className={styles.centerColumn}>
@@ -350,7 +309,7 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
         </div>
         <div className={styles.costColumn}>
           {renderCostSlot(aggregatedCosts.rightTop, "right", "top")}
-          {renderCostSlot([], "right", "middle")}
+          {renderCostSlot([0, 0, 0], "right", "middle")}
           {renderCostSlot(aggregatedCosts.rightBottom, "right", "bottom")}
         </div>
       </div>

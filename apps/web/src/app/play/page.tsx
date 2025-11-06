@@ -117,6 +117,71 @@ const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "c
 const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"];
 const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"];
 const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
+const COST_SLOT_KEYS = ["costa", "costb", "costc"] as const;
+type CostSlotIndex = 0 | 1 | 2;
+type CostSlotArray = [number, number, number];
+
+function addSlotValue(slots: CostSlotArray, index: CostSlotIndex, value: number | null): void {
+  if (value === null) {
+    return;
+  }
+  slots[index] += value;
+}
+
+function extractCostSlots(
+  record: Record<string, unknown> | undefined,
+  extras: Record<string, unknown> | undefined,
+  extraKeys: readonly string[],
+): CostSlotArray {
+  const slots: CostSlotArray = [0, 0, 0];
+
+  if (record && typeof record === "object") {
+    COST_SLOT_KEYS.forEach((key, index) => {
+      addSlotValue(slots, index as CostSlotIndex, toNumeric(record[key]));
+    });
+  } else {
+    addSlotValue(slots, 1, toNumeric(record));
+  }
+
+  extraKeys.forEach((extraKey) => {
+    const extraValue = extras?.[extraKey];
+    if (!extraValue) {
+      return;
+    }
+    if (typeof extraValue === "object" && !Array.isArray(extraValue)) {
+      COST_SLOT_KEYS.forEach((key, index) => {
+        const nested = (extraValue as Record<string, unknown>)[key];
+        addSlotValue(slots, index as CostSlotIndex, toNumeric(nested));
+      });
+    } else {
+      addSlotValue(slots, 1, toNumeric(extraValue));
+    }
+  });
+
+  return slots;
+}
+
+function sumSlots(slots: CostSlotArray): number {
+  return slots[0] + slots[1] + slots[2];
+}
+
+function reverseSlots(slots: CostSlotArray): CostSlotArray {
+  return [slots[2], slots[1], slots[0]];
+}
+
+function flipPosition(position: number | null | undefined): number | null {
+  if (position === null || position === undefined || Number.isNaN(position)) {
+    return position ?? null;
+  }
+  const slot = toSlotFromPosition(position);
+  if (slot === "top") {
+    return 3;
+  }
+  if (slot === "bottom") {
+    return 1;
+  }
+  return 2;
+}
 
 type PlayerActionCategory = "lab" | "student" | "general";
 
@@ -555,24 +620,25 @@ function isWillAbilityNode(node: CharacterGrowthNode): boolean {
 }
 
 function getPolishCardValues(card: CatalogDevelopmentCard | null | undefined): {
-  left: { top: number; bottom: number };
-  right: { top: number; bottom: number };
+  left: { top: CostSlotArray; bottom: CostSlotArray };
+  right: { top: CostSlotArray; bottom: CostSlotArray };
 } {
   if (!card) {
     return {
-      left: { top: 0, bottom: 0 },
-      right: { top: 0, bottom: 0 },
+      left: { top: [0, 0, 0], bottom: [0, 0, 0] },
+      right: { top: [0, 0, 0], bottom: [0, 0, 0] },
     };
   }
-  const leftTop =
-    sumCostRecord(card.costLeftUp) + sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS);
-  const leftBottom =
-    sumCostRecord(card.costLeftDown) + sumExtras(card.extras, COST_LEFT_DOWN_EXTRA_KEYS);
-  const rightTop = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
-  const rightBottom = sumExtras(card.extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+  const extras = card.extras ?? {};
   return {
-    left: { top: leftTop, bottom: leftBottom },
-    right: { top: rightTop, bottom: rightBottom },
+    left: {
+      top: extractCostSlots(card.costLeftUp as Record<string, unknown> | undefined, extras, COST_LEFT_UP_EXTRA_KEYS),
+      bottom: extractCostSlots(card.costLeftDown as Record<string, unknown> | undefined, extras, COST_LEFT_DOWN_EXTRA_KEYS),
+    },
+    right: {
+      top: extractCostSlots(undefined, extras, COST_RIGHT_UP_EXTRA_KEYS),
+      bottom: extractCostSlots(undefined, extras, COST_RIGHT_DOWN_EXTRA_KEYS),
+    },
   };
 }
 
@@ -644,26 +710,41 @@ function buildDraftCraftedLens(
   const sourceCards = details.map((detail) => ({
     cardId: detail.cardId,
     cardType: detail.type,
-    flipped: detail.type === "vp" ? true : detail.flipped,
+    flipped: detail.type === "vp" ? false : detail.flipped,
   }));
   details.forEach((detail) => {
-    const useRight = detail.type === "vp" || detail.flipped;
-    if (useRight) {
-      rightTopTotal += detail.values.right.top;
+    const sumLeftTop = sumSlots(detail.values.left.top);
+    const sumLeftBottom = sumSlots(detail.values.left.bottom);
+    const sumRightTop = sumSlots(detail.values.right.top);
+    const sumRightBottom = sumSlots(detail.values.right.bottom);
+
+    if (detail.type === "vp") {
+      rightTopTotal += sumRightTop;
+    } else if (!detail.flipped) {
+      leftTopTotal += sumLeftTop;
+      rightTopTotal += sumRightTop;
     } else {
-      leftTopTotal += detail.values.left.top;
+      leftTopTotal += sumRightBottom;
+      rightTopTotal += sumLeftBottom;
     }
     vpTotal += extractCardVp(detail.card);
+    const basePosition = detail.costPosition ?? null;
+    const finalPosition =
+      detail.type === "vp"
+        ? basePosition
+        : detail.flipped
+          ? flipPosition(basePosition)
+          : basePosition;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
       cardType: detail.type,
-      position: detail.costPosition,
-      item: detail.costItem,
+      position: finalPosition,
+      item: detail.costItem ?? detail.cardId,
     };
     if (detail.costNumber !== null && detail.costNumber !== undefined && !Number.isNaN(detail.costNumber)) {
       item.quantity = detail.costNumber;
     }
-    if (useRight) {
+    if (detail.type === "vp" || detail.flipped) {
       rightItems.push(item);
     } else {
       leftItems.push(item);
@@ -1237,10 +1318,14 @@ export default function PlayPage(): JSX.Element {
     let rightTopTotal = 0;
     polishSelectionDetails.forEach((detail) => {
       const useRight = detail.type === "vp" || detail.flipped;
-      if (useRight) {
-        rightTopTotal += detail.values.right.top;
+      if (detail.type === "vp") {
+        rightTopTotal += sumSlots(detail.values.right.top);
+      } else if (!detail.flipped) {
+        leftTopTotal += sumSlots(detail.values.left.top);
+        rightTopTotal += sumSlots(detail.values.right.top);
       } else {
-        leftTopTotal += detail.values.left.top;
+        leftTopTotal += sumSlots(detail.values.right.bottom);
+        rightTopTotal += sumSlots(detail.values.left.bottom);
       }
     });
     const foundationRequirement = Math.max(0, Math.ceil(rightTopTotal - leftTopTotal));
