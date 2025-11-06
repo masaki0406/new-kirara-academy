@@ -178,7 +178,7 @@ const baseRuleset: Ruleset = {
     spirit: {
       labId: 'spirit',
       name: '気合',
-      cost: { lobby: 1 },
+      cost: { actionPoints: 0, lobby: 1 },
       rewards: [
         {
           type: 'resource',

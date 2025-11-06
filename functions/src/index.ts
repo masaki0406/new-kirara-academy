@@ -78,7 +78,7 @@ const defaultLabs: Ruleset['labs'] = {
     labId: 'spirit',
     name: '気合',
     description: '士気を高め、行動力を回復しながら淀みを整えます。',
-    cost: { lobby: 1 },
+    cost: { actionPoints: 0, lobby: 1 },
     rewards: [
       { type: 'resource', value: { actionPoints: 1, stagnation: 1 } },
     ],
