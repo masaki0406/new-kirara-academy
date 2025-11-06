@@ -103,17 +103,18 @@ function sanitizeCraftedLensSideItems(value: unknown): CraftedLensSideItem[] {
         : record.item === null || record.item === undefined
           ? null
           : String(record.item);
-    const quantity =
-      typeof record.quantity === 'number' && Number.isFinite(record.quantity)
-        ? record.quantity
-        : undefined;
-    items.push({
+    const sanitized: CraftedLensSideItem = {
       cardId,
       cardType,
       position,
       item,
-      quantity,
-    });
+    };
+    if (typeof record.quantity === 'number' && Number.isFinite(record.quantity)) {
+      sanitized.quantity = record.quantity;
+    } else if (record.quantity === null) {
+      sanitized.quantity = null;
+    }
+    items.push(sanitized);
   });
   return items;
 }

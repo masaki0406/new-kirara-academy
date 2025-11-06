@@ -170,7 +170,7 @@ interface PolishSelectionDetail {
   type: "development" | "vp";
   card: CatalogDevelopmentCard | null;
   flipped: boolean;
-  totals: { left: number; right: number };
+  values: { left: number; right: number };
   costItem: string | null;
   costNumber: number | null;
   costPosition: number | null;
@@ -549,20 +549,17 @@ function isWillAbilityNode(node: CharacterGrowthNode): boolean {
   return node.name.startsWith("意思");
 }
 
-function getPolishCardTotals(
-  card: CatalogDevelopmentCard | null | undefined,
-  flipped: boolean,
-): { left: number; right: number } {
+function getPolishCardValues(card: CatalogDevelopmentCard | null | undefined): {
+  left: number;
+  right: number;
+} {
   if (!card) {
     return { left: 0, right: 0 };
   }
-  const leftTop =
+  const leftTotal =
     sumCostRecord(card.costLeftUp) + sumExtras(card.extras, COST_LEFT_UP_EXTRA_KEYS);
-  const rightTop = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
-  if (flipped) {
-    return { left: rightTop, right: leftTop };
-  }
-  return { left: leftTop, right: rightTop };
+  const rightTotal = sumExtras(card.extras, COST_RIGHT_UP_EXTRA_KEYS);
+  return { left: leftTotal, right: rightTotal };
 }
 
 function toOptionalNumeric(value: unknown): number | null {
@@ -633,20 +630,27 @@ function buildDraftCraftedLens(
   const sourceCards = details.map((detail) => ({
     cardId: detail.cardId,
     cardType: detail.type,
-    flipped: detail.flipped,
+    flipped: detail.type === "vp" ? true : detail.flipped,
   }));
   details.forEach((detail) => {
-    leftTotal += detail.totals.left;
-    rightTotal += detail.totals.right;
+    const useRight = detail.type === "vp" || detail.flipped;
+    const values = detail.values;
+    if (useRight) {
+      rightTotal += values.right;
+    } else {
+      leftTotal += values.left;
+    }
     vpTotal += extractCardVp(detail.card);
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
       cardType: detail.type,
       position: detail.costPosition,
       item: detail.costItem,
-      quantity: detail.costNumber ?? undefined,
     };
-    if (detail.flipped) {
+    if (detail.costNumber !== null && detail.costNumber !== undefined && !Number.isNaN(detail.costNumber)) {
+      item.quantity = detail.costNumber;
+    }
+    if (useRight) {
       rightItems.push(item);
     } else {
       leftItems.push(item);
@@ -1163,7 +1167,7 @@ export default function PlayPage(): JSX.Element {
       if (next[cardId]) {
         delete next[cardId];
       } else {
-        next[cardId] = { type, flipped: false };
+        next[cardId] = { type, flipped: type === "vp" };
       }
       return next;
     });
@@ -1173,7 +1177,7 @@ export default function PlayPage(): JSX.Element {
     setPolishSelectionMap((prev) => {
       const next = { ...prev };
       const entry = next[cardId];
-      if (entry) {
+      if (entry && entry.type === "development") {
         next[cardId] = { ...entry, flipped: !entry.flipped };
       }
       return next;
@@ -1190,13 +1194,13 @@ export default function PlayPage(): JSX.Element {
         entry.type === "development"
           ? developmentCardCatalog.get(cardId) ?? null
           : vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null;
-      const totals = getPolishCardTotals(card, entry.flipped ?? false);
+      const values = getPolishCardValues(card);
       return {
         cardId,
         type: entry.type,
         card,
         flipped: entry.flipped,
-        totals,
+        values,
         costItem: normalizeItemLabel(card?.costItem ?? null),
         costNumber: getCardCostNumber(card),
         costPosition: getCardCostPosition(card),
@@ -1207,8 +1211,13 @@ export default function PlayPage(): JSX.Element {
   const polishSummary = useMemo(() => {
     const totals = polishSelectionDetails.reduce(
       (acc, detail) => {
-        acc.left += detail.totals.left;
-        acc.right += detail.totals.right;
+        const values = detail.values;
+        const useRight = detail.type === "vp" || detail.flipped;
+        if (useRight) {
+          acc.right += values.right;
+        } else {
+          acc.left += values.left;
+        }
         return acc;
       },
       { left: 0, right: 0 },
@@ -1235,10 +1244,11 @@ export default function PlayPage(): JSX.Element {
     let rightConflict = false;
     polishSelectionDetails.forEach((detail) => {
       const position = detail.costPosition;
+      const useRight = detail.type === "vp" || detail.flipped;
       if (position === null || position === undefined || Number.isNaN(position)) {
         return;
       }
-      if (detail.flipped) {
+      if (useRight) {
         if (rightPositions.has(position)) {
           rightConflict = true;
         } else {
@@ -1253,7 +1263,10 @@ export default function PlayPage(): JSX.Element {
       }
     });
     const positionConflict = leftConflict || rightConflict;
-    const lensResult = buildDraftCraftedLens(polishSelectionDetails, polishFoundationChoice);
+    const lensResult = buildDraftCraftedLens(
+      polishSelectionDetails,
+      polishFoundationChoice,
+    );
     const canSubmit =
       polishSelectionDetails.length > 0 &&
       foundationMet &&
@@ -3377,17 +3390,33 @@ export default function PlayPage(): JSX.Element {
                       {polishDevelopmentOptions.map(({ cardId, card }) => {
                         const entry = polishSelectionMap[cardId];
                         const selected = Boolean(entry);
-                        const totals = getPolishCardTotals(card, entry?.flipped ?? false);
+                        const values = getPolishCardValues(card);
+                        const orientationRight = Boolean(entry?.flipped);
                         return (
                           <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
-                            <label className={styles.polishOptionLabel}>
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onChange={() => handleTogglePolishCard(cardId, "development")}
-                              />
-                              <span>{card?.cardId ?? cardId}</span>
-                            </label>
+                            <div className={styles.polishOptionHeader}>
+                              <label className={styles.polishOptionLabel}>
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => handleTogglePolishCard(cardId, "development")}
+                                />
+                                <span>{card?.cardId ?? cardId}</span>
+                              </label>
+                              <span className={styles.polishTotals}>
+                                左 {values.left} / 右 {values.right}
+                              </span>
+                            </div>
+                            {card ? (
+                              <div className={styles.polishOptionPreview}>
+                                <DevelopmentCardPreview
+                                  card={card}
+                                  orientation={orientationRight ? "right" : "left"}
+                                />
+                              </div>
+                            ) : (
+                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                            )}
                             {selected ? (
                               <div className={styles.polishOptionControls}>
                                 <button
@@ -3395,15 +3424,9 @@ export default function PlayPage(): JSX.Element {
                                   className={styles.polishToggleButton}
                                   onClick={() => handleTogglePolishFlip(cardId)}
                                 >
-                                  {entry?.flipped ? "裏面扱い" : "表面扱い"}
+                                  {orientationRight ? "右側で使用中" : "左側で使用中"}
                                 </button>
-                                <span className={styles.polishTotals}>
-                                  左 {totals.left} / 右 {totals.right}
-                                </span>
                               </div>
-                            ) : null}
-                            {!card ? (
-                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
                             ) : null}
                           </li>
                         );
@@ -3420,33 +3443,33 @@ export default function PlayPage(): JSX.Element {
                       {polishVpOptions.map(({ cardId, card }) => {
                         const entry = polishSelectionMap[cardId];
                         const selected = Boolean(entry);
-                        const totals = getPolishCardTotals(card, entry?.flipped ?? false);
+                        const values = getPolishCardValues(card);
                         return (
                           <li key={`vp-${cardId}`} className={styles.polishOptionItem}>
-                            <label className={styles.polishOptionLabel}>
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                onChange={() => handleTogglePolishCard(cardId, "vp")}
-                              />
-                              <span>{card?.cardId ?? cardId}</span>
-                            </label>
+                            <div className={styles.polishOptionHeader}>
+                              <label className={styles.polishOptionLabel}>
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={() => handleTogglePolishCard(cardId, "vp")}
+                                />
+                                <span>{card?.cardId ?? cardId}</span>
+                              </label>
+                              <span className={styles.polishTotals}>
+                                左 {values.left} / 右 {values.right}
+                              </span>
+                            </div>
+                            {card ? (
+                              <div className={styles.polishOptionPreview}>
+                                <DevelopmentCardPreview card={card} orientation="right" />
+                              </div>
+                            ) : (
+                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                            )}
                             {selected ? (
                               <div className={styles.polishOptionControls}>
-                                <button
-                                  type="button"
-                                  className={styles.polishToggleButton}
-                                  onClick={() => handleTogglePolishFlip(cardId)}
-                                >
-                                  {entry?.flipped ? "裏面扱い" : "表面扱い"}
-                                </button>
-                                <span className={styles.polishTotals}>
-                                  左 {totals.left} / 右 {totals.right}
-                                </span>
+                                <span className={styles.polishHint}>VPカードは右側で使用します。</span>
                               </div>
-                            ) : null}
-                            {!card ? (
-                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
                             ) : null}
                           </li>
                         );
@@ -3461,20 +3484,35 @@ export default function PlayPage(): JSX.Element {
                   <p className={styles.polishEmpty}>カードを選択してください。</p>
                 ) : (
                   <ul className={styles.polishSelectionList}>
-                    {polishSelectionDetails.map((detail) => (
-                      <li key={`sel-${detail.cardId}`} className={styles.polishSelectionItem}>
-                        <div>
-                          <strong>{detail.card?.cardId ?? detail.cardId}</strong>
-                          <span className={styles.polishSelectionMeta}>
-                            {detail.type === "vp" ? "VPカード" : "開発カード"}
-                            {detail.flipped ? "（裏面扱い）" : "（表面扱い）"}
-                          </span>
-                        </div>
-                        <span className={styles.polishTotals}>
-                          左 {detail.totals.left} / 右 {detail.totals.right}
-                        </span>
-                      </li>
-                    ))}
+                    {polishSelectionDetails.map((detail) => {
+                      const useRight = detail.type === "vp" || detail.flipped;
+                      return (
+                        <li key={`sel-${detail.cardId}`} className={styles.polishSelectionItem}>
+                          <div className={styles.polishSelectionHeader}>
+                            <div>
+                              <strong>{detail.card?.cardId ?? detail.cardId}</strong>
+                              <span className={styles.polishSelectionMeta}>
+                                {detail.type === "vp" ? "VPカード" : "開発カード"}
+                                {useRight ? "（右側配置）" : "（左側配置）"}
+                              </span>
+                            </div>
+                            <span className={styles.polishTotals}>
+                              左 {detail.values.left} / 右 {detail.values.right}
+                            </span>
+                          </div>
+                          {detail.card ? (
+                            <div className={styles.polishSelectionPreview}>
+                              <DevelopmentCardPreview
+                                card={detail.card}
+                                orientation={useRight ? "right" : "left"}
+                              />
+                            </div>
+                          ) : (
+                            <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>

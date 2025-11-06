@@ -95,16 +95,18 @@ function normalizeCraftedLensSideItems(value: unknown): CraftedLensSideItem[] {
     } else if (record.item !== undefined && record.item !== null) {
       item = String(record.item);
     }
-    const quantityNumber = toFiniteNumber(record.quantity);
-    const quantity =
-      quantityNumber !== null && Number.isFinite(quantityNumber) ? quantityNumber : undefined;
-    items.push({
+    const normalized: CraftedLensSideItem = {
       cardId,
       cardType,
       position,
       item,
-      quantity,
-    });
+    };
+    if (typeof record.quantity === 'number' && Number.isFinite(record.quantity)) {
+      normalized.quantity = record.quantity;
+    } else if (record.quantity === null) {
+      normalized.quantity = null;
+    }
+    items.push(normalized);
   });
   return items;
 }
@@ -249,16 +251,21 @@ function generateCraftedLensId(playerId: string, timestamp: number | undefined):
 }
 
 function cloneSideItems(items: CraftedLensSideItem[]): CraftedLensSideItem[] {
-  return items.map((item) => ({
-    cardId: item.cardId,
-    cardType: item.cardType,
-    position:
-      item.position === null || item.position === undefined
-        ? null
-        : Math.floor(item.position),
-    item: item.item ?? null,
-    quantity: item.quantity,
-  }));
+  return items.map((item) => {
+    const cloned: CraftedLensSideItem = {
+      cardId: item.cardId,
+      cardType: item.cardType,
+      position:
+        item.position === null || item.position === undefined ? null : Math.floor(item.position),
+      item: item.item ?? null,
+    };
+    if (typeof item.quantity === 'number' && Number.isFinite(item.quantity)) {
+      cloned.quantity = item.quantity;
+    } else if (item.quantity === null) {
+      cloned.quantity = null;
+    }
+    return cloned;
+  });
 }
 
 function cloneSourceCards(cards: CraftedLensSourceCard[]): CraftedLensSourceCard[] {

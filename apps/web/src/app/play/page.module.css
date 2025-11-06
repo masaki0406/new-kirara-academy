@@ -1888,6 +1888,13 @@
   gap: 8px;
 }
 
+.polishOptionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .polishOptionLabel {
   display: flex;
   align-items: center;
@@ -1896,11 +1903,24 @@
   color: #0f172a;
 }
 
+.polishOptionPreview {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
 .polishOptionControls {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.polishHint {
+  font-size: 11px;
+  color: #1d4ed8;
 }
 
 .polishToggleButton {
@@ -1934,11 +1954,24 @@
   background: rgba(248, 250, 252, 0.9);
   padding: 10px 12px;
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.polishSelectionHeader {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
+.polishSelectionPreview {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
 .polishSelectionMeta {
   display: block;
   font-size: 11px;
