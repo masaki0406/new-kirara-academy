@@ -52,8 +52,6 @@ function toNumeric(value: unknown): number | null {
   return null;
 }
 
-type CostSlotArray = [number, number, number];
-
 function accumulateSlots(
   slots: CostSlotArray,
   record: Record<string, unknown> | undefined,
