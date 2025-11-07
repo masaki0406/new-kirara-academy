@@ -14,6 +14,10 @@ interface Props {
 }
 
 const STANDARD_COST_KEYS = ["costa", "costb", "costc"] as const;
+const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"] as const;
+const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"] as const;
+const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"] as const;
+const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"] as const;
 type CostSlotArray = [number, number, number];
 type ItemSlotKey = "top" | "middle" | "bottom";
 
