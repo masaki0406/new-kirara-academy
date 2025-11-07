@@ -24,6 +24,11 @@ interface AggregatedCostData {
   rightBottom: CostSlotArray;
 }
 
+interface CostSnapshot {
+  left: { top: CostSlotArray; bottom: CostSlotArray };
+  right: { top: CostSlotArray; bottom: CostSlotArray };
+}
+
 interface AggregatedItemData {
   left: Record<ItemSlotKey, string[]>;
   right: Record<ItemSlotKey, string[]>;
