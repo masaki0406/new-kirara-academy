@@ -7,6 +7,7 @@ import type {
 } from "@domain/types";
 import styles from "./CraftedLensPreview.module.css";
 import cardStyles from "./DevelopmentCardPreview.module.css";
+import { DevelopmentCardPreview } from "./DevelopmentCardPreview";
 
 interface Props {
   lens: CraftedLens;
@@ -35,8 +36,8 @@ interface CostSnapshot {
 }
 
 interface AggregatedItemData {
-  left: Record<ItemSlotKey, string[]>;
-  right: Record<ItemSlotKey, string[]>;
+  left: Record<ItemSlotKey, CraftedLensSideItem[]>;
+  right: Record<ItemSlotKey, CraftedLensSideItem[]>;
 }
 
 function toSlotFromPosition(position: number | undefined | null): ItemSlotKey {
@@ -193,7 +194,7 @@ function aggregateCosts(
 }
 
 function aggregateItems(lens: CraftedLens): AggregatedItemData {
-  const buildInitial = (): Record<ItemSlotKey, string[]> => ({
+  const buildInitial = (): Record<ItemSlotKey, CraftedLensSideItem[]> => ({
     top: [],
     middle: [],
     bottom: [],
@@ -203,11 +204,11 @@ function aggregateItems(lens: CraftedLens): AggregatedItemData {
 
   lens.leftItems.forEach((item) => {
     const slot = toSlotFromPosition(item.position);
-    left[slot].push(formatItem(item));
+    left[slot].push({ ...item });
   });
   lens.rightItems.forEach((item) => {
     const slot = toSlotFromPosition(item.position);
-    right[slot].push(formatItem(item));
+    right[slot].push({ ...item });
   });
 
   return { left, right };
@@ -275,9 +276,10 @@ function renderCostSlot(
 }
 
 function renderItemBox(
-  items: string[],
+  items: CraftedLensSideItem[],
   slot: ItemSlotKey,
   side: "left" | "right",
+  getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
 ): JSX.Element {
   const boxClass = classNames(
     cardStyles.centerItemBox,
@@ -292,11 +294,23 @@ function renderItemBox(
     <div className={boxClass}>
       {items.length > 0 ? (
         <ul className={styles.itemList}>
-          {items.map((item, index) => (
-            <li key={`${side}-${slot}-${index}`} className={styles.itemEntry}>
-              {item}
-            </li>
-          ))}
+          {items.map((item, index) => {
+            if (item.cardType === "vp" && getCard) {
+              const card = getCard(item.cardId, item.cardType);
+              if (card) {
+                return (
+                  <li key={`${side}-${slot}-${index}`} className={styles.itemCard}>
+                    <DevelopmentCardPreview card={card} orientation="right" cardType="vp" />
+                  </li>
+                );
+              }
+            }
+            return (
+              <li key={`${side}-${slot}-${index}`} className={styles.itemEntry}>
+                {formatItem(item)}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <span className={cardStyles.centerPlaceholder}>-</span>
@@ -308,7 +322,8 @@ function renderItemBox(
 function renderCostColumn(
   side: "left" | "right",
   costs: AggregatedCostData,
-  items: Record<ItemSlotKey, string[]>,
+  items: Record<ItemSlotKey, CraftedLensSideItem[]>,
+  getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
 ): JSX.Element {
   const isLeft = side === "left";
   const alignment: "left" | "right" = isLeft ? "left" : "right";
@@ -323,9 +338,9 @@ function renderCostColumn(
       )}
     >
       {renderCostSlot(topSlots, alignment, "top", `${side}-top`)}
-      {renderItemBox(items.top, "top", side)}
-      {renderItemBox(items.middle, "middle", side)}
-      {renderItemBox(items.bottom, "bottom", side)}
+      {renderItemBox(items.top, "top", side, getCard)}
+      {renderItemBox(items.middle, "middle", side, getCard)}
+      {renderItemBox(items.bottom, "bottom", side, getCard)}
       {renderCostSlot(bottomSlots, alignment, "bottom", `${side}-bottom`)}
     </div>
   );
@@ -357,8 +372,8 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
         </header>
         <div className={cardStyles.main}>
           <div className={cardStyles.costLayout}>
-            {renderCostColumn("left", aggregatedCosts, aggregatedItems.left)}
-            {renderCostColumn("right", aggregatedCosts, aggregatedItems.right)}
+            {renderCostColumn("left", aggregatedCosts, aggregatedItems.left, getCard)}
+            {renderCostColumn("right", aggregatedCosts, aggregatedItems.right, getCard)}
           </div>
         </div>
       </div>
