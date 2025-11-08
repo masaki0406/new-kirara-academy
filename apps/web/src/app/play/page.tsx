@@ -743,6 +743,7 @@ function buildDraftCraftedLens(
     const sumRightTop = sumSlots(detail.values.right.top);
     const sumRightBottom = sumSlots(detail.values.right.bottom);
 
+    const detailVpValue = extractCardVp(detail.card);
     if (detail.type === "vp") {
       rightTopTotal += sumRightTop;
     } else if (!detail.flipped) {
@@ -752,7 +753,7 @@ function buildDraftCraftedLens(
       leftTopTotal += sumRightBottom;
       rightTopTotal += sumLeftBottom;
     }
-    vpTotal += extractCardVp(detail.card);
+    vpTotal += detailVpValue;
     const basePosition = detail.costPosition ?? null;
     const finalPosition =
       detail.type === "vp"
@@ -760,14 +761,22 @@ function buildDraftCraftedLens(
         : detail.flipped
           ? flipPosition(basePosition)
           : basePosition;
+    const displayLabel =
+      detail.type === "vp"
+        ? "VP"
+        : detail.costItem ?? detail.cardId;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
       cardType: detail.type,
       position: finalPosition,
-      item: detail.costItem ?? detail.cardId,
+      item: displayLabel,
     };
-    if (detail.costNumber !== null && detail.costNumber !== undefined && !Number.isNaN(detail.costNumber)) {
-      item.quantity = detail.costNumber;
+    const quantity =
+      detail.type === "vp"
+        ? detailVpValue
+        : detail.costNumber;
+    if (quantity !== null && quantity !== undefined && !Number.isNaN(quantity)) {
+      item.quantity = quantity;
     }
     if (detail.type === "vp" || detail.flipped) {
       rightItems.push(item);
