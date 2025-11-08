@@ -763,7 +763,7 @@ function buildDraftCraftedLens(
           : basePosition;
     const displayLabel =
       detail.type === "vp"
-        ? "VP"
+        ? detail.card?.cardId ?? detail.cardId
         : detail.costItem ?? detail.cardId;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
