@@ -720,6 +720,17 @@ function extractCardVp(card: CatalogDevelopmentCard | null): number {
   }, 0);
 }
 
+function formatCostRowText(slots: CostSlotArray): string {
+  return slots
+    .map((value) => {
+      if (Number.isInteger(value)) {
+        return value.toString();
+      }
+      return value.toFixed(2).replace(/\.?0+$/, "");
+    })
+    .join(" / ");
+}
+
 function buildDraftCraftedLens(
   details: PolishSelectionDetail[],
   foundationCost: FoundationCost | null,
@@ -763,7 +774,9 @@ function buildDraftCraftedLens(
           : basePosition;
     const displayLabel =
       detail.type === "vp"
-        ? detail.card?.cardId ?? detail.cardId
+        ? `${detail.card?.cardId ?? detail.cardId} ｜ 上(${formatCostRowText(detail.values.right.top)}) 下(${formatCostRowText(detail.values.right.bottom)}) ｜ ${
+            detailVpValue ? `VP × ${detailVpValue}` : "-"
+          }`
         : detail.costItem ?? detail.cardId;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
@@ -773,7 +786,7 @@ function buildDraftCraftedLens(
     };
     const quantity =
       detail.type === "vp"
-        ? detailVpValue
+        ? null
         : detail.costNumber;
     if (quantity !== null && quantity !== undefined && !Number.isNaN(quantity)) {
       item.quantity = quantity;
