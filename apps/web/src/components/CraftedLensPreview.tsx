@@ -6,6 +6,7 @@ import type {
   PolishCardType,
 } from "@domain/types";
 import styles from "./CraftedLensPreview.module.css";
+import cardStyles from "./DevelopmentCardPreview.module.css";
 
 interface Props {
   lens: CraftedLens;
@@ -214,26 +215,47 @@ function formatNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function renderCostSlot(slots: CostSlotArray, alignment: "left" | "right", position: ItemSlotKey): JSX.Element {
+function classNames(...values: Array<string | undefined | null>): string {
+  return values.filter(Boolean).join(" ");
+}
+
+function renderCostRow(slots: CostSlotArray, alignment: "left" | "right", keyPrefix: string): JSX.Element {
+  const rowClass = classNames(
+    cardStyles.costRow,
+    alignment === "right" ? cardStyles.costRowRight : cardStyles.costRowLeft,
+  );
   return (
-    <div
-      className={[
-        styles.costSlot,
-        alignment === "right" ? styles.costSlotRight : styles.costSlotLeft,
-        position === "top"
-          ? styles.costSlotTop
-          : position === "bottom"
-            ? styles.costSlotBottom
-            : styles.costSlotMiddle,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <div className={rowClass}>
       {slots.map((value, index) => (
-        <div key={`${position}-${alignment}-${index}`} className={styles.costCell}>
-          {value === 0 ? "−" : formatNumber(value)}
+        <div
+          key={`${keyPrefix}-${index}`}
+          className={classNames(
+            cardStyles.costPositionBox,
+            value === 0 ? cardStyles.costPositionBoxEmpty : undefined,
+          )}
+        >
+          {value !== 0 ? (
+            <span className={cardStyles.costPositionValue}>{formatNumber(value)}</span>
+          ) : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+function renderCostSlot(slots: CostSlotArray, alignment: "left" | "right", position: ItemSlotKey): JSX.Element {
+  const slotClass = classNames(
+    styles.costSlot,
+    alignment === "right" ? styles.costSlotRight : styles.costSlotLeft,
+    position === "top"
+      ? styles.costSlotTop
+      : position === "bottom"
+        ? styles.costSlotBottom
+        : styles.costSlotMiddle,
+  );
+  return (
+    <div className={slotClass}>
+      {renderCostRow(slots, alignment, `${position}-${alignment}`)}
     </div>
   );
 }
