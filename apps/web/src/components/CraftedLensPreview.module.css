@@ -1,150 +1,59 @@
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+.lensCard {
+  --card-border: rgba(203, 213, 225, 0.9);
+  --card-accent: #1f2937;
+  border-color: var(--card-border);
 }
 
-.header {
+.lensHeader {
+  flex-wrap: wrap;
+}
+
+.lensMeta {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
-  gap: 12px;
+  justify-content: flex-end;
 }
 
-.lensId {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1e3a8a;
-}
-
-.headerMeta {
-  display: flex;
+.lensBadge {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 11px;
+  font-weight: 600;
   color: #0f172a;
 }
 
-.foundation {
-  font-weight: 600;
-}
-
-.vpMeta {
-  font-weight: 600;
-}
-
-.costLayout {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr 1fr;
-  gap: 12px;
-}
-
-.costColumn {
-  display: grid;
-  grid-template-rows: repeat(3, minmax(60px, auto));
-  gap: 8px;
-}
-
-.costSlot {
-  display: flex;
-  flex-direction: column;
-  border-radius: 10px;
-  padding: 8px;
-  background: rgba(248, 250, 252, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  min-height: 60px;
-}
-
-.costSlotTop {
-  border-top-left-radius: 12px;
-  border-top-right-radius: 12px;
-}
-
-.costSlotBottom {
-  border-bottom-left-radius: 12px;
-  border-bottom-right-radius: 12px;
-}
-
-.costSlotLeft {
-  align-items: stretch;
-}
-
-.costSlotRight {
-  align-items: stretch;
-}
-
-.centerColumn {
-  display: grid;
-  grid-template-rows: repeat(3, minmax(90px, auto));
-  gap: 8px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(248, 250, 252, 0.9);
-  padding: 10px;
-}
-
-.itemRow {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.itemRowTitle {
-  font-size: 11px;
-  font-weight: 700;
-  color: #1f2937;
+.lensBadgeLabel {
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  color: rgba(15, 23, 42, 0.7);
 }
 
-.itemRowSides {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+.lensBadgeValue {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--card-accent, #0f172a);
 }
 
-.itemSide {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.itemSideLabel {
-  font-size: 11px;
-  font-weight: 600;
-  color: #1d4ed8;
-}
-
-.itemSideList {
+.itemList {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  width: 100%;
 }
 
-.itemSideEntry {
+.itemEntry {
   font-size: 12px;
+  font-weight: 600;
   color: #0f172a;
-}
-
-.itemSideEmpty {
-  font-size: 12px;
-  color: #94a3b8;
-}
-
-@media (max-width: 640px) {
-  .costLayout {
-    grid-template-columns: 1fr;
-  }
-
-  .itemRowSides {
-    grid-template-columns: 1fr;
-  }
+  text-align: left;
 }

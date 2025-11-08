@@ -219,7 +219,11 @@ function classNames(...values: Array<string | undefined | null>): string {
   return values.filter(Boolean).join(" ");
 }
 
-function renderCostRow(slots: CostSlotArray, alignment: "left" | "right", keyPrefix: string): JSX.Element {
+function renderCostRow(
+  slots: CostSlotArray,
+  alignment: "left" | "right",
+  keyPrefix: string,
+): JSX.Element {
   const rowClass = classNames(
     cardStyles.costRow,
     alignment === "right" ? cardStyles.costRowRight : cardStyles.costRowLeft,
@@ -227,105 +231,122 @@ function renderCostRow(slots: CostSlotArray, alignment: "left" | "right", keyPre
   return (
     <div className={rowClass}>
       {slots.map((value, index) => (
-        <div
-          key={`${keyPrefix}-${index}`}
-          className={classNames(
-            cardStyles.costPositionBox,
-            value === 0 ? cardStyles.costPositionBoxEmpty : undefined,
-          )}
-        >
-          {value !== 0 ? (
-            <span className={cardStyles.costPositionValue}>{formatNumber(value)}</span>
-          ) : null}
+        <div key={`${keyPrefix}-${index}`} className={cardStyles.costPositionBox}>
+          <span className={cardStyles.costPositionValue}>{formatNumber(value)}</span>
         </div>
       ))}
     </div>
   );
 }
 
-function renderCostSlot(slots: CostSlotArray, alignment: "left" | "right", position: ItemSlotKey): JSX.Element {
+function renderCostSlot(
+  slots: CostSlotArray,
+  alignment: "left" | "right",
+  position: ItemSlotKey,
+  keyPrefix: string,
+): JSX.Element {
   const slotClass = classNames(
-    styles.costSlot,
-    alignment === "right" ? styles.costSlotRight : styles.costSlotLeft,
+    cardStyles.costSlot,
     position === "top"
-      ? styles.costSlotTop
+      ? cardStyles.costSlotTop
       : position === "bottom"
-        ? styles.costSlotBottom
-        : styles.costSlotMiddle,
+        ? cardStyles.costSlotBottom
+        : cardStyles.costSlotMiddle,
+    alignment === "right" ? cardStyles.costSlotRight : cardStyles.costSlotLeft,
   );
   return (
     <div className={slotClass}>
-      {renderCostRow(slots, alignment, `${position}-${alignment}`)}
+      {renderCostRow(slots, alignment, keyPrefix)}
     </div>
   );
 }
 
-function renderItemSide(label: string, items: string[]): JSX.Element {
+function renderItemBox(
+  items: string[],
+  slot: ItemSlotKey,
+  side: "left" | "right",
+): JSX.Element {
+  const boxClass = classNames(
+    cardStyles.centerItemBox,
+    slot === "top"
+      ? cardStyles.centerItemBoxTop
+      : slot === "bottom"
+        ? cardStyles.centerItemBoxBottom
+        : cardStyles.centerItemBoxMiddle,
+    side === "left" ? cardStyles.centerItemBoxLeft : cardStyles.centerItemBoxRight,
+  );
   return (
-    <div className={styles.itemSide}>
-      <span className={styles.itemSideLabel}>{label}</span>
-      {items.length === 0 ? (
-        <span className={styles.itemSideEmpty}>なし</span>
-      ) : (
-        <ul className={styles.itemSideList}>
+    <div className={boxClass}>
+      {items.length > 0 ? (
+        <ul className={styles.itemList}>
           {items.map((item, index) => (
-            <li key={`${label}-${index}`} className={styles.itemSideEntry}>
+            <li key={`${side}-${slot}-${index}`} className={styles.itemEntry}>
               {item}
             </li>
           ))}
         </ul>
+      ) : (
+        <span className={cardStyles.centerPlaceholder}>-</span>
       )}
     </div>
   );
 }
 
-export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Element {
-  const composedClassName = [styles.card, className].filter(Boolean).join(" ");
-  const aggregatedCosts = aggregateCosts(lens, getCard);
-  const aggregatedItems = aggregateItems(lens);
+function renderCostColumn(
+  side: "left" | "right",
+  costs: AggregatedCostData,
+  items: Record<ItemSlotKey, string[]>,
+): JSX.Element {
+  const isLeft = side === "left";
+  const alignment: "left" | "right" = isLeft ? "left" : "right";
+  const topSlots = isLeft ? costs.leftTop : costs.rightTop;
+  const bottomSlots = isLeft ? costs.leftBottom : costs.rightBottom;
 
   return (
-    <article className={composedClassName}>
-      <header className={styles.header}>
-        <span className={styles.lensId}>{lens.lensId}</span>
-        <div className={styles.headerMeta}>
-          <span className={styles.foundation}>土台 {lens.foundationCost}</span>
-          <span className={styles.vpMeta}>VP {lens.vpTotal ?? 0}</span>
-        </div>
-      </header>
-      <div className={styles.costLayout}>
-        <div className={styles.costColumn}>
-          {renderCostSlot(aggregatedCosts.leftTop, "left", "top")}
-          {renderCostSlot([0, 0, 0], "left", "middle")}
-          {renderCostSlot(aggregatedCosts.leftBottom, "left", "bottom")}
-        </div>
-        <div className={styles.centerColumn}>
-          <div className={styles.itemRow}>
-            <span className={styles.itemRowTitle}>上段</span>
-            <div className={styles.itemRowSides}>
-              {renderItemSide("左", aggregatedItems.left.top)}
-              {renderItemSide("右", aggregatedItems.right.top)}
-            </div>
+    <div
+      className={classNames(
+        cardStyles.costColumn,
+        isLeft ? cardStyles.costColumnLeft : cardStyles.costColumnRight,
+      )}
+    >
+      {renderCostSlot(topSlots, alignment, "top", `${side}-top`)}
+      {renderItemBox(items.top, "top", side)}
+      {renderItemBox(items.middle, "middle", side)}
+      {renderItemBox(items.bottom, "bottom", side)}
+      {renderCostSlot(bottomSlots, alignment, "bottom", `${side}-bottom`)}
+    </div>
+  );
+}
+
+export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Element {
+  const aggregatedCosts = aggregateCosts(lens, getCard);
+  const aggregatedItems = aggregateItems(lens);
+  const metaEntries = [
+    { label: "土台", value: lens.foundationCost },
+    { label: "VP", value: lens.vpTotal ?? 0 },
+    { label: "左計", value: lens.leftTotal },
+    { label: "右計", value: lens.rightTotal },
+  ];
+
+  return (
+    <article className={classNames(cardStyles.card, styles.lensCard, className)}>
+      <div className={cardStyles.inner}>
+        <header className={classNames(cardStyles.header, styles.lensHeader)}>
+          <span className={cardStyles.name}>{lens.lensId}</span>
+          <div className={styles.lensMeta}>
+            {metaEntries.map(({ label, value }) => (
+              <span key={label} className={styles.lensBadge}>
+                <span className={styles.lensBadgeLabel}>{label}</span>
+                <span className={styles.lensBadgeValue}>{value ?? "-"}</span>
+              </span>
+            ))}
           </div>
-          <div className={styles.itemRow}>
-            <span className={styles.itemRowTitle}>中央</span>
-            <div className={styles.itemRowSides}>
-              {renderItemSide("左", aggregatedItems.left.middle)}
-              {renderItemSide("右", aggregatedItems.right.middle)}
-            </div>
+        </header>
+        <div className={cardStyles.main}>
+          <div className={cardStyles.costLayout}>
+            {renderCostColumn("left", aggregatedCosts, aggregatedItems.left)}
+            {renderCostColumn("right", aggregatedCosts, aggregatedItems.right)}
           </div>
-          <div className={styles.itemRow}>
-            <span className={styles.itemRowTitle}>下段</span>
-            <div className={styles.itemRowSides}>
-              {renderItemSide("左", aggregatedItems.left.bottom)}
-              {renderItemSide("右", aggregatedItems.right.bottom)}
-            </div>
-          </div>
-        </div>
-        <div className={styles.costColumn}>
-          {renderCostSlot(aggregatedCosts.rightTop, "right", "top")}
-          {renderCostSlot([0, 0, 0], "right", "middle")}
-          {renderCostSlot(aggregatedCosts.rightBottom, "right", "bottom")}
         </div>
       </div>
     </article>
