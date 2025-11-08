@@ -103,7 +103,11 @@ function accumulateSlots(
   });
 }
 
-function getCostSnapshot(card: CatalogDevelopmentCard | null): CostSnapshot {
+function hasSlotValues(slots: CostSlotArray): boolean {
+  return slots.some((value) => value !== 0);
+}
+
+function getCostSnapshot(card: CatalogDevelopmentCard | null, cardType: PolishCardType = "development"): CostSnapshot {
   if (!card) {
     return {
       left: { top: [0, 0, 0], bottom: [0, 0, 0] },
@@ -120,6 +124,15 @@ function getCostSnapshot(card: CatalogDevelopmentCard | null): CostSnapshot {
   accumulateSlots(leftBottom, card.costLeftDown as Record<string, unknown> | undefined, extras, COST_LEFT_DOWN_EXTRA_KEYS);
   accumulateSlots(rightTop, undefined, extras, COST_RIGHT_UP_EXTRA_KEYS);
   accumulateSlots(rightBottom, undefined, extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+
+  if (cardType === "vp") {
+    const effectiveRightTop = hasSlotValues(rightTop) ? rightTop : leftTop;
+    const effectiveRightBottom = hasSlotValues(rightBottom) ? rightBottom : leftBottom;
+    return {
+      left: { top: [0, 0, 0], bottom: [0, 0, 0] },
+      right: { top: effectiveRightTop, bottom: effectiveRightBottom },
+    };
+  }
 
   return {
     left: { top: leftTop, bottom: leftBottom },
@@ -154,7 +167,7 @@ function aggregateCosts(
 
   lens.sourceCards.forEach((source) => {
     const card = getCard(source.cardId, source.cardType);
-    const snapshot = getCostSnapshot(card);
+    const snapshot = getCostSnapshot(card, source.cardType);
 
     if (source.cardType === "vp") {
       addSlots(aggregated.rightTop, snapshot.right.top);

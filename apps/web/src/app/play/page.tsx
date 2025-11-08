@@ -625,7 +625,10 @@ function isWillAbilityNode(node: CharacterGrowthNode): boolean {
   return node.name.startsWith("意思");
 }
 
-function getPolishCardValues(card: CatalogDevelopmentCard | null | undefined): {
+function getPolishCardValues(
+  card: CatalogDevelopmentCard | null | undefined,
+  cardType: "development" | "vp" = "development",
+): {
   left: { top: CostSlotArray; bottom: CostSlotArray };
   right: { top: CostSlotArray; bottom: CostSlotArray };
 } {
@@ -636,15 +639,31 @@ function getPolishCardValues(card: CatalogDevelopmentCard | null | undefined): {
     };
   }
   const extras = card.extras ?? {};
+  const leftTop = extractCostSlots(
+    card.costLeftUp as Record<string, unknown> | undefined,
+    extras,
+    COST_LEFT_UP_EXTRA_KEYS,
+  );
+  const leftBottom = extractCostSlots(
+    card.costLeftDown as Record<string, unknown> | undefined,
+    extras,
+    COST_LEFT_DOWN_EXTRA_KEYS,
+  );
+  const rightTop = extractCostSlots(undefined, extras, COST_RIGHT_UP_EXTRA_KEYS);
+  const rightBottom = extractCostSlots(undefined, extras, COST_RIGHT_DOWN_EXTRA_KEYS);
+
+  if (cardType === "vp") {
+    const effectiveRightTop = sumSlots(rightTop) > 0 ? rightTop : leftTop;
+    const effectiveRightBottom = sumSlots(rightBottom) > 0 ? rightBottom : leftBottom;
+    return {
+      left: { top: [0, 0, 0], bottom: [0, 0, 0] },
+      right: { top: effectiveRightTop, bottom: effectiveRightBottom },
+    };
+  }
+
   return {
-    left: {
-      top: extractCostSlots(card.costLeftUp as Record<string, unknown> | undefined, extras, COST_LEFT_UP_EXTRA_KEYS),
-      bottom: extractCostSlots(card.costLeftDown as Record<string, unknown> | undefined, extras, COST_LEFT_DOWN_EXTRA_KEYS),
-    },
-    right: {
-      top: extractCostSlots(undefined, extras, COST_RIGHT_UP_EXTRA_KEYS),
-      bottom: extractCostSlots(undefined, extras, COST_RIGHT_DOWN_EXTRA_KEYS),
-    },
+    left: { top: leftTop, bottom: leftBottom },
+    right: { top: rightTop, bottom: rightBottom },
   };
 }
 
@@ -1305,7 +1324,7 @@ export default function PlayPage(): JSX.Element {
         entry.type === "development"
           ? developmentCardCatalog.get(cardId) ?? null
           : vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null;
-      const values = getPolishCardValues(card);
+      const values = getPolishCardValues(card, entry.type);
       return {
         cardId,
         type: entry.type,
