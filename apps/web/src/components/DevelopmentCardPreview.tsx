@@ -413,6 +413,7 @@ function renderCostBoxes(
   entries: CostPositionEntry[],
   alignment: "left" | "right",
   keyPrefix: string,
+  reverseOrder = false,
 ): JSX.Element {
   const rowClass = classNames(
     styles.costRow,
@@ -420,9 +421,12 @@ function renderCostBoxes(
   );
 
   if (entries.length === 0) {
+    const placeholderKeys = reverseOrder
+      ? [...COST_POSITION_KEYS].reverse()
+      : COST_POSITION_KEYS;
     return (
       <div className={rowClass}>
-        {COST_POSITION_KEYS.map((key) => (
+        {placeholderKeys.map((key) => (
           <div
             key={`${key}-${keyPrefix}`}
             className={classNames(styles.costPositionBox, styles.costPositionBoxEmpty)}
@@ -432,9 +436,11 @@ function renderCostBoxes(
     );
   }
 
+  const orderedEntries = reverseOrder ? [...entries].reverse() : entries;
+
   return (
     <div className={rowClass}>
-      {entries.map((entry, index) => (
+      {orderedEntries.map((entry, index) => (
         <div
           key={`${keyPrefix}-${entry.key}-${index}`}
           className={styles.costPositionBox}
@@ -452,6 +458,7 @@ function renderCostSlot(
   slotKey: "top" | "middle" | "bottom",
   keyPrefix: string,
   forceBox = false,
+  reverseOrder = false,
 ): JSX.Element {
   const slotClass = classNames(
     styles.costSlot,
@@ -469,7 +476,7 @@ function renderCostSlot(
 
   return (
     <div className={slotClass}>
-      {renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`)}
+      {renderCostBoxes(entries, alignment, `${keyPrefix}-${slotKey}`, reverseOrder)}
     </div>
   );
 }
@@ -510,6 +517,16 @@ function toSlotFromPosition(position: number | undefined | null): "top" | "middl
   }
   if (position === 3) {
     return "bottom";
+  }
+  return "middle";
+}
+
+function flipSlotPosition(slot: "top" | "middle" | "bottom"): "top" | "middle" | "bottom" {
+  if (slot === "top") {
+    return "bottom";
+  }
+  if (slot === "bottom") {
+    return "top";
   }
   return "middle";
 }
@@ -643,6 +660,7 @@ export function DevelopmentCardPreview({
   const primarySide = orientation;
   const isRightOrientation = orientation === "right";
   const isVpCard = cardType === "vp";
+  const shouldRotateCard = !isVpCard && isRightOrientation;
   let vpRewardSlot: "top" | "middle" | "bottom" | null = null;
   let vpRewardText: string | null = null;
   if (isVpCard) {
@@ -672,32 +690,40 @@ export function DevelopmentCardPreview({
     );
     tokensRightCost = buildTokensFromEntries(costTopRight, "cost");
     tokensRightReward = buildTokensFromEntries(costBottomRight, "reward");
-    const leftHasContent =
-      costTopLeft.length > 0 ||
-      costBottomLeft.length > 0 ||
-      tokensLeftCost.length > 0 ||
-      tokensLeftReward.length > 0;
-    const rightHasContent =
-      costTopRight.length > 0 ||
-      costBottomRight.length > 0 ||
-      tokensRightCost.length > 0 ||
-      tokensRightReward.length > 0;
-    if (isRightOrientation && !rightHasContent && leftHasContent) {
-      effectiveLeftTopEntries = [] as CostPositionEntry[];
-      effectiveLeftBottomEntries = [] as CostPositionEntry[];
-      tokensLeftCost = [] as TokenDefinition[];
-      tokensLeftReward = [] as TokenDefinition[];
-      effectiveRightTopEntries = costTopLeft;
-      effectiveRightBottomEntries = costBottomLeft;
-      tokensRightCost = buildTokensFromEntries(costTopLeft, "cost");
-      tokensRightReward = buildTokensFromEntries(costBottomLeft, "reward");
-    } else {
-      effectiveLeftTopEntries = costTopLeft;
-      effectiveLeftBottomEntries = costBottomLeft;
-      effectiveRightTopEntries = costTopRight;
-      effectiveRightBottomEntries = costBottomRight;
+    if (shouldRotateCard) {
+      const originalLeftTop = effectiveLeftTopEntries;
+      const originalLeftBottom = effectiveLeftBottomEntries;
+      const originalRightTop = effectiveRightTopEntries;
+      const originalRightBottom = effectiveRightBottomEntries;
+      const originalLeftCostTokens = tokensLeftCost;
+      const originalLeftRewardTokens = tokensLeftReward;
+      const originalRightCostTokens = tokensRightCost;
+      const originalRightRewardTokens = tokensRightReward;
+
+      effectiveLeftTopEntries = originalRightTop;
+      effectiveLeftBottomEntries = originalRightBottom;
+      effectiveRightTopEntries = originalLeftTop;
+      effectiveRightBottomEntries = originalLeftBottom;
+
+      tokensLeftCost = originalRightCostTokens;
+      tokensLeftReward = originalRightRewardTokens;
+      tokensRightCost = originalLeftCostTokens;
+      tokensRightReward = originalLeftRewardTokens;
+
+      [effectiveLeftTopEntries, effectiveLeftBottomEntries] = [
+        effectiveLeftBottomEntries,
+        effectiveLeftTopEntries,
+      ];
+      [effectiveRightTopEntries, effectiveRightBottomEntries] = [
+        effectiveRightBottomEntries,
+        effectiveRightTopEntries,
+      ];
     }
   }
+  const activeBadgeSlot = shouldRotateCard ? flipSlotPosition(badgeSlot) : badgeSlot;
+  const costTokenSlot: "top" | "middle" | "bottom" = shouldRotateCard ? "bottom" : "top";
+  const rewardTokenSlot: "top" | "middle" | "bottom" = shouldRotateCard ? "top" : "bottom";
+  const reverseCostOrder = shouldRotateCard;
   const extrasEntries = Object.entries(extrasRecord);
   const extras = extrasEntries.filter(
     ([key]) => !isCostPositionKey(key) && !usedExtraKeys.has(key),
@@ -740,12 +766,12 @@ export function DevelopmentCardPreview({
           ? styles.centerItemBoxBottom
           : styles.centerItemBoxMiddle,
       side === "left" ? styles.centerItemBoxLeft : styles.centerItemBoxRight,
-      isPrimary && badgeSlot === slot ? styles.centerItemBoxActive : undefined,
+      isPrimary && activeBadgeSlot === slot ? styles.centerItemBoxActive : undefined,
     );
 
     const content: JSX.Element[] = [];
 
-    if (isPrimary && slot === "top") {
+    if (isPrimary && slot === costTokenSlot) {
       const tokens = renderTokenRowContent(side === "left" ? tokensLeftCost : tokensRightCost);
       if (tokens) {
         content.push(
@@ -756,7 +782,7 @@ export function DevelopmentCardPreview({
       }
     }
 
-    if (isPrimary && badgeSlot === slot) {
+    if (isPrimary && activeBadgeSlot === slot) {
       const alignment: "left" | "center" | "right" =
         primarySide === "right"
           ? slot === "middle"
@@ -772,7 +798,7 @@ export function DevelopmentCardPreview({
       );
     }
 
-    if (isPrimary && slot === "bottom") {
+    if (isPrimary && slot === rewardTokenSlot) {
       const tokens = renderTokenRowContent(
         side === "left" ? tokensLeftReward : tokensRightReward,
       );
@@ -806,11 +832,11 @@ export function DevelopmentCardPreview({
       : (isVpCard ? costBottomRight : effectiveRightBottomEntries);
     return (
       <div className={classNames(styles.costColumn, isLeft ? styles.costColumnLeft : styles.costColumnRight)}>
-        {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true)}
+        {renderCostSlot(topEntries, isLeft ? "left" : "right", "top", side, true, reverseCostOrder)}
         {renderItemSlot("top", side)}
         {renderItemSlot("middle", side)}
         {renderItemSlot("bottom", side)}
-        {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true)}
+        {renderCostSlot(bottomEntries, isLeft ? "left" : "right", "bottom", side, true, reverseCostOrder)}
       </div>
     );
   };
