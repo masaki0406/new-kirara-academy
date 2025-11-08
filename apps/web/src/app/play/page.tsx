@@ -2598,7 +2598,11 @@ export default function PlayPage(): JSX.Element {
                         case "vp": {
                           if (slot.card) {
                             bodyContent = (
-                              <DevelopmentCardPreview card={slot.card} orientation="right" />
+                              <DevelopmentCardPreview
+                                card={slot.card}
+                                orientation="right"
+                                cardType="vp"
+                              />
                             );
                             hint = "公開中の VP カード";
                           } else if (slot.cardId) {
@@ -2861,7 +2865,11 @@ export default function PlayPage(): JSX.Element {
                                   </div>
                                   <div className={styles.journalSlotBody}>
                                     {card ? (
-                                      <DevelopmentCardPreview card={card} orientation="right" />
+                                      <DevelopmentCardPreview
+                                        card={card}
+                                        orientation="right"
+                                        cardType="vp"
+                                      />
                                     ) : (
                                       <span className={styles.collectedFallback}>{cardId}</span>
                                     )}
@@ -3483,7 +3491,7 @@ export default function PlayPage(): JSX.Element {
                         const entry = polishSelectionMap[cardId];
                         const selected = Boolean(entry);
                         const orientationRight = Boolean(entry?.flipped);
-                        const orientationLabel = orientationRight ? "右側で使用" : "左側で使用";
+                        const orientationLabel = orientationRight ? "左側で使用" : "右側で使用";
                         return (
                           <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
                             <div className={styles.polishOptionHeader}>
@@ -3544,7 +3552,7 @@ export default function PlayPage(): JSX.Element {
                             </div>
                             {card ? (
                               <div className={styles.polishOptionPreview}>
-                                <DevelopmentCardPreview card={card} orientation="right" />
+                                <DevelopmentCardPreview card={card} orientation="right" cardType="vp" />
                               </div>
                             ) : (
                               <p className={styles.polishWarning}>カード情報が未登録です。</p>
@@ -3583,6 +3591,7 @@ export default function PlayPage(): JSX.Element {
                               <DevelopmentCardPreview
                                 card={detail.card}
                                 orientation={useRight ? "right" : "left"}
+                                cardType={detail.type}
                               />
                             </div>
                           ) : (

@@ -575,9 +575,15 @@ interface Props {
   card: CatalogDevelopmentCard;
   className?: string;
   orientation?: "left" | "right";
+  cardType?: "development" | "vp";
 }
 
-export function DevelopmentCardPreview({ card, className, orientation = "left" }: Props): JSX.Element {
+export function DevelopmentCardPreview({
+  card,
+  className,
+  orientation = "left",
+  cardType = "development",
+}: Props): JSX.Element {
   const displayName = (card.cardId ?? card.id ?? "").trim() || card.id || "未登録カード";
   const mainSymbol = resolveSymbolKind(card.costItem);
   const themeClass = getThemeClassName(mainSymbol);
@@ -636,7 +642,7 @@ export function DevelopmentCardPreview({ card, className, orientation = "left" }
   );
   const primarySide = orientation;
   const isRightOrientation = orientation === "right";
-  const isVpCard = isRightOrientation;
+  const isVpCard = cardType === "vp";
   let vpRewardSlot: "top" | "middle" | "bottom" | null = null;
   let vpRewardText: string | null = null;
   if (isVpCard) {
