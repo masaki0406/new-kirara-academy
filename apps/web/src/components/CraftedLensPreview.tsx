@@ -7,7 +7,6 @@ import type {
 } from "@domain/types";
 import styles from "./CraftedLensPreview.module.css";
 import cardStyles from "./DevelopmentCardPreview.module.css";
-import { DevelopmentCardPreview } from "./DevelopmentCardPreview";
 
 interface Props {
   lens: CraftedLens;
@@ -279,7 +278,6 @@ function renderItemBox(
   items: CraftedLensSideItem[],
   slot: ItemSlotKey,
   side: "left" | "right",
-  getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
 ): JSX.Element {
   const boxClass = classNames(
     cardStyles.centerItemBox,
@@ -287,7 +285,7 @@ function renderItemBox(
       ? cardStyles.centerItemBoxTop
       : slot === "bottom"
         ? cardStyles.centerItemBoxBottom
-        : cardStyles.centerItemBoxMiddle,
+      : cardStyles.centerItemBoxMiddle,
     side === "left" ? cardStyles.centerItemBoxLeft : cardStyles.centerItemBoxRight,
   );
   return (
@@ -295,16 +293,6 @@ function renderItemBox(
       {items.length > 0 ? (
         <ul className={styles.itemList}>
           {items.map((item, index) => {
-            if (item.cardType === "vp" && getCard) {
-              const card = getCard(item.cardId, item.cardType);
-              if (card) {
-                return (
-                  <li key={`${side}-${slot}-${index}`} className={styles.itemCard}>
-                    <DevelopmentCardPreview card={card} orientation="right" cardType="vp" />
-                  </li>
-                );
-              }
-            }
             return (
               <li key={`${side}-${slot}-${index}`} className={styles.itemEntry}>
                 {formatItem(item)}
@@ -323,7 +311,6 @@ function renderCostColumn(
   side: "left" | "right",
   costs: AggregatedCostData,
   items: Record<ItemSlotKey, CraftedLensSideItem[]>,
-  getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
 ): JSX.Element {
   const isLeft = side === "left";
   const alignment: "left" | "right" = isLeft ? "left" : "right";
@@ -338,9 +325,9 @@ function renderCostColumn(
       )}
     >
       {renderCostSlot(topSlots, alignment, "top", `${side}-top`)}
-      {renderItemBox(items.top, "top", side, getCard)}
-      {renderItemBox(items.middle, "middle", side, getCard)}
-      {renderItemBox(items.bottom, "bottom", side, getCard)}
+      {renderItemBox(items.top, "top", side)}
+      {renderItemBox(items.middle, "middle", side)}
+      {renderItemBox(items.bottom, "bottom", side)}
       {renderCostSlot(bottomSlots, alignment, "bottom", `${side}-bottom`)}
     </div>
   );
@@ -372,8 +359,8 @@ export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Ele
         </header>
         <div className={cardStyles.main}>
           <div className={cardStyles.costLayout}>
-            {renderCostColumn("left", aggregatedCosts, aggregatedItems.left, getCard)}
-            {renderCostColumn("right", aggregatedCosts, aggregatedItems.right, getCard)}
+            {renderCostColumn("left", aggregatedCosts, aggregatedItems.left)}
+            {renderCostColumn("right", aggregatedCosts, aggregatedItems.right)}
           </div>
         </div>
       </div>
