@@ -1430,6 +1430,7 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
   if (extraAction > 0) {
     player.actionPoints = Math.max(0, player.actionPoints - extraAction);
   }
+
   payResourceCost(player.resources, lens.cost);
   if (lens.cost.creativity) {
     player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
@@ -1439,8 +1440,19 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
     applyReward(player, reward);
   }
 
+  // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
+  slot.occupantId = action.playerId;
+  slot.isActive = false;
+  if (occupantPlayer) {
+    incrementPlayerLobbyUsed(occupantPlayer, 1);
+  }
+
   lens.status = 'exhausted';
   if (lens.ownerId !== action.playerId) {
+    const owner = gameState.players[lens.ownerId];
+    if (owner) {
+      owner.vp += 2;
+    }
     triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
       actorId: action.playerId,
       ownerId: lens.ownerId,
@@ -1451,12 +1463,6 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
     actorId: action.playerId,
     actionType: 'persuasion',
   });
-
-  slot.occupantId = undefined;
-  slot.isActive = true;
-  if (occupantPlayer) {
-    incrementPlayerLobbyUsed(occupantPlayer, 1);
-  }
 };
 
 export const validatePass: Validator = async (action, context) => {
