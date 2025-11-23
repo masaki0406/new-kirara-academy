@@ -115,8 +115,20 @@ const LAB_TASKS: TaskDefinition[] = [
 
 const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"];
 const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"];
-const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"];
-const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
+const COST_RIGHT_UP_EXTRA_KEYS = [
+  "cost_right_up",
+  "costRightUp",
+  "costTopRight",
+  "cost_rightup",
+  "COST",
+  "cost",
+];
+const COST_RIGHT_DOWN_EXTRA_KEYS = [
+  "cost_right_down",
+  "costRightDown",
+  "costBottomRight",
+  "cost_rightdown",
+];
 const COST_SLOT_KEYS = ["costa", "costb", "costc"] as const;
 type CostSlotIndex = 0 | 1 | 2;
 type CostSlotArray = [number, number, number];
@@ -720,6 +732,32 @@ function extractCardVp(card: CatalogDevelopmentCard | null): number {
   }, 0);
 }
 
+function extractCardVpReward(card: CatalogDevelopmentCard | null): {
+  amount: number | null;
+  position: number | null;
+} {
+  if (!card?.extras) {
+    return { amount: null, position: null };
+  }
+  const amountKeys = ["getvp", "get_vp"];
+  const positionKeys = ["vppos", "vp_pos"];
+  let amount: number | null = null;
+  for (const key of amountKeys) {
+    if (amount !== null) {
+      break;
+    }
+    amount = toOptionalNumeric(card.extras[key]);
+  }
+  let position: number | null = null;
+  for (const key of positionKeys) {
+    if (position !== null) {
+      break;
+    }
+    position = toOptionalNumeric(card.extras[key]);
+  }
+  return { amount, position };
+}
+
 function formatCostRowText(slots: CostSlotArray): string {
   return slots
     .map((value) => {
@@ -729,6 +767,13 @@ function formatCostRowText(slots: CostSlotArray): string {
       return value.toFixed(2).replace(/\.?0+$/, "");
     })
     .join(" / ");
+}
+
+function formatDisplayNumber(value: number): string {
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function buildDraftCraftedLens(
@@ -755,6 +800,7 @@ function buildDraftCraftedLens(
     const sumRightBottom = sumSlots(detail.values.right.bottom);
 
     const detailVpValue = extractCardVp(detail.card);
+    const vpReward = detail.type === "vp" ? extractCardVpReward(detail.card) : { amount: null, position: null };
     if (detail.type === "vp") {
       rightTopTotal += sumRightTop;
     } else if (!detail.flipped) {
@@ -764,19 +810,21 @@ function buildDraftCraftedLens(
       leftTopTotal += sumRightBottom;
       rightTopTotal += sumLeftBottom;
     }
-    vpTotal += detailVpValue;
+    vpTotal += detail.type === "vp" ? vpReward.amount ?? detailVpValue : detailVpValue;
     const basePosition = detail.costPosition ?? null;
     const finalPosition =
       detail.type === "vp"
-        ? basePosition
+        ? vpReward.position ?? basePosition
         : detail.flipped
           ? flipPosition(basePosition)
           : basePosition;
     const displayLabel =
       detail.type === "vp"
-        ? `${detail.card?.cardId ?? detail.cardId} ｜ 上(${formatCostRowText(detail.values.right.top)}) 下(${formatCostRowText(detail.values.right.bottom)}) ｜ ${
-            detailVpValue ? `VP × ${detailVpValue}` : "-"
-          }`
+        ? vpReward.amount !== null
+          ? `VP × ${formatDisplayNumber(vpReward.amount)}`
+          : `${detail.card?.cardId ?? detail.cardId} ｜ 上(${formatCostRowText(detail.values.right.top)}) 下(${formatCostRowText(detail.values.right.bottom)}) ｜ ${
+              detailVpValue ? `VP × ${detailVpValue}` : "-"
+            }`
         : detail.costItem ?? detail.cardId;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,

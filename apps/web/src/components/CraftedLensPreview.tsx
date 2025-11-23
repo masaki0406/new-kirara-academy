@@ -17,8 +17,20 @@ interface Props {
 const STANDARD_COST_KEYS = ["costa", "costb", "costc"] as const;
 const COST_LEFT_UP_EXTRA_KEYS = ["cost_left_up", "costLeftUp", "costTopLeft", "cost_topleft"] as const;
 const COST_LEFT_DOWN_EXTRA_KEYS = ["cost_left_down", "costLeftDown", "costBottomLeft", "cost_bottomleft"] as const;
-const COST_RIGHT_UP_EXTRA_KEYS = ["cost_right_up", "costRightUp", "costTopRight", "cost_rightup"] as const;
-const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"] as const;
+const COST_RIGHT_UP_EXTRA_KEYS = [
+  "cost_right_up",
+  "costRightUp",
+  "costTopRight",
+  "cost_rightup",
+  "COST",
+  "cost",
+] as const;
+const COST_RIGHT_DOWN_EXTRA_KEYS = [
+  "cost_right_down",
+  "costRightDown",
+  "costBottomRight",
+  "cost_rightdown",
+] as const;
 type CostSlotArray = [number, number, number];
 type ItemSlotKey = "top" | "middle" | "bottom";
 
@@ -37,6 +49,29 @@ interface CostSnapshot {
 interface AggregatedItemData {
   left: Record<ItemSlotKey, CraftedLensSideItem[]>;
   right: Record<ItemSlotKey, CraftedLensSideItem[]>;
+}
+
+function extractVpReward(card: CatalogDevelopmentCard | null): { amount: number | null; position: number | null } {
+  if (!card?.extras) {
+    return { amount: null, position: null };
+  }
+  const amountKeys = ["getvp", "get_vp"];
+  const positionKeys = ["vppos", "vp_pos"];
+  let amount: number | null = null;
+  for (const key of amountKeys) {
+    if (amount !== null) {
+      break;
+    }
+    amount = toNumeric(card.extras[key]);
+  }
+  let position: number | null = null;
+  for (const key of positionKeys) {
+    if (position !== null) {
+      break;
+    }
+    position = toNumeric(card.extras[key]);
+  }
+  return { amount, position };
 }
 
 function toSlotFromPosition(position: number | undefined | null): ItemSlotKey {
@@ -192,7 +227,10 @@ function aggregateCosts(
   return aggregated;
 }
 
-function aggregateItems(lens: CraftedLens): AggregatedItemData {
+function aggregateItems(
+  lens: CraftedLens,
+  getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null,
+): AggregatedItemData {
   const buildInitial = (): Record<ItemSlotKey, CraftedLensSideItem[]> => ({
     top: [],
     middle: [],
@@ -201,13 +239,30 @@ function aggregateItems(lens: CraftedLens): AggregatedItemData {
   const left = buildInitial();
   const right = buildInitial();
 
+  const normalizeItem = (item: CraftedLensSideItem): CraftedLensSideItem => {
+    const normalized: CraftedLensSideItem = { ...item };
+    if (item.cardType === "vp" && getCard) {
+      const card = getCard(item.cardId, item.cardType);
+      const vpReward = extractVpReward(card);
+      if ((normalized.position === null || normalized.position === undefined) && vpReward.position !== null) {
+        normalized.position = vpReward.position;
+      }
+      if (!normalized.item && vpReward.amount !== null) {
+        normalized.item = `VP × ${formatNumber(vpReward.amount)}`;
+      }
+    }
+    return normalized;
+  };
+
   lens.leftItems.forEach((item) => {
-    const slot = toSlotFromPosition(item.position);
-    left[slot].push({ ...item });
+    const normalized = normalizeItem(item);
+    const slot = toSlotFromPosition(normalized.position);
+    left[slot].push(normalized);
   });
   lens.rightItems.forEach((item) => {
-    const slot = toSlotFromPosition(item.position);
-    right[slot].push({ ...item });
+    const normalized = normalizeItem(item);
+    const slot = toSlotFromPosition(normalized.position);
+    right[slot].push(normalized);
   });
 
   return { left, right };
@@ -335,7 +390,7 @@ function renderCostColumn(
 
 export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Element {
   const aggregatedCosts = aggregateCosts(lens, getCard);
-  const aggregatedItems = aggregateItems(lens);
+  const aggregatedItems = aggregateItems(lens, getCard);
   const metaEntries = [
     { label: "土台", value: lens.foundationCost },
     { label: "VP", value: lens.vpTotal ?? 0 },
