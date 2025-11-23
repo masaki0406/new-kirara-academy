@@ -223,6 +223,7 @@ interface PlayerActionContext {
   persuasionTargetCount: number;
   collectableCardCount: number;
   ownedLensCount: number;
+  exhaustedLensCount: number;
 }
 
 interface PlayerActionAvailability {
@@ -476,6 +477,13 @@ function requireActionPointsExhausted(): PlayerActionRequirement {
       : { available: false, reason: "行動力を使い切ったあとに実行します" };
 }
 
+function requireExhaustedLens(): PlayerActionRequirement {
+  return ({ exhaustedLensCount }) =>
+    exhaustedLensCount > 0
+      ? { available: true }
+      : { available: false, reason: "再起動できるレンズがありません" };
+}
+
 const PLAYER_ACTIONS: PlayerActionDefinition[] = [
   (() => {
     const { summary, description } = getLabActionText("polish");
@@ -558,9 +566,9 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "restart",
     label: "再起動",
     category: "general",
-    summary: "行動力を消費後に再度立て直す",
-    description: "行動力を使い切ったあとで態勢を立て直し、次の展開に備えます。",
-    requirement: combineRequirements(requireActionPointsExhausted()),
+    summary: "行動力 3 / 自分の使用済みレンズを再起動",
+    description: "使用済みレンズを再び使用可能状態に戻します。行動力を3消費します。",
+    requirement: combineRequirements(requireActionPoints(3), requireExhaustedLens()),
   },
   {
     id: "collect",
@@ -934,6 +942,13 @@ interface OwnedLensOption {
   ownerName?: string;
 }
 
+interface ExhaustedLensOption {
+  lensId: string;
+  ownerName?: string;
+  status: string;
+  slotActive: boolean;
+}
+
 const JOURNAL_SLOT_LAYOUT: JournalSlotDefinition[] = [
   { position: 1, role: "development", label: "開発カード置き場" },
   { position: 2, role: "development", label: "開発カード置き場" },
@@ -1047,6 +1062,9 @@ export default function PlayPage(): JSX.Element {
   const [isLensActivateDialogOpen, setIsLensActivateDialogOpen] = useState(false);
   const [selectedLensActivateId, setSelectedLensActivateId] = useState<string | null>(null);
   const [isLensActivateSubmitting, setIsLensActivateSubmitting] = useState(false);
+  const [isRefreshDialogOpen, setIsRefreshDialogOpen] = useState(false);
+  const [selectedRefreshLensId, setSelectedRefreshLensId] = useState<string | null>(null);
+  const [isRefreshSubmitting, setIsRefreshSubmitting] = useState(false);
   const [isPersuasionDialogOpen, setIsPersuasionDialogOpen] = useState(false);
   const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
@@ -1759,6 +1777,32 @@ export default function PlayPage(): JSX.Element {
     }));
   }, [gameState, localPlayer?.id]);
 
+  const exhaustedLensTargets = useMemo<ExhaustedLensOption[]>(() => {
+    if (!gameState || !localPlayer?.id) {
+      return [];
+    }
+    const lenses = gameState.board?.lenses ?? {};
+    const slots = gameState.board?.lobbySlots ?? [];
+    const players = gameState.players ?? {};
+    return slots
+      .filter(
+        (slot) =>
+          slot.occupantId === localPlayer.id &&
+          Boolean(lenses[slot.lensId]) &&
+          lenses[slot.lensId].status === "exhausted" &&
+          slot.isActive === false,
+      )
+      .map((slot) => {
+        const lens = lenses[slot.lensId];
+        return {
+          lensId: lens.lensId,
+          ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
+          status: lens.status,
+          slotActive: slot.isActive,
+        };
+      });
+  }, [gameState, localPlayer?.id]);
+
   const openWillDialog = useCallback(() => {
     if (availableWillNodes.length === 0) {
       setFeedback("使用可能な意思能力がありません。");
@@ -1799,6 +1843,26 @@ export default function PlayPage(): JSX.Element {
     setIsLensActivateSubmitting(false);
   }, []);
 
+  const openRefreshDialog = useCallback(() => {
+    if (exhaustedLensTargets.length === 0) {
+      setFeedback("再起動できるレンズがありません。");
+      return;
+    }
+    setSelectedRefreshLensId((prev) => {
+      if (prev && exhaustedLensTargets.some((lens) => lens.lensId === prev)) {
+        return prev;
+      }
+      return exhaustedLensTargets[0]?.lensId ?? null;
+    });
+    setIsRefreshDialogOpen(true);
+  }, [exhaustedLensTargets, setFeedback]);
+
+  const closeRefreshDialog = useCallback(() => {
+    setIsRefreshDialogOpen(false);
+    setSelectedRefreshLensId(null);
+    setIsRefreshSubmitting(false);
+  }, []);
+
   const selectedLensActivateTarget = useMemo(
     () =>
       ownLensTargets.find((lens) => lens.lensId === selectedLensActivateId) ??
@@ -1818,6 +1882,14 @@ export default function PlayPage(): JSX.Element {
         ? selectedLensActivateTarget.rewards.map((reward) => describeRewardDefinition(reward))
         : [],
     [selectedLensActivateTarget],
+  );
+
+  const selectedRefreshTarget = useMemo(
+    () =>
+      exhaustedLensTargets.find((lens) => lens.lensId === selectedRefreshLensId) ??
+      exhaustedLensTargets[0] ??
+      null,
+    [exhaustedLensTargets, selectedRefreshLensId],
   );
 
   const handleSubmitWill = useCallback(async () => {
@@ -1898,22 +1970,68 @@ export default function PlayPage(): JSX.Element {
       closeLensActivateDialog();
     } catch (error) {
       console.error(error);
+    setFeedback(
+      error instanceof Error
+        ? error.message
+        : "レンズ起動アクションの実行に失敗しました。",
+    );
+  } finally {
+    setIsLensActivateSubmitting(false);
+    setPendingActionId(null);
+  }
+}, [
+  localPlayer?.id,
+  selectedLensActivateId,
+  ownLensTargets,
+  performAction,
+  refresh,
+  closeLensActivateDialog,
+  setFeedback,
+]);
+
+  const handleSubmitRefresh = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    const lensId =
+      selectedRefreshLensId &&
+      exhaustedLensTargets.some((lens) => lens.lensId === selectedRefreshLensId)
+        ? selectedRefreshLensId
+        : exhaustedLensTargets[0]?.lensId ?? null;
+    if (!lensId) {
+      setFeedback("再起動するレンズを選択してください。");
+      return;
+    }
+    setIsRefreshSubmitting(true);
+    setPendingActionId("restart");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "refresh",
+          payload: { lensId },
+        },
+      });
+      setFeedback(`レンズ ${lensId} を再起動しました。`);
+      await refresh();
+      closeRefreshDialog();
+    } catch (error) {
+      console.error(error);
       setFeedback(
-        error instanceof Error
-          ? error.message
-          : "レンズ起動アクションの実行に失敗しました。",
+        error instanceof Error ? error.message : "再起動アクションの実行に失敗しました。",
       );
     } finally {
-      setIsLensActivateSubmitting(false);
+      setIsRefreshSubmitting(false);
       setPendingActionId(null);
     }
   }, [
     localPlayer?.id,
-    selectedLensActivateId,
-    ownLensTargets,
+    selectedRefreshLensId,
+    exhaustedLensTargets,
     performAction,
     refresh,
-    closeLensActivateDialog,
+    closeRefreshDialog,
     setFeedback,
   ]);
 
@@ -2017,6 +2135,7 @@ export default function PlayPage(): JSX.Element {
       persuasionTargetCount,
       collectableCardCount,
       ownedLensCount: ownLensTargets.length,
+      exhaustedLensCount: exhaustedLensTargets.length,
     };
     const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
 
@@ -2059,6 +2178,7 @@ export default function PlayPage(): JSX.Element {
     persuasionTargetCount,
     collectableCardCount,
     ownLensTargets.length,
+    exhaustedLensTargets.length,
   ]);
 
   const openPersuasionDialog = useCallback(() => {
@@ -3297,11 +3417,14 @@ export default function PlayPage(): JSX.Element {
                                       polishVpOptions.length > 0;
                                     const hasLensActivateSources =
                                       action.id !== "lens-activate" || ownLensTargets.length > 0;
+                                    const hasRefreshSources =
+                                      action.id !== "restart" || exhaustedLensTargets.length > 0;
                                     const buttonDisabled =
                                       !action.available ||
                                       action.implemented === false ||
                                       !hasPolishSources ||
                                       !hasLensActivateSources ||
+                                      !hasRefreshSources ||
                                       pendingActionId === action.id;
                                     const handleActionClick = () => {
                                       if (action.implemented === false) {
@@ -3317,6 +3440,8 @@ export default function PlayPage(): JSX.Element {
                                         openWillDialog();
                                       } else if (action.id === "lens-activate") {
                                         openLensActivateDialog();
+                                      } else if (action.id === "restart") {
+                                        openRefreshDialog();
                                       } else if (action.id === "persuasion") {
                                         openPersuasionDialog();
                                       } else if (LAB_ACTION_LOOKUP.has(action.id)) {
@@ -3356,6 +3481,11 @@ export default function PlayPage(): JSX.Element {
                                         !hasLensActivateSources ? (
                                           <p className={styles.playerActionHint}>
                                             起動できるレンズがありません。
+                                          </p>
+                                        ) : null}
+                                        {action.id === "restart" && implemented && !hasRefreshSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            再起動できるレンズがありません。
                                           </p>
                                         ) : null}
                                         {action.implemented === false ? (
@@ -3757,6 +3887,108 @@ export default function PlayPage(): JSX.Element {
                 }
               >
                 {isLensActivateSubmitting ? "送信中..." : "起動する"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isRefreshDialogOpen ? (
+        <div
+          className={styles.willOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="レンズ再起動"
+          onClick={isRefreshSubmitting ? undefined : closeRefreshDialog}
+        >
+          <div
+            className={styles.willModal}
+            role="document"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.willHeader}>
+              <h4>レンズを再起動</h4>
+              <button
+                type="button"
+                className={styles.willCloseButton}
+                onClick={closeRefreshDialog}
+                aria-label="閉じる"
+                disabled={isRefreshSubmitting}
+              >
+                ×
+              </button>
+            </div>
+            <p className={styles.willHelp}>使用済みの自分のレンズを選んで再起動します。</p>
+            <div
+              className={styles.willList}
+              role="radiogroup"
+              aria-label="再起動するレンズ"
+            >
+              {exhaustedLensTargets.length > 0 ? (
+                exhaustedLensTargets.map((lens) => {
+                  const checked = selectedRefreshLensId === lens.lensId;
+                  return (
+                    <label
+                      key={lens.lensId}
+                      className={classNames(
+                        styles.willOption,
+                        checked ? styles.willOptionActive : undefined,
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="lensRefresh"
+                        value={lens.lensId}
+                        checked={checked}
+                        onChange={() => setSelectedRefreshLensId(lens.lensId)}
+                        disabled={isRefreshSubmitting}
+                      />
+                      <div>
+                        <span className={styles.willAbilityTitle}>レンズ {lens.lensId}</span>
+                        <p className={styles.willAbilityDescription}>
+                          所有者: {lens.ownerName ?? "あなた"} / ロビー:{" "}
+                          {lens.slotActive ? "未使用" : "使用済み"}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.willAbilityDescription}>再起動できるレンズがありません。</p>
+              )}
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>必要コスト</h5>
+              <ul className={styles.actionConfirmList}>
+                <li>行動力 3</li>
+              </ul>
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>効果</h5>
+              <ul className={styles.actionConfirmList}>
+                <li>選択したレンズを再び使用可能にします。</li>
+              </ul>
+            </div>
+            <div className={styles.willFooter}>
+              <button
+                type="button"
+                className={styles.willSecondaryButton}
+                onClick={closeRefreshDialog}
+                disabled={isRefreshSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.willPrimaryButton}
+                onClick={() => void handleSubmitRefresh()}
+                disabled={
+                  isRefreshSubmitting ||
+                  exhaustedLensTargets.length === 0 ||
+                  !selectedRefreshTarget
+                }
+              >
+                {isRefreshSubmitting ? "送信中..." : "再起動する"}
               </button>
             </div>
           </div>

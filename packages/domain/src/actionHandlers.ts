@@ -838,12 +838,26 @@ export const validateRefresh: Validator = async (action, context) => {
     return errors;
   }
 
-  if (lens.ownerId !== action.playerId) {
-    errors.push('自分のレンズのみ再起動できます');
-  }
-
   if (lens.status !== 'exhausted') {
     errors.push('レンズは再起動の必要がありません');
+  }
+
+  const slot = gameState.board.lobbySlots.find(
+    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+  );
+  if (!slot) {
+    errors.push('使用済みの自分のロビーが配置されていません');
+  }
+
+  const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+  if (player.actionPoints < totalActionCost) {
+    errors.push('行動力が不足しています');
+  }
+  if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
+    errors.push('創造力が不足しています');
+  }
+  if (!canPayResourceCost(player.resources, lens.cost)) {
+    errors.push('必要な資源が不足しています');
   }
 
   return errors;
@@ -862,13 +876,49 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     throw new Error('指定されたレンズが存在しません');
   }
 
+  const slot = gameState.board.lobbySlots.find(
+    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+  );
+  if (!slot) {
+    throw new Error('使用済みの自分のロビーが配置されていません');
+  }
+
   player.actionPoints = Math.max(0, player.actionPoints - 3);
-  lens.status = 'available';
-  gameState.board.lobbySlots
-    .filter((slot) => slot.lensId === lensId)
-    .forEach((slot) => {
-      slot.isActive = true;
+
+  const cost = lens.cost;
+  if (cost.actionPoints) {
+    player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
+  }
+  payResourceCost(player.resources, cost);
+  if (cost.creativity) {
+    player.creativity = Math.max(0, player.creativity - cost.creativity);
+  }
+
+  // 入れ替えたロビーを使用状態にする
+  slot.isActive = false;
+
+  for (const reward of lens.rewards) {
+    applyReward(player, reward);
+  }
+
+  lens.status = 'exhausted';
+
+  if (lens.ownerId !== action.playerId) {
+    const owner = gameState.players[lens.ownerId];
+    if (owner) {
+      owner.vp += 2;
+    }
+    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
+      actorId: action.playerId,
+      ownerId: lens.ownerId,
+      actionType: 'refresh',
     });
+  }
+
+  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+    actorId: action.playerId,
+    actionType: 'refresh',
+  });
 };
 
 export const validateCollect: Validator = async (action, context) => {
