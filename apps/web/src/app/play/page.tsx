@@ -222,6 +222,7 @@ interface PlayerActionContext {
   negotiationAvailable: boolean;
   persuasionTargetCount: number;
   collectableCardCount: number;
+  ownedLensCount: number;
 }
 
 interface PlayerActionAvailability {
@@ -396,8 +397,8 @@ function requireCreativity(amount: number): PlayerActionRequirement {
 }
 
 function requireOwnedLens(): PlayerActionRequirement {
-  return ({ player }) =>
-    player.ownedLenses.length > 0
+  return ({ ownedLensCount }) =>
+    ownedLensCount > 0
       ? { available: true }
       : { available: false, reason: "所有しているレンズが必要です" };
 }
@@ -914,6 +915,14 @@ interface LensTargetOption {
   rewards: RewardDefinition[];
 }
 
+interface OwnedLensOption {
+  lensId: string;
+  cost: ResourceCost;
+  rewards: RewardDefinition[];
+  status: string;
+  ownerName?: string;
+}
+
 const JOURNAL_SLOT_LAYOUT: JournalSlotDefinition[] = [
   { position: 1, role: "development", label: "開発カード置き場" },
   { position: 2, role: "development", label: "開発カード置き場" },
@@ -1024,6 +1033,9 @@ export default function PlayPage(): JSX.Element {
   const [isWillDialogOpen, setIsWillDialogOpen] = useState(false);
   const [selectedWillNodeId, setSelectedWillNodeId] = useState<string | null>(null);
   const [isWillSubmitting, setIsWillSubmitting] = useState(false);
+  const [isLensActivateDialogOpen, setIsLensActivateDialogOpen] = useState(false);
+  const [selectedLensActivateId, setSelectedLensActivateId] = useState<string | null>(null);
+  const [isLensActivateSubmitting, setIsLensActivateSubmitting] = useState(false);
   const [isPersuasionDialogOpen, setIsPersuasionDialogOpen] = useState(false);
   const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
@@ -1717,6 +1729,24 @@ export default function PlayPage(): JSX.Element {
   );
   const willAbilityCount = availableWillNodes.length;
 
+  const ownLensTargets = useMemo<OwnedLensOption[]>(() => {
+    if (!gameState || !localPlayer?.id) {
+      return [];
+    }
+    const lenses = Object.values(gameState.board?.lenses ?? {});
+    const players = gameState.players ?? {};
+    const owned = lenses.filter(
+      (lens) => lens.ownerId === localPlayer.id && lens.status === "available",
+    );
+    return owned.map((lens) => ({
+      lensId: lens.lensId,
+      cost: lens.cost,
+      rewards: lens.rewards,
+      status: lens.status,
+      ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
+    }));
+  }, [gameState, localPlayer?.id]);
+
   const openWillDialog = useCallback(() => {
     if (availableWillNodes.length === 0) {
       setFeedback("使用可能な意思能力がありません。");
@@ -1736,6 +1766,47 @@ export default function PlayPage(): JSX.Element {
     setSelectedWillNodeId(null);
     setIsWillSubmitting(false);
   }, []);
+
+  const openLensActivateDialog = useCallback(() => {
+    if (ownLensTargets.length === 0) {
+      setFeedback("起動できるレンズがありません。");
+      return;
+    }
+    setSelectedLensActivateId((prev) => {
+      if (prev && ownLensTargets.some((lens) => lens.lensId === prev)) {
+        return prev;
+      }
+      return ownLensTargets[0]?.lensId ?? null;
+    });
+    setIsLensActivateDialogOpen(true);
+  }, [ownLensTargets, setFeedback]);
+
+  const closeLensActivateDialog = useCallback(() => {
+    setIsLensActivateDialogOpen(false);
+    setSelectedLensActivateId(null);
+    setIsLensActivateSubmitting(false);
+  }, []);
+
+  const selectedLensActivateTarget = useMemo(
+    () =>
+      ownLensTargets.find((lens) => lens.lensId === selectedLensActivateId) ??
+      ownLensTargets[0] ??
+      null,
+    [ownLensTargets, selectedLensActivateId],
+  );
+
+  const lensActivateCostDescriptions = useMemo(
+    () => (selectedLensActivateTarget ? describeResourceCost(selectedLensActivateTarget.cost) : []),
+    [selectedLensActivateTarget],
+  );
+
+  const lensActivateRewardDescriptions = useMemo(
+    () =>
+      selectedLensActivateTarget
+        ? selectedLensActivateTarget.rewards.map((reward) => describeRewardDefinition(reward))
+        : [],
+    [selectedLensActivateTarget],
+  );
 
   const handleSubmitWill = useCallback(async () => {
     if (!localPlayer?.id) {
@@ -1783,6 +1854,54 @@ export default function PlayPage(): JSX.Element {
     performAction,
     refresh,
     closeWillDialog,
+    setFeedback,
+  ]);
+
+  const handleSubmitLensActivate = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    const lensId =
+      selectedLensActivateId &&
+      ownLensTargets.some((lens) => lens.lensId === selectedLensActivateId)
+        ? selectedLensActivateId
+        : ownLensTargets[0]?.lensId ?? null;
+    if (!lensId) {
+      setFeedback("起動するレンズを選択してください。");
+      return;
+    }
+    setIsLensActivateSubmitting(true);
+    setPendingActionId("lens-activate");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "lensActivate",
+          payload: { lensId },
+        },
+      });
+      setFeedback(`レンズ ${lensId} を起動しました。`);
+      await refresh();
+      closeLensActivateDialog();
+    } catch (error) {
+      console.error(error);
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "レンズ起動アクションの実行に失敗しました。",
+      );
+    } finally {
+      setIsLensActivateSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
+    localPlayer?.id,
+    selectedLensActivateId,
+    ownLensTargets,
+    performAction,
+    refresh,
+    closeLensActivateDialog,
     setFeedback,
   ]);
 
@@ -1885,6 +2004,7 @@ export default function PlayPage(): JSX.Element {
       negotiationAvailable,
       persuasionTargetCount,
       collectableCardCount,
+      ownedLensCount: ownLensTargets.length,
     };
     const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
 
@@ -1926,6 +2046,7 @@ export default function PlayPage(): JSX.Element {
     negotiationAvailable,
     persuasionTargetCount,
     collectableCardCount,
+    ownLensTargets.length,
   ]);
 
   const openPersuasionDialog = useCallback(() => {
@@ -3162,10 +3283,13 @@ export default function PlayPage(): JSX.Element {
                                       action.id !== "polish" ||
                                       polishDevelopmentOptions.length > 0 ||
                                       polishVpOptions.length > 0;
+                                    const hasLensActivateSources =
+                                      action.id !== "lens-activate" || ownLensTargets.length > 0;
                                     const buttonDisabled =
                                       !action.available ||
                                       action.implemented === false ||
                                       !hasPolishSources ||
+                                      !hasLensActivateSources ||
                                       pendingActionId === action.id;
                                     const handleActionClick = () => {
                                       if (action.implemented === false) {
@@ -3176,6 +3300,8 @@ export default function PlayPage(): JSX.Element {
                                         openPolishDialog();
                                       } else if (action.id === "will") {
                                         openWillDialog();
+                                      } else if (action.id === "lens-activate") {
+                                        openLensActivateDialog();
                                       } else if (action.id === "persuasion") {
                                         openPersuasionDialog();
                                       } else if (LAB_ACTION_LOOKUP.has(action.id)) {
@@ -3208,6 +3334,13 @@ export default function PlayPage(): JSX.Element {
                                         {action.id === "polish" && implemented && !hasPolishSources ? (
                                           <p className={styles.playerActionHint}>
                                             獲得済みのカードがありません。
+                                          </p>
+                                        ) : null}
+                                        {action.id === "lens-activate" &&
+                                        implemented &&
+                                        !hasLensActivateSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            起動できるレンズがありません。
                                           </p>
                                         ) : null}
                                         {action.implemented === false ? (
@@ -3500,6 +3633,115 @@ export default function PlayPage(): JSX.Element {
                 }
               >
                 {isWillSubmitting ? "送信中..." : "意思を実行"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isLensActivateDialogOpen ? (
+        <div
+          className={styles.willOverlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="レンズ起動"
+          onClick={isLensActivateSubmitting ? undefined : closeLensActivateDialog}
+        >
+          <div
+            className={styles.willModal}
+            role="document"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.willHeader}>
+              <h4>レンズを起動</h4>
+              <button
+                type="button"
+                className={styles.willCloseButton}
+                onClick={closeLensActivateDialog}
+                aria-label="閉じる"
+                disabled={isLensActivateSubmitting}
+              >
+                ×
+              </button>
+            </div>
+            <p className={styles.willHelp}>自分のレンズから起動するものを選択してください。</p>
+            <div
+              className={styles.willList}
+              role="radiogroup"
+              aria-label="起動するレンズ"
+            >
+              {ownLensTargets.length > 0 ? (
+                ownLensTargets.map((lens) => {
+                  const checked = selectedLensActivateId === lens.lensId;
+                  return (
+                    <label
+                      key={lens.lensId}
+                      className={classNames(
+                        styles.willOption,
+                        checked ? styles.willOptionActive : undefined,
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="lensActivate"
+                        value={lens.lensId}
+                        checked={checked}
+                        onChange={() => setSelectedLensActivateId(lens.lensId)}
+                        disabled={isLensActivateSubmitting}
+                      />
+                      <div>
+                        <span className={styles.willAbilityTitle}>
+                          レンズ {lens.lensId}
+                        </span>
+                        <p className={styles.willAbilityDescription}>
+                          状態: {lens.status === "available" ? "使用可能" : lens.status}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className={styles.willAbilityDescription}>起動できるレンズがありません。</p>
+              )}
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
+              <ul className={styles.actionConfirmList}>
+                {lensActivateCostDescriptions.length > 0 ? (
+                  lensActivateCostDescriptions.map((item) => <li key={item}>{item}</li>)
+                ) : (
+                  <li>追加コストなし</li>
+                )}
+              </ul>
+            </div>
+            <div className={styles.actionConfirmSection}>
+              <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
+              <ul className={styles.actionConfirmList}>
+                {lensActivateRewardDescriptions.length > 0 ? (
+                  lensActivateRewardDescriptions.map((item) => <li key={item}>{item}</li>)
+                ) : (
+                  <li>即時効果なし</li>
+                )}
+              </ul>
+            </div>
+            <div className={styles.willFooter}>
+              <button
+                type="button"
+                className={styles.willSecondaryButton}
+                onClick={closeLensActivateDialog}
+                disabled={isLensActivateSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                className={styles.willPrimaryButton}
+                onClick={() => void handleSubmitLensActivate()}
+                disabled={
+                  isLensActivateSubmitting || ownLensTargets.length === 0 || !selectedLensActivateTarget
+                }
+              >
+                {isLensActivateSubmitting ? "送信中..." : "起動する"}
               </button>
             </div>
           </div>
