@@ -776,6 +776,26 @@ function formatDisplayNumber(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
+function removeUsedCards(
+  cards: string[],
+  removalMap: Map<string, number> | null | undefined,
+): string[] {
+  if (!removalMap || removalMap.size === 0) {
+    return cards;
+  }
+  const counts = new Map(removalMap);
+  const result: string[] = [];
+  cards.forEach((cardId) => {
+    const remaining = counts.get(cardId) ?? 0;
+    if (remaining > 0) {
+      counts.set(cardId, remaining - 1);
+    } else {
+      result.push(cardId);
+    }
+  });
+  return result;
+}
+
 function buildDraftCraftedLens(
   details: PolishSelectionDetail[],
   foundationCost: FoundationCost | null,
@@ -939,6 +959,12 @@ interface CharacterGrowthNodeWithStatus extends CharacterGrowthNode {
   unlockable: boolean;
 }
 
+interface PendingPolishResult {
+  lens: CraftedLens;
+  selection: Array<{ cardId: string; cardType: "development" | "vp" }>;
+  foundationCost: FoundationCost;
+}
+
 export default function PlayPage(): JSX.Element {
   const {
     baseUrl,
@@ -1002,6 +1028,7 @@ export default function PlayPage(): JSX.Element {
   const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
   const [pendingCollectKey, setPendingCollectKey] = useState<string | null>(null);
+  const [pendingPolishResult, setPendingPolishResult] = useState<PendingPolishResult | null>(null);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -1176,6 +1203,18 @@ export default function PlayPage(): JSX.Element {
     return gameState.players[localPlayer.id];
   }, [localPlayer?.id, gameState]);
 
+  useEffect(() => {
+    if (!pendingPolishResult) {
+      return;
+    }
+    const hasApplied =
+      localGamePlayer?.craftedLenses?.some((lens) => lens.lensId === pendingPolishResult.lens.lensId) ??
+      false;
+    if (hasApplied || !localGamePlayer) {
+      setPendingPolishResult(null);
+    }
+  }, [localGamePlayer, pendingPolishResult]);
+
   const playerLensCount = useMemo(() => {
     if (!localPlayer?.id || !gameState) {
       return 0;
@@ -1327,14 +1366,49 @@ export default function PlayPage(): JSX.Element {
       const raw = collection[cost];
       const count =
         typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
-      return { cost, count };
+      const pendingAdjustment =
+        pendingPolishResult?.foundationCost === cost ? 1 : 0;
+      const adjustedCount = Math.max(0, count - pendingAdjustment);
+      return { cost, count: adjustedCount };
     });
-  }, [localGamePlayer?.collectedFoundationCards]);
+  }, [localGamePlayer?.collectedFoundationCards, pendingPolishResult?.foundationCost]);
+
+  const pendingPolishRemoval = useMemo(() => {
+    if (!pendingPolishResult) {
+      return null;
+    }
+    const development = new Map<string, number>();
+    const vp = new Map<string, number>();
+    pendingPolishResult.selection.forEach(({ cardId, cardType }) => {
+      const map = cardType === "development" ? development : vp;
+      map.set(cardId, (map.get(cardId) ?? 0) + 1);
+    });
+    return { development, vp };
+  }, [pendingPolishResult]);
+
+  const effectiveCollectedDevelopmentCards = useMemo(() => {
+    const cards = [...(localGamePlayer?.collectedDevelopmentCards ?? [])];
+    return removeUsedCards(cards, pendingPolishRemoval?.development);
+  }, [localGamePlayer?.collectedDevelopmentCards, pendingPolishRemoval?.development]);
+
+  const effectiveCollectedVpCards = useMemo(() => {
+    const cards = [...(localGamePlayer?.collectedVpCards ?? [])];
+    return removeUsedCards(cards, pendingPolishRemoval?.vp);
+  }, [localGamePlayer?.collectedVpCards, pendingPolishRemoval?.vp]);
 
   const totalCollectedFoundation = useMemo(
     () => collectedFoundationEntries.reduce((sum, entry) => sum + entry.count, 0),
     [collectedFoundationEntries],
   );
+
+  const effectiveCraftedLenses = useMemo(() => {
+    const lenses = localGamePlayer?.craftedLenses ?? [];
+    if (!pendingPolishResult) {
+      return lenses;
+    }
+    const alreadyExists = lenses.some((lens) => lens.lensId === pendingPolishResult.lens.lensId);
+    return alreadyExists ? lenses : [...lenses, pendingPolishResult.lens];
+  }, [localGamePlayer?.craftedLenses, pendingPolishResult]);
 
   const openPolishDialog = useCallback(() => {
     setPolishSelectionMap({});
@@ -1526,6 +1600,11 @@ export default function PlayPage(): JSX.Element {
             polish: polishPayload,
           },
         },
+      });
+      setPendingPolishResult({
+        lens: resultLens,
+        selection: selection.map((entry) => ({ cardId: entry.cardId, cardType: entry.cardType })),
+        foundationCost: polishFoundationChoice,
       });
       setFeedback("研磨を実行しました。");
       closePolishDialog();
@@ -2189,20 +2268,20 @@ export default function PlayPage(): JSX.Element {
 
   const polishDevelopmentOptions = useMemo(
     () =>
-      (localGamePlayer?.collectedDevelopmentCards ?? []).map((cardId) => ({
+      effectiveCollectedDevelopmentCards.map((cardId) => ({
         cardId,
         card: developmentCardCatalog.get(cardId) ?? null,
       })),
-    [localGamePlayer?.collectedDevelopmentCards, developmentCardCatalog],
+    [effectiveCollectedDevelopmentCards, developmentCardCatalog],
   );
 
   const polishVpOptions = useMemo(
     () =>
-      (localGamePlayer?.collectedVpCards ?? []).map((cardId) => ({
+      effectiveCollectedVpCards.map((cardId) => ({
         cardId,
         card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
       })),
-    [localGamePlayer?.collectedVpCards, vpCardCatalog, developmentCardCatalog],
+    [effectiveCollectedVpCards, vpCardCatalog, developmentCardCatalog],
   );
 
   const labPlacementSummary = useMemo(() => {
@@ -2970,11 +3049,11 @@ export default function PlayPage(): JSX.Element {
                         </section>
                         <section className={styles.collectedColumn}>
                           <header className={styles.collectedSummary}>
-                            完成レンズ {(localGamePlayer.craftedLenses ?? []).length} 枚
+                            完成レンズ {effectiveCraftedLenses.length} 枚
                           </header>
-                          {localGamePlayer.craftedLenses && localGamePlayer.craftedLenses.length > 0 ? (
+                          {effectiveCraftedLenses.length > 0 ? (
                             <div className={styles.craftedLensGrid}>
-                              {localGamePlayer.craftedLenses.map((lens) => (
+                              {effectiveCraftedLenses.map((lens) => (
                                 <CraftedLensPreview
                                   key={lens.lensId}
                                   lens={lens}
