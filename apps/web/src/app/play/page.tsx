@@ -1928,10 +1928,10 @@ export default function PlayPage(): JSX.Element {
       console.error(error);
       setFeedback(error instanceof Error ? error.message : "意思アクションの実行に失敗しました。");
     } finally {
-      setIsWillSubmitting(false);
-      setPendingActionId(null);
-    }
-  }, [
+    setIsWillSubmitting(false);
+    setPendingActionId(null);
+  }
+}, [
     localPlayer?.id,
     selectedWillNodeId,
     availableWillNodes,
@@ -2022,18 +2022,42 @@ export default function PlayPage(): JSX.Element {
         error instanceof Error ? error.message : "再起動アクションの実行に失敗しました。",
       );
     } finally {
-      setIsRefreshSubmitting(false);
+    setIsRefreshSubmitting(false);
+    setPendingActionId(null);
+  }
+}, [
+  localPlayer?.id,
+  selectedRefreshLensId,
+  exhaustedLensTargets,
+  performAction,
+  refresh,
+  closeRefreshDialog,
+  setFeedback,
+]);
+
+  const handleSubmitPass = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    setPendingActionId("pass");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "pass",
+          payload: {},
+        },
+      });
+      setFeedback("パスしました。");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      setFeedback(error instanceof Error ? error.message : "パスの実行に失敗しました。");
+    } finally {
       setPendingActionId(null);
     }
-  }, [
-    localPlayer?.id,
-    selectedRefreshLensId,
-    exhaustedLensTargets,
-    performAction,
-    refresh,
-    closeRefreshDialog,
-    setFeedback,
-  ]);
+  }, [localPlayer?.id, performAction, refresh, setFeedback]);
 
 
   const lensOpponentTargets = useMemo<LensTargetOption[]>(() => {
@@ -3444,6 +3468,8 @@ export default function PlayPage(): JSX.Element {
                                         openRefreshDialog();
                                       } else if (action.id === "persuasion") {
                                         openPersuasionDialog();
+                                      } else if (action.id === "pass") {
+                                        void handleSubmitPass();
                                       } else if (LAB_ACTION_LOOKUP.has(action.id)) {
                                         openLabConfirmDialog(action.id);
                                       }

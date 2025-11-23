@@ -79,10 +79,29 @@ export class PhaseManagerImpl implements PhaseManager {
   async endPhase(state: MutableGameState): Promise<void> {
     const gameState = state.state;
     gameState.currentPhase = 'end';
-    // 使用済みレンズのロビーを未行動状態へ戻す
+    // レンズ上のロビーは残したまま未使用状態に戻す
     gameState.board.lobbySlots.forEach((slot) => {
       slot.isActive = true;
     });
+
+    // ラボに配置したロビーを各プレイヤーのボードに戻す
+    const placements = Array.isArray(gameState.labPlacements) ? gameState.labPlacements : [];
+    placements.forEach(({ playerId, count }) => {
+      if (!count || count <= 0) {
+        return;
+      }
+      const player = gameState.players[playerId];
+      if (!player) {
+        return;
+      }
+      const currentStock =
+        typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
+          ? player.lobbyStock
+          : 0;
+      player.lobbyStock = currentStock + count;
+    });
+    gameState.labPlacements = [];
+
     // 公開列を補充
     replenishDevelopmentRow(
       gameState,
