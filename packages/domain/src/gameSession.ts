@@ -94,6 +94,12 @@ export class GameSessionImpl implements GameSession {
 
     const result = await this.deps.actionResolver.resolve(action, context);
     if (result.success) {
+      if (action.actionType !== 'pass') {
+        const nextPlayer = this.deps.turnOrder.nextPlayer();
+        if (nextPlayer) {
+          mutableState.state.currentPlayerId = nextPlayer;
+        }
+      }
       await mutableState.save();
       await this.writeLog({
         action,
