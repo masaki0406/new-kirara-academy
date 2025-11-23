@@ -1,7 +1,7 @@
 "use client";
 
 import type { JSX } from "react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
 import {
@@ -315,6 +315,17 @@ function getLabActionText(id: string): { summary: string; description: string } 
   const summary = entry.cost.join(" / ");
   const description = `${entry.material} 【効果】${entry.result.join(" / ")}`;
   return { summary, description };
+}
+
+function scrollIntoViewIfPossible(target: HTMLElement | null | undefined): void {
+  if (!target) {
+    return;
+  }
+  try {
+    target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  } catch {
+    // no-op
+  }
 }
 
 function describeResourceCost(cost: ResourceCost): string[] {
@@ -1041,6 +1052,7 @@ export default function PlayPage(): JSX.Element {
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
   const [pendingCollectKey, setPendingCollectKey] = useState<string | null>(null);
   const [pendingPolishResult, setPendingPolishResult] = useState<PendingPolishResult | null>(null);
+  const collectSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setBaseUrlInput(baseUrl || DEFAULT_FUNCTIONS_BASE_URL);
@@ -2827,7 +2839,7 @@ export default function PlayPage(): JSX.Element {
                 </div>
               </article>
 
-              <article className={`${styles.card} ${styles.journalBoard}`}>
+              <article className={`${styles.card} ${styles.journalBoard}`} ref={collectSectionRef}>
                 <div className={styles.journalHeader}>
                   <div>
                     <h4 className={styles.boardTitle}>研究日誌</h4>
@@ -3295,6 +3307,9 @@ export default function PlayPage(): JSX.Element {
                                       if (action.implemented === false) {
                                         setFeedback("この行動は現在準備中です。");
                                         return;
+                                      }
+                                      if (action.id === "collect") {
+                                        scrollIntoViewIfPossible(collectSectionRef.current);
                                       }
                                       if (action.id === "polish") {
                                         openPolishDialog();
