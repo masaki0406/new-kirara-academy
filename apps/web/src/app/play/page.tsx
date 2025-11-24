@@ -1789,7 +1789,7 @@ export default function PlayPage(): JSX.Element {
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
         const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
-        const hasUsedLobby = lensSlots.some((slot) => slot.isActive === false);
+        const hasUsedLobby = lensSlots.some((slot) => slot.occupantId && slot.isActive === false);
         if (hasUsedLobby) {
           return false;
         }
