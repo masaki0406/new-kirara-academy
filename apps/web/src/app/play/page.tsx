@@ -222,7 +222,7 @@ interface PlayerActionContext {
   negotiationAvailable: boolean;
   persuasionTargetCount: number;
   collectableCardCount: number;
-  ownedLensCount: number;
+  lensActivateCount: number;
   exhaustedLensCount: number;
 }
 
@@ -292,6 +292,12 @@ const PLAYER_ACTION_CATEGORY_LABELS: Record<PlayerActionCategory, string> = {
   student: "学生アクション",
   general: "共通操作",
 };
+
+interface CraftedLensWithOwner {
+  lens: CraftedLens;
+  ownerId: string;
+  ownerName: string;
+}
 
 const LAB_ACTION_LOOKUP = new Map<string, LabActionDefinition>(
   LAB_ACTIONS.map((action) => [action.id, action]),
@@ -408,11 +414,11 @@ function requireCreativity(amount: number): PlayerActionRequirement {
       : { available: false, reason: `創造力が ${amount} 必要です` };
 }
 
-function requireOwnedLens(): PlayerActionRequirement {
-  return ({ ownedLensCount }) =>
-    ownedLensCount > 0
+function requireLensActivateTarget(): PlayerActionRequirement {
+  return ({ lensActivateCount }) =>
+    lensActivateCount > 0
       ? { available: true }
-      : { available: false, reason: "所有しているレンズが必要です" };
+      : { available: false, reason: "起動できるレンズがありません" };
 }
 
 function requireLobbyStock(): PlayerActionRequirement {
@@ -551,7 +557,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     category: "general",
     summary: "行動力 1 / 所有レンズを起動",
     description: "所有するレンズを起動し、対応する効果を発動します。",
-    requirement: combineRequirements(requireActionPoints(1), requireOwnedLens()),
+    requirement: combineRequirements(requireActionPoints(1), requireLensActivateTarget()),
     highlight: "primary",
   },
   {
@@ -934,7 +940,7 @@ interface LensTargetOption {
   rewards: RewardDefinition[];
 }
 
-interface OwnedLensOption {
+interface LensActivateOption {
   lensId: string;
   cost: ResourceCost;
   rewards: RewardDefinition[];
@@ -1452,6 +1458,19 @@ export default function PlayPage(): JSX.Element {
     return alreadyExists ? lenses : [...lenses, pendingPolishResult.lens];
   }, [localGamePlayer?.craftedLenses, pendingPolishResult]);
 
+  const allCraftedLenses = useMemo<CraftedLensWithOwner[]>(() => {
+    if (!gameState?.players) {
+      return [];
+    }
+    return Object.values(gameState.players).flatMap((player) =>
+      (player.craftedLenses ?? []).map((lens) => ({
+        lens,
+        ownerId: player.playerId,
+        ownerName: player.displayName ?? player.playerId,
+      })),
+    );
+  }, [gameState?.players]);
+
   const openPolishDialog = useCallback(() => {
     setPolishSelectionMap({});
     setPolishFoundationChoice(null);
@@ -1759,22 +1778,33 @@ export default function PlayPage(): JSX.Element {
   );
   const willAbilityCount = availableWillNodes.length;
 
-  const ownLensTargets = useMemo<OwnedLensOption[]>(() => {
+  const lensActivateTargets = useMemo<LensActivateOption[]>(() => {
     if (!gameState || !localPlayer?.id) {
       return [];
     }
-    const lenses = Object.values(gameState.board?.lenses ?? {});
+    const lenses = gameState.board?.lenses ?? {};
+    const slots = gameState.board?.lobbySlots ?? [];
     const players = gameState.players ?? {};
-    const owned = lenses.filter(
-      (lens) => lens.ownerId === localPlayer.id && lens.status === "available",
-    );
-    return owned.map((lens) => ({
-      lensId: lens.lensId,
-      cost: lens.cost,
-      rewards: lens.rewards,
-      status: lens.status,
-      ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
-    }));
+    return Object.values(lenses)
+      .filter((lens) => lens.status === "available")
+      .filter((lens) => {
+        const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
+        const hasUsedLobby = lensSlots.some((slot) => slot.isActive === false);
+        if (hasUsedLobby) {
+          return false;
+        }
+        const hasSelfActiveLobby = lensSlots.some(
+          (slot) => slot.occupantId === localPlayer.id && slot.isActive,
+        );
+        return lens.ownerId === localPlayer.id || hasSelfActiveLobby;
+      })
+      .map((lens) => ({
+        lensId: lens.lensId,
+        cost: lens.cost,
+        rewards: lens.rewards,
+        status: lens.status,
+        ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
+      }));
   }, [gameState, localPlayer?.id]);
 
   const exhaustedLensTargets = useMemo<ExhaustedLensOption[]>(() => {
@@ -1824,18 +1854,18 @@ export default function PlayPage(): JSX.Element {
   }, []);
 
   const openLensActivateDialog = useCallback(() => {
-    if (ownLensTargets.length === 0) {
+    if (lensActivateTargets.length === 0) {
       setFeedback("起動できるレンズがありません。");
       return;
     }
     setSelectedLensActivateId((prev) => {
-      if (prev && ownLensTargets.some((lens) => lens.lensId === prev)) {
+      if (prev && lensActivateTargets.some((lens) => lens.lensId === prev)) {
         return prev;
       }
-      return ownLensTargets[0]?.lensId ?? null;
+      return lensActivateTargets[0]?.lensId ?? null;
     });
     setIsLensActivateDialogOpen(true);
-  }, [ownLensTargets, setFeedback]);
+  }, [lensActivateTargets, setFeedback]);
 
   const closeLensActivateDialog = useCallback(() => {
     setIsLensActivateDialogOpen(false);
@@ -1865,10 +1895,10 @@ export default function PlayPage(): JSX.Element {
 
   const selectedLensActivateTarget = useMemo(
     () =>
-      ownLensTargets.find((lens) => lens.lensId === selectedLensActivateId) ??
-      ownLensTargets[0] ??
+      lensActivateTargets.find((lens) => lens.lensId === selectedLensActivateId) ??
+      lensActivateTargets[0] ??
       null,
-    [ownLensTargets, selectedLensActivateId],
+    [lensActivateTargets, selectedLensActivateId],
   );
 
   const lensActivateCostDescriptions = useMemo(
@@ -1948,9 +1978,9 @@ export default function PlayPage(): JSX.Element {
     }
     const lensId =
       selectedLensActivateId &&
-      ownLensTargets.some((lens) => lens.lensId === selectedLensActivateId)
+      lensActivateTargets.some((lens) => lens.lensId === selectedLensActivateId)
         ? selectedLensActivateId
-        : ownLensTargets[0]?.lensId ?? null;
+        : lensActivateTargets[0]?.lensId ?? null;
     if (!lensId) {
       setFeedback("起動するレンズを選択してください。");
       return;
@@ -1982,7 +2012,7 @@ export default function PlayPage(): JSX.Element {
 }, [
   localPlayer?.id,
   selectedLensActivateId,
-  ownLensTargets,
+  lensActivateTargets,
   performAction,
   refresh,
   closeLensActivateDialog,
@@ -2158,7 +2188,7 @@ export default function PlayPage(): JSX.Element {
       negotiationAvailable,
       persuasionTargetCount,
       collectableCardCount,
-      ownedLensCount: ownLensTargets.length,
+      lensActivateCount: lensActivateTargets.length,
       exhaustedLensCount: exhaustedLensTargets.length,
     };
     const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
@@ -2201,7 +2231,7 @@ export default function PlayPage(): JSX.Element {
     negotiationAvailable,
     persuasionTargetCount,
     collectableCardCount,
-    ownLensTargets.length,
+    lensActivateTargets.length,
     exhaustedLensTargets.length,
   ]);
 
@@ -3343,6 +3373,28 @@ export default function PlayPage(): JSX.Element {
                             <p className={styles.collectedEmpty}>まだ作成していません。</p>
                           )}
                         </section>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            全プレイヤーの完成レンズ {allCraftedLenses.length} 枚
+                          </header>
+                          {allCraftedLenses.length > 0 ? (
+                            <div className={styles.craftedLensGrid}>
+                              {allCraftedLenses.map(({ lens, ownerId, ownerName }) => (
+                                <div key={`all-lens-${lens.lensId}`} className={styles.craftedLensCard}>
+                                  <div className={styles.journalSlotHeader}>
+                                    <span className={styles.journalSlotIndex}>LP</span>
+                                    <span className={styles.journalSlotType}>
+                                      所有者: {ownerName ?? ownerId}
+                                    </span>
+                                  </div>
+                                  <CraftedLensPreview lens={lens} getCard={getCardDefinition} />
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className={styles.collectedEmpty}>公開済みの完成レンズがありません。</p>
+                          )}
+                        </section>
                       </div>
                     </div>
                     {localCharacterProfile ? (
@@ -3440,7 +3492,7 @@ export default function PlayPage(): JSX.Element {
                                       polishDevelopmentOptions.length > 0 ||
                                       polishVpOptions.length > 0;
                                     const hasLensActivateSources =
-                                      action.id !== "lens-activate" || ownLensTargets.length > 0;
+                                      action.id !== "lens-activate" || lensActivateTargets.length > 0;
                                     const hasRefreshSources =
                                       action.id !== "restart" || exhaustedLensTargets.length > 0;
                                     const buttonDisabled =
@@ -3841,8 +3893,8 @@ export default function PlayPage(): JSX.Element {
               role="radiogroup"
               aria-label="起動するレンズ"
             >
-              {ownLensTargets.length > 0 ? (
-                ownLensTargets.map((lens) => {
+              {lensActivateTargets.length > 0 ? (
+                lensActivateTargets.map((lens) => {
                   const checked = selectedLensActivateId === lens.lensId;
                   return (
                     <label
@@ -3909,7 +3961,7 @@ export default function PlayPage(): JSX.Element {
                 className={styles.willPrimaryButton}
                 onClick={() => void handleSubmitLensActivate()}
                 disabled={
-                  isLensActivateSubmitting || ownLensTargets.length === 0 || !selectedLensActivateTarget
+                isLensActivateSubmitting || lensActivateTargets.length === 0 || !selectedLensActivateTarget
                 }
               >
                 {isLensActivateSubmitting ? "送信中..." : "起動する"}
