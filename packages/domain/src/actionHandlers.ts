@@ -361,6 +361,8 @@ function clampCreativity(value: number): number {
   return Math.max(0, Math.min(MAX_CREATIVITY, value));
 }
 
+type ResourceKey = 'light' | 'rainbow' | 'stagnation';
+
 function resolveLabCost(lab: LabDefinition | undefined): LabCostDefinition {
   const base: LabCostDefinition = { actionPoints: 1 };
   if (!lab?.cost) {
@@ -689,7 +691,17 @@ export const validateLensActivate: Validator = async (action, context) => {
     errors.push('行動力が不足しています');
   }
 
-  if (!canPayResourceCost(player.resources, lens.cost)) {
+  const itemCost = accumulateResourceFromItems(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+  );
+  const mergedCost: ResourceCost = {
+    light: (lens.cost.light ?? 0) + (itemCost.light ?? 0),
+    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.rainbow ?? 0),
+    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.stagnation ?? 0),
+    creativity: lens.cost.creativity,
+    actionPoints: lens.cost.actionPoints,
+  };
+  if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
 
@@ -717,12 +729,28 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
 
   payResourceCost(player.resources, lens.cost);
+  const itemCost = accumulateResourceFromItems(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+  );
+  payResourceCost(player.resources, itemCost);
   if (lens.cost.creativity) {
     player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
   }
 
   for (const reward of lens.rewards) {
     applyReward(player, reward);
+  }
+  const itemReward = accumulateResourceFromItems(
+    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+  );
+  if (
+    itemReward.light ||
+    itemReward.rainbow ||
+    itemReward.stagnation ||
+    itemReward.actionPoints ||
+    itemReward.creativity
+  ) {
+    applyReward(player, { type: 'resource', value: itemReward });
   }
 
   lens.status = 'exhausted';
@@ -1668,6 +1696,42 @@ function ensureUnlimitedMap(wallet: ResourceWallet): void {
   if (!wallet.unlimited) {
     wallet.unlimited = {} as Partial<Record<ResourceType, boolean>>;
   }
+}
+
+function toResourceKey(label: string | null | undefined): ResourceKey | null {
+  if (!label) {
+    return null;
+  }
+  const normalized = label.toLowerCase();
+  if (normalized.includes('光') || normalized.includes('light')) {
+    return 'light';
+  }
+  if (normalized.includes('虹') || normalized.includes('rainbow')) {
+    return 'rainbow';
+  }
+  if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) {
+    return 'stagnation';
+  }
+  return null;
+}
+
+function accumulateResourceFromItems(
+  items: CraftedLensSideItem[] | undefined,
+): ResourceReward {
+  const reward: ResourceReward = {};
+  if (!Array.isArray(items)) {
+    return reward;
+  }
+  items.forEach((item) => {
+    const key = toResourceKey(item.item);
+    if (!key) {
+      return;
+    }
+    const amount =
+      typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
+    reward[key] = (reward[key] ?? 0) + amount;
+  });
+  return reward;
 }
 
 function canActivateLens(
