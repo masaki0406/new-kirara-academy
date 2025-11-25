@@ -11,6 +11,7 @@ import cardStyles from "./DevelopmentCardPreview.module.css";
 interface Props {
   lens: CraftedLens;
   className?: string;
+  ownerName?: string;
   getCard?: (cardId: string, cardType: PolishCardType) => CatalogDevelopmentCard | null;
 }
 
@@ -388,10 +389,11 @@ function renderCostColumn(
   );
 }
 
-export function CraftedLensPreview({ lens, className, getCard }: Props): JSX.Element {
+export function CraftedLensPreview({ lens, className, getCard, ownerName }: Props): JSX.Element {
   const aggregatedCosts = aggregateCosts(lens, getCard);
   const aggregatedItems = aggregateItems(lens, getCard);
   const metaEntries = [
+    ...(ownerName ? [{ label: "作成者", value: ownerName }] : []),
     { label: "土台", value: lens.foundationCost },
     { label: "VP", value: lens.vpTotal ?? 0 },
     { label: "左計", value: lens.leftTotal },

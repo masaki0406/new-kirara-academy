@@ -173,6 +173,8 @@ export interface LensState {
   slots: number;
   tags: string[];
   status: 'available' | 'exhausted';
+  leftItems?: CraftedLensSideItem[];
+  rightItems?: CraftedLensSideItem[];
 }
 
 export interface BoardState {

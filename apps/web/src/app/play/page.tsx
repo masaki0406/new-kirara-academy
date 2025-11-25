@@ -1785,18 +1785,18 @@ export default function PlayPage(): JSX.Element {
     const lenses = gameState.board?.lenses ?? {};
     const slots = gameState.board?.lobbySlots ?? [];
     const players = gameState.players ?? {};
+    const availableLobbyTokens = lobbySummary.reserveUnused;
     return Object.values(lenses)
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
         const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
-        const hasUsedLobby = lensSlots.some((slot) => slot.occupantId && slot.isActive === false);
-        if (hasUsedLobby) {
+        const hasAnyLobby = lensSlots.some((slot) => Boolean(slot.occupantId));
+        if (hasAnyLobby) {
           return false;
         }
-        const hasSelfActiveLobby = lensSlots.some(
-          (slot) => slot.occupantId === localPlayer.id && slot.isActive,
-        );
-        return lens.ownerId === localPlayer.id || hasSelfActiveLobby;
+        const hasEmptySlot = lensSlots.some((slot) => !slot.occupantId);
+        const canUseOwnLobby = hasEmptySlot && availableLobbyTokens > 0;
+        return canUseOwnLobby;
       })
       .map((lens) => ({
         lensId: lens.lensId,
@@ -1805,7 +1805,7 @@ export default function PlayPage(): JSX.Element {
         status: lens.status,
         ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
       }));
-  }, [gameState, localPlayer?.id]);
+  }, [gameState, localPlayer?.id, lobbySummary.reserveUnused]);
 
   const exhaustedLensTargets = useMemo<ExhaustedLensOption[]>(() => {
     if (!gameState || !localPlayer?.id) {
@@ -3365,6 +3365,7 @@ export default function PlayPage(): JSX.Element {
                                   key={lens.lensId}
                                   lens={lens}
                                   className={styles.craftedLensCard}
+                                  ownerName={localGamePlayer?.displayName ?? localGamePlayer?.playerId}
                                   getCard={getCardDefinition}
                                 />
                               ))}
@@ -3387,7 +3388,11 @@ export default function PlayPage(): JSX.Element {
                                       所有者: {ownerName ?? ownerId}
                                     </span>
                                   </div>
-                                  <CraftedLensPreview lens={lens} getCard={getCardDefinition} />
+                                  <CraftedLensPreview
+                                    lens={lens}
+                                    getCard={getCardDefinition}
+                                    ownerName={ownerName ?? ownerId}
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -4341,7 +4346,11 @@ export default function PlayPage(): JSX.Element {
               {polishSummary.lensResult ? (
                 <section className={styles.polishSection}>
                   <h6>完成レンズプレビュー</h6>
-                  <CraftedLensPreview lens={polishSummary.lensResult} getCard={getCardDefinition} />
+                  <CraftedLensPreview
+                    lens={polishSummary.lensResult}
+                    getCard={getCardDefinition}
+                    ownerName={localGamePlayer?.displayName ?? localGamePlayer?.playerId}
+                  />
                 </section>
               ) : null}
               <section className={styles.polishSection}>

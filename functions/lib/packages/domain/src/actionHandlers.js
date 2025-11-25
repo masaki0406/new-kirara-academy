@@ -228,6 +228,7 @@ function cloneSourceCards(cards) {
     }));
 }
 function applyPolishResult(action, context, player, payload) {
+    const board = context.gameState.board;
     consumeFoundationCard(player, payload.foundationCost);
     player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
     player.collectedVpCards = player.collectedVpCards ?? [];
@@ -264,6 +265,39 @@ function applyPolishResult(action, context, player, payload) {
         sourceCards: cloneSourceCards(payload.result.sourceCards.length ? payload.result.sourceCards : payload.selection),
     };
     player.craftedLenses.push(lens);
+    if (!player.ownedLenses) {
+        player.ownedLenses = [];
+    }
+    if (!player.ownedLenses.includes(lensId)) {
+        player.ownedLenses.push(lensId);
+    }
+    // ボード上に完成レンズを配置し、ロビーを確保する
+    if (!board.lenses[lensId]) {
+        const craftedLensState = {
+            lensId,
+            ownerId: action.playerId,
+            cost: {},
+            rewards: [],
+            slots: 1,
+            tags: ['crafted'],
+            status: 'available',
+            leftItems: lens.leftItems,
+            rightItems: lens.rightItems,
+        };
+        board.lenses[lensId] = craftedLensState;
+    }
+    if (!Array.isArray(board.lobbySlots)) {
+        board.lobbySlots = [];
+    }
+    const existingSlots = board.lobbySlots.filter((slot) => slot.lensId === lensId);
+    if (existingSlots.length === 0) {
+        board.lobbySlots.push({
+            lensId,
+            ownerId: action.playerId,
+            occupantId: undefined,
+            isActive: true,
+        });
+    }
 }
 function cloneDefaultFoundationStock() {
     const stock = {};
@@ -620,11 +654,25 @@ const applyLensActivate = async (action, context) => {
         applyReward(player, { type: 'resource', value: itemReward });
     }
     lens.status = 'exhausted';
-    gameState.board.lobbySlots
-        .filter((slot) => slot.lensId === lensId && slot.occupantId === action.playerId)
-        .forEach((slot) => {
-        slot.isActive = false;
-    });
+    const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
+    let occupiedSlot = targetSlots.find((slot) => slot.occupantId === action.playerId);
+    if (!occupiedSlot) {
+        occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
+        if (!occupiedSlot) {
+            throw new Error('ロビー枠がありません');
+        }
+        const configuredStock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
+            ? player.lobbyStock
+            : null;
+        if (configuredStock !== null) {
+            player.lobbyStock = Math.max(0, configuredStock - 1);
+        }
+        else {
+            incrementPlayerLobbyUsed(player, 1);
+        }
+        occupiedSlot.occupantId = action.playerId;
+    }
+    occupiedSlot.isActive = false;
     if (lens.ownerId !== action.playerId) {
         (0, triggerEngine_1.triggerEvent)(gameState, context.ruleset, 'lensActivatedByOther', {
             actorId: action.playerId,
@@ -1466,10 +1514,15 @@ function accumulateResourceFromItems(items) {
     return reward;
 }
 function canActivateLens(lensId, ownerId, playerId, gameState) {
-    if (ownerId === playerId) {
-        return true;
+    const slots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
+    const hasOccupant = slots.some((slot) => Boolean(slot.occupantId));
+    if (hasOccupant) {
+        return false;
     }
-    return gameState.board.lobbySlots.some((slot) => slot.lensId === lensId && slot.occupantId === playerId && slot.isActive);
+    const hasEmptySlot = slots.some((slot) => !slot.occupantId);
+    const player = gameState.players[playerId];
+    const hasLobbyToken = player ? getPlayerLobbyStock(player) > 0 : false;
+    return hasEmptySlot && hasLobbyToken;
 }
 function canPayResourceCost(wallet, cost) {
     return ['light', 'rainbow', 'stagnation'].every((resource) => {
