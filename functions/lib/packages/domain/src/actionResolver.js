@@ -37,6 +37,7 @@ function createDefaultActionResolver() {
             collect: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validateCollect, apply: actionHandlers_1.applyCollect }),
             will: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validateWill, apply: actionHandlers_1.applyWill }),
             task: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validateTask, apply: actionHandlers_1.applyTask }),
+            persuasion: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validatePersuasion, apply: actionHandlers_1.applyPersuasion }),
             rooting: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validateRooting, apply: actionHandlers_1.applyRooting }),
             pass: (0, actionHandlers_1.createActionHandler)({ validate: actionHandlers_1.validatePass, apply: actionHandlers_1.applyPass }),
         },

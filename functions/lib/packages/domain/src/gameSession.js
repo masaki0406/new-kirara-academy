@@ -43,6 +43,8 @@ class GameSessionImpl {
         const mutableState = await this.deps.stateLoader();
         if (this.deps.turnOrder.hasAllPassed()) {
             const state = mutableState.state;
+            // 終了フェーズ処理
+            await this.deps.phaseManager.endPhase(mutableState);
             if (this.currentRound >= this.maxRounds) {
                 await this.deps.phaseManager.finalScoring(mutableState);
                 this.currentPhase = 'finalScoring';
@@ -67,12 +69,21 @@ class GameSessionImpl {
         };
         const result = await this.deps.actionResolver.resolve(action, context);
         if (result.success) {
+            if (action.actionType !== 'pass') {
+                const nextPlayer = this.deps.turnOrder.nextPlayer();
+                if (nextPlayer) {
+                    mutableState.state.currentPlayerId = nextPlayer;
+                }
+            }
             await mutableState.save();
             await this.writeLog({
                 action,
                 timestamp,
                 result,
             });
+            if (action.actionType === 'pass') {
+                await this.endRoundIfNeeded();
+            }
         }
         return result;
     }

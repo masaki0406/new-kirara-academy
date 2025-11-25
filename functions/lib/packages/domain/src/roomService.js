@@ -1,9 +1,165 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RoomService = void 0;
+const types_1 = require("./types");
+function cloneDefaultFoundationStock() {
+    const stock = {};
+    types_1.FOUNDATION_COSTS.forEach((cost) => {
+        const value = types_1.DEFAULT_FOUNDATION_STOCK[cost];
+        if (typeof value === 'number') {
+            stock[cost] = value;
+        }
+    });
+    return stock;
+}
+function normalizeFoundationCost(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return null;
+    }
+    const numeric = Math.floor(value);
+    if (!types_1.FOUNDATION_COSTS.includes(numeric)) {
+        return null;
+    }
+    return numeric;
+}
+function sanitizeCraftedLensSideItems(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items = [];
+    value.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+        const record = entry;
+        const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+        const cardType = record.cardType === 'development' || record.cardType === 'vp' ? record.cardType : null;
+        if (!cardId || !cardType) {
+            return;
+        }
+        const position = typeof record.position === 'number' && Number.isFinite(record.position)
+            ? Math.floor(record.position)
+            : null;
+        const item = typeof record.item === 'string'
+            ? record.item
+            : record.item === null || record.item === undefined
+                ? null
+                : String(record.item);
+        const sanitized = {
+            cardId,
+            cardType,
+            position,
+            item,
+        };
+        if (typeof record.quantity === 'number' && Number.isFinite(record.quantity)) {
+            sanitized.quantity = record.quantity;
+        }
+        else if (record.quantity === null) {
+            sanitized.quantity = null;
+        }
+        items.push(sanitized);
+    });
+    return items;
+}
+function sanitizeCraftedLensSources(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const sources = [];
+    value.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+        const record = entry;
+        const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+        const cardType = record.cardType === 'development' || record.cardType === 'vp' ? record.cardType : null;
+        const flipped = typeof record.flipped === 'boolean' ? record.flipped : false;
+        if (!cardId || !cardType) {
+            return;
+        }
+        sources.push({
+            cardId,
+            cardType,
+            flipped,
+        });
+    });
+    return sources;
+}
+function sanitizeCraftedLenses(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const lenses = [];
+    value.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+        const record = entry;
+        const lensId = typeof record.lensId === 'string' && record.lensId.trim().length > 0 ? record.lensId : null;
+        const foundationCost = normalizeFoundationCost(record.foundationCost);
+        const leftTotal = typeof record.leftTotal === 'number' && Number.isFinite(record.leftTotal)
+            ? record.leftTotal
+            : null;
+        const rightTotal = typeof record.rightTotal === 'number' && Number.isFinite(record.rightTotal)
+            ? record.rightTotal
+            : null;
+        if (!lensId || foundationCost === null || leftTotal === null || rightTotal === null) {
+            return;
+        }
+        const createdAt = typeof record.createdAt === 'number' && Number.isFinite(record.createdAt)
+            ? Math.max(0, Math.floor(record.createdAt))
+            : Date.now();
+        const vpTotal = typeof record.vpTotal === 'number' && Number.isFinite(record.vpTotal) ? record.vpTotal : 0;
+        const leftItems = sanitizeCraftedLensSideItems(record.leftItems);
+        const rightItems = sanitizeCraftedLensSideItems(record.rightItems);
+        const sourceCards = sanitizeCraftedLensSources(record.sourceCards);
+        lenses.push({
+            lensId,
+            createdAt,
+            foundationCost,
+            leftTotal,
+            rightTotal,
+            vpTotal,
+            leftItems,
+            rightItems,
+            sourceCards,
+        });
+    });
+    return lenses;
+}
 function ensureStateDefaults(state) {
     if (!Array.isArray(state.labPlacements)) {
         state.labPlacements = [];
+    }
+    if (!state.board) {
+        state.board = {
+            lenses: {},
+            lobbySlots: [],
+            publicDevelopmentCards: [],
+            publicVpCards: [],
+            foundationStock: cloneDefaultFoundationStock(),
+        };
+    }
+    else {
+        const board = state.board;
+        if (!board.foundationStock || typeof board.foundationStock !== 'object') {
+            board.foundationStock = cloneDefaultFoundationStock();
+        }
+        else {
+            const sanitized = {};
+            types_1.FOUNDATION_COSTS.forEach((cost) => {
+                const raw = board.foundationStock?.[cost];
+                const fallback = types_1.DEFAULT_FOUNDATION_STOCK[cost] ?? 0;
+                const value = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : fallback;
+                if (value > 0) {
+                    sanitized[cost] = value;
+                }
+            });
+            board.foundationStock = sanitized;
+        }
+        if (board.foundationCards) {
+            delete board.foundationCards;
+        }
     }
     if (state.players) {
         Object.values(state.players).forEach((player) => {
@@ -19,6 +175,25 @@ function ensureStateDefaults(state) {
             }
             if (!Array.isArray(player.collectedVpCards)) {
                 player.collectedVpCards = [];
+            }
+            if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
+                player.collectedFoundationCards = {};
+            }
+            else {
+                const sanitized = {};
+                types_1.FOUNDATION_COSTS.forEach((cost) => {
+                    const raw = player.collectedFoundationCards?.[cost];
+                    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+                        sanitized[cost] = Math.max(0, Math.floor(raw));
+                    }
+                });
+                player.collectedFoundationCards = sanitized;
+            }
+            if (!Array.isArray(player.craftedLenses)) {
+                player.craftedLenses = [];
+            }
+            else {
+                player.craftedLenses = sanitizeCraftedLenses(player.craftedLenses);
             }
             if (legacyHand) {
                 player.hand = [];
@@ -55,13 +230,14 @@ class RoomService {
             },
             collectedDevelopmentCards: [],
             collectedVpCards: [],
+            collectedFoundationCards: {},
+            craftedLenses: [],
             ownedLenses: [],
             tasksCompleted: [],
             hasPassed: false,
             isRooting: false,
             unlockedCharacterNodes: [],
             lobbyStock: state.players[params.hostId]?.lobbyStock ?? RoomService.DEFAULT_LOBBY_STOCK,
-            lobbyUsed: state.players[params.hostId]?.lobbyUsed ?? 0,
         };
         if (!state.currentPlayerId) {
             state.currentPlayerId = params.hostId;
@@ -121,13 +297,14 @@ class RoomService {
                 resources,
                 collectedDevelopmentCards: [],
                 collectedVpCards: [],
+                collectedFoundationCards: {},
+                craftedLenses: [],
                 ownedLenses: [],
                 tasksCompleted: [],
                 hasPassed: false,
                 isRooting: false,
                 unlockedCharacterNodes: [],
                 lobbyStock: RoomService.DEFAULT_LOBBY_STOCK,
-                lobbyUsed: 0,
             };
         }
         if (!state.turnOrder.includes(params.playerId)) {

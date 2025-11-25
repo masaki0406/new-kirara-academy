@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.applyPass = exports.validatePass = exports.applyRooting = exports.validateRooting = exports.applyTask = exports.validateTask = exports.applyWill = exports.validateWill = exports.applyCollect = exports.validateCollect = exports.applyRefresh = exports.validateRefresh = exports.applyMove = exports.validateMove = exports.applyLensActivate = exports.validateLensActivate = exports.applyLabActivate = exports.validateLabActivate = void 0;
+exports.applyPass = exports.validatePass = exports.applyPersuasion = exports.validatePersuasion = exports.applyRooting = exports.validateRooting = exports.applyTask = exports.validateTask = exports.applyWill = exports.validateWill = exports.applyCollect = exports.validateCollect = exports.applyRefresh = exports.validateRefresh = exports.applyMove = exports.validateMove = exports.applyLensActivate = exports.validateLensActivate = exports.applyLabActivate = exports.validateLabActivate = void 0;
 exports.createActionHandler = createActionHandler;
 exports.hasCapacity = hasCapacity;
+const types_1 = require("./types");
 const triggerEngine_1 = require("./triggerEngine");
 const characterGrowth_1 = require("./characterGrowth");
 const DEFAULT_LOBBY_STOCK = 4;
@@ -12,6 +13,283 @@ const TOTAL_RESOURCE_LIMIT = 12;
 const RESOURCE_ORDER = ['light', 'rainbow', 'stagnation'];
 function getTotalResources(wallet) {
     return RESOURCE_ORDER.reduce((sum, resource) => sum + wallet[resource], 0);
+}
+function isFoundationCost(value) {
+    return types_1.FOUNDATION_COSTS.includes(value);
+}
+function parseFoundationCost(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return null;
+    }
+    const numeric = Math.floor(value);
+    return isFoundationCost(numeric) ? numeric : null;
+}
+function toFiniteNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return null;
+}
+function normalizePolishCardType(value) {
+    if (value === 'development' || value === 'vp') {
+        return value;
+    }
+    return null;
+}
+function normalizeCraftedLensSideItems(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const items = [];
+    value.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+        const record = entry;
+        const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+        const cardType = normalizePolishCardType(record.cardType);
+        if (!cardId || !cardType) {
+            return;
+        }
+        const positionNumber = toFiniteNumber(record.position);
+        const position = positionNumber !== null ? Math.floor(positionNumber) : null;
+        let item = null;
+        if (typeof record.item === 'string') {
+            item = record.item;
+        }
+        else if (record.item !== undefined && record.item !== null) {
+            item = String(record.item);
+        }
+        const normalized = {
+            cardId,
+            cardType,
+            position,
+            item,
+        };
+        if (typeof record.quantity === 'number' && Number.isFinite(record.quantity)) {
+            normalized.quantity = record.quantity;
+        }
+        else if (record.quantity === null) {
+            normalized.quantity = null;
+        }
+        items.push(normalized);
+    });
+    return items;
+}
+function normalizeCraftedLensSourceCards(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    const sources = [];
+    value.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+        const record = entry;
+        const cardId = typeof record.cardId === 'string' ? record.cardId : null;
+        const cardType = normalizePolishCardType(record.cardType);
+        const flipped = typeof record.flipped === 'boolean' ? record.flipped : false;
+        if (!cardId || !cardType) {
+            return;
+        }
+        sources.push({
+            cardId,
+            cardType,
+            flipped,
+        });
+    });
+    return sources;
+}
+function normalizeCraftedLens(value) {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+    const record = value;
+    const foundationCost = parseFoundationCost(record.foundationCost);
+    const leftTotalNumber = toFiniteNumber(record.leftTotal);
+    const rightTotalNumber = toFiniteNumber(record.rightTotal);
+    if (foundationCost === null || leftTotalNumber === null || rightTotalNumber === null) {
+        return null;
+    }
+    const vpTotalNumber = toFiniteNumber(record.vpTotal) ?? 0;
+    const createdAtNumber = toFiniteNumber(record.createdAt);
+    const lensId = typeof record.lensId === 'string' && record.lensId.trim().length > 0 ? record.lensId : '';
+    const leftItems = normalizeCraftedLensSideItems(record.leftItems);
+    const rightItems = normalizeCraftedLensSideItems(record.rightItems);
+    const sourceCards = normalizeCraftedLensSourceCards(record.sourceCards);
+    return {
+        lensId,
+        createdAt: createdAtNumber !== null && Number.isFinite(createdAtNumber)
+            ? Math.max(0, Math.floor(createdAtNumber))
+            : Date.now(),
+        foundationCost,
+        leftTotal: leftTotalNumber,
+        rightTotal: rightTotalNumber,
+        vpTotal: vpTotalNumber,
+        leftItems,
+        rightItems,
+        sourceCards,
+    };
+}
+function normalizePolishPayload(raw) {
+    if (!raw || typeof raw !== 'object') {
+        return null;
+    }
+    const record = raw;
+    const selection = normalizeCraftedLensSourceCards(record.selection);
+    const foundationCost = parseFoundationCost(record.foundationCost);
+    const result = normalizeCraftedLens(record.result);
+    if (!selection.length || foundationCost === null || !result) {
+        return null;
+    }
+    if (!result.sourceCards.length) {
+        result.sourceCards = selection.map((entry) => ({ ...entry }));
+    }
+    result.foundationCost = foundationCost;
+    return {
+        selection,
+        foundationCost,
+        result,
+    };
+}
+function findDuplicatePositions(items) {
+    const seen = new Set();
+    for (const item of items) {
+        if (item.position === null || item.position === undefined) {
+            continue;
+        }
+        const position = Math.floor(item.position);
+        if (seen.has(position)) {
+            return position;
+        }
+        seen.add(position);
+    }
+    return null;
+}
+function buildSelectionKey(cardId, cardType, flipped) {
+    return `${cardType}:${cardId}:${flipped ? '1' : '0'}`;
+}
+function removeCardFromList(cards, cardId) {
+    const index = cards.indexOf(cardId);
+    if (index === -1) {
+        throw new Error('指定されたカードが見つかりません');
+    }
+    cards.splice(index, 1);
+}
+function consumeFoundationCard(player, foundationCost) {
+    if (!player.collectedFoundationCards) {
+        throw new Error('土台カードの在庫が不足しています');
+    }
+    const current = player.collectedFoundationCards[foundationCost] ?? 0;
+    if (!Number.isFinite(current) || current <= 0) {
+        throw new Error('土台カードの在庫が不足しています');
+    }
+    const remaining = current - 1;
+    if (remaining > 0) {
+        player.collectedFoundationCards[foundationCost] = remaining;
+    }
+    else {
+        delete player.collectedFoundationCards[foundationCost];
+    }
+}
+function generateCraftedLensId(playerId, timestamp) {
+    const timeSeed = typeof timestamp === 'number' && Number.isFinite(timestamp) ? timestamp : Date.now();
+    const randomSeed = Math.random().toString(36).slice(2, 8);
+    return `crafted-lens-${playerId}-${timeSeed}-${randomSeed}`;
+}
+function cloneSideItems(items) {
+    return items.map((item) => {
+        const cloned = {
+            cardId: item.cardId,
+            cardType: item.cardType,
+            position: item.position === null || item.position === undefined ? null : Math.floor(item.position),
+            item: item.item ?? null,
+        };
+        if (typeof item.quantity === 'number' && Number.isFinite(item.quantity)) {
+            cloned.quantity = item.quantity;
+        }
+        else if (item.quantity === null) {
+            cloned.quantity = null;
+        }
+        return cloned;
+    });
+}
+function cloneSourceCards(cards) {
+    return cards.map((card) => ({
+        cardId: card.cardId,
+        cardType: card.cardType,
+        flipped: card.flipped,
+    }));
+}
+function applyPolishResult(action, context, player, payload) {
+    consumeFoundationCard(player, payload.foundationCost);
+    player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
+    player.collectedVpCards = player.collectedVpCards ?? [];
+    const developmentCards = player.collectedDevelopmentCards;
+    const vpCards = player.collectedVpCards;
+    payload.selection.forEach((selection) => {
+        if (selection.cardType === 'development') {
+            removeCardFromList(developmentCards, selection.cardId);
+        }
+        else {
+            removeCardFromList(vpCards, selection.cardId);
+        }
+    });
+    if (!player.craftedLenses) {
+        player.craftedLenses = [];
+    }
+    const createdAt = typeof payload.result.createdAt === 'number' && Number.isFinite(payload.result.createdAt)
+        ? Math.max(0, Math.floor(payload.result.createdAt))
+        : context.timestamp ?? Date.now();
+    const lensId = payload.result.lensId && payload.result.lensId.trim().length > 0
+        ? payload.result.lensId
+        : generateCraftedLensId(action.playerId, context.timestamp);
+    const lens = {
+        lensId,
+        createdAt,
+        foundationCost: payload.foundationCost,
+        leftTotal: payload.result.leftTotal,
+        rightTotal: payload.result.rightTotal,
+        vpTotal: typeof payload.result.vpTotal === 'number' && Number.isFinite(payload.result.vpTotal)
+            ? payload.result.vpTotal
+            : payload.result.vpTotal ?? 0,
+        leftItems: cloneSideItems(payload.result.leftItems),
+        rightItems: cloneSideItems(payload.result.rightItems),
+        sourceCards: cloneSourceCards(payload.result.sourceCards.length ? payload.result.sourceCards : payload.selection),
+    };
+    player.craftedLenses.push(lens);
+}
+function cloneDefaultFoundationStock() {
+    const stock = {};
+    types_1.FOUNDATION_COSTS.forEach((cost) => {
+        const base = types_1.DEFAULT_FOUNDATION_STOCK[cost];
+        if (typeof base === 'number') {
+            stock[cost] = base;
+        }
+    });
+    return stock;
+}
+function ensureFoundationStockInitialized(board) {
+    if (!board.foundationStock || typeof board.foundationStock !== 'object') {
+        board.foundationStock = cloneDefaultFoundationStock();
+    }
+}
+function getAvailableFoundationStock(state, cost) {
+    const stock = state.board.foundationStock;
+    if (stock && typeof stock[cost] === 'number' && Number.isFinite(stock[cost])) {
+        return stock[cost];
+    }
+    if (!stock) {
+        const fallback = types_1.DEFAULT_FOUNDATION_STOCK[cost];
+        return typeof fallback === 'number' ? fallback : 0;
+    }
+    return 0;
 }
 function clampActionPoints(value) {
     return Math.max(0, Math.min(MAX_ACTION_POINTS, value));
@@ -33,9 +311,21 @@ function resolveLabCost(lab) {
 }
 function getPlayerLobbyStock(player) {
     if (typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)) {
-        return player.lobbyStock;
+        return Math.max(0, player.lobbyStock);
     }
-    return DEFAULT_LOBBY_STOCK;
+    const used = getPlayerLobbyUsed(player);
+    return Math.max(0, DEFAULT_LOBBY_STOCK - used);
+}
+function getPlayerLobbyUsed(player) {
+    if (typeof player.lobbyUsed === 'number' && Number.isFinite(player.lobbyUsed)) {
+        return Math.max(0, player.lobbyUsed);
+    }
+    return 0;
+}
+function incrementPlayerLobbyUsed(player, amount) {
+    const current = getPlayerLobbyUsed(player);
+    const next = Math.max(0, current + amount);
+    player.lobbyUsed = Math.min(DEFAULT_LOBBY_STOCK, next);
 }
 function createActionHandler({ validate, apply, }) {
     return async (action, context) => {
@@ -105,6 +395,95 @@ const validateLabActivate = async (action, context) => {
             }
         }
     });
+    if (labId === 'polish') {
+        const rawPayload = action.payload && typeof action.payload === 'object'
+            ? action.payload.polish
+            : undefined;
+        const normalized = normalizePolishPayload(rawPayload);
+        if (!normalized) {
+            errors.push('研磨の設定が不正です');
+            return errors;
+        }
+        if (!normalized.selection.length) {
+            errors.push('研磨で使用するカードを選択してください');
+        }
+        const foundationAvailable = player.collectedFoundationCards?.[normalized.foundationCost] ?? 0;
+        if (foundationAvailable <= 0) {
+            errors.push('指定された土台カードを所持していません');
+        }
+        const developmentCounts = new Map();
+        (player.collectedDevelopmentCards ?? []).forEach((cardId) => {
+            developmentCounts.set(cardId, (developmentCounts.get(cardId) ?? 0) + 1);
+        });
+        const vpCounts = new Map();
+        (player.collectedVpCards ?? []).forEach((cardId) => {
+            vpCounts.set(cardId, (vpCounts.get(cardId) ?? 0) + 1);
+        });
+        normalized.selection.forEach((selection) => {
+            if (selection.cardType === 'development') {
+                const remaining = developmentCounts.get(selection.cardId) ?? 0;
+                if (remaining <= 0) {
+                    errors.push(`開発カード ${selection.cardId} を所持していません`);
+                }
+                else {
+                    developmentCounts.set(selection.cardId, remaining - 1);
+                }
+            }
+            else {
+                const remaining = vpCounts.get(selection.cardId) ?? 0;
+                if (remaining <= 0) {
+                    errors.push(`VPカード ${selection.cardId} を所持していません`);
+                }
+                else {
+                    vpCounts.set(selection.cardId, remaining - 1);
+                }
+            }
+        });
+        const diff = Math.max(0, normalized.result.rightTotal - normalized.result.leftTotal);
+        if (diff > normalized.foundationCost) {
+            errors.push('土台カードのコストが不足しています');
+        }
+        const leftDuplicate = findDuplicatePositions(normalized.result.leftItems);
+        if (leftDuplicate !== null) {
+            errors.push('左側のPOSが重複しています');
+        }
+        const rightDuplicate = findDuplicatePositions(normalized.result.rightItems);
+        if (rightDuplicate !== null) {
+            errors.push('右側のPOSが重複しています');
+        }
+        const selectionCountMap = new Map();
+        normalized.selection.forEach((selection) => {
+            const key = buildSelectionKey(selection.cardId, selection.cardType, selection.flipped);
+            selectionCountMap.set(key, (selectionCountMap.get(key) ?? 0) + 1);
+        });
+        const resultCountMap = new Map();
+        normalized.result.sourceCards.forEach((source) => {
+            const key = buildSelectionKey(source.cardId, source.cardType, source.flipped);
+            resultCountMap.set(key, (resultCountMap.get(key) ?? 0) + 1);
+        });
+        if (selectionCountMap.size !== resultCountMap.size) {
+            errors.push('研磨結果の参照カードが一致しません');
+        }
+        else {
+            selectionCountMap.forEach((count, key) => {
+                if (resultCountMap.get(key) !== count) {
+                    errors.push('研磨結果の参照カードが一致しません');
+                }
+            });
+        }
+        normalized.result.leftItems.forEach((item) => {
+            const key = buildSelectionKey(item.cardId, item.cardType, false);
+            if (!selectionCountMap.has(key)) {
+                errors.push('左側のアイテム割り当てが不正です');
+            }
+        });
+        normalized.result.rightItems.forEach((item) => {
+            const key = buildSelectionKey(item.cardId, item.cardType, true);
+            if (!selectionCountMap.has(key)) {
+                errors.push('右側のアイテム割り当てが不正です');
+            }
+        });
+    }
     return errors;
 };
 exports.validateLabActivate = validateLabActivate;
@@ -146,6 +525,16 @@ const applyLabActivate = async (action, context) => {
     for (const reward of lab.rewards) {
         applyReward(player, reward);
     }
+    if (labId === 'polish') {
+        const rawPayload = action.payload && typeof action.payload === 'object'
+            ? action.payload.polish
+            : undefined;
+        const normalized = normalizePolishPayload(rawPayload);
+        if (!normalized) {
+            throw new Error('研磨の設定が不正です');
+        }
+        applyPolishResult(action, context, player, normalized);
+    }
     if (labId === 'negotiation') {
         player.isRooting = true;
         context.turnOrder?.registerRooting(action.playerId);
@@ -183,7 +572,15 @@ const validateLensActivate = async (action, context) => {
     if (player.actionPoints < totalActionCost) {
         errors.push('行動力が不足しています');
     }
-    if (!canPayResourceCost(player.resources, lens.cost)) {
+    const itemCost = accumulateResourceFromItems(lens.leftItems);
+    const mergedCost = {
+        light: (lens.cost.light ?? 0) + (itemCost.light ?? 0),
+        rainbow: (lens.cost.rainbow ?? 0) + (itemCost.rainbow ?? 0),
+        stagnation: (lens.cost.stagnation ?? 0) + (itemCost.stagnation ?? 0),
+        creativity: lens.cost.creativity,
+        actionPoints: lens.cost.actionPoints,
+    };
+    if (!canPayResourceCost(player.resources, mergedCost)) {
         errors.push('必要な資源が不足しています');
     }
     if ((lens.cost.creativity ?? 0) > player.creativity) {
@@ -206,11 +603,21 @@ const applyLensActivate = async (action, context) => {
     const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
     player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
     payResourceCost(player.resources, lens.cost);
+    const itemCost = accumulateResourceFromItems(lens.leftItems);
+    payResourceCost(player.resources, itemCost);
     if (lens.cost.creativity) {
         player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
     }
     for (const reward of lens.rewards) {
         applyReward(player, reward);
+    }
+    const itemReward = accumulateResourceFromItems(lens.rightItems);
+    if (itemReward.light ||
+        itemReward.rainbow ||
+        itemReward.stagnation ||
+        itemReward.actionPoints ||
+        itemReward.creativity) {
+        applyReward(player, { type: 'resource', value: itemReward });
     }
     lens.status = 'exhausted';
     gameState.board.lobbySlots
@@ -305,11 +712,22 @@ const validateRefresh = async (action, context) => {
         errors.push('指定されたレンズが存在しません');
         return errors;
     }
-    if (lens.ownerId !== action.playerId) {
-        errors.push('自分のレンズのみ再起動できます');
-    }
     if (lens.status !== 'exhausted') {
         errors.push('レンズは再起動の必要がありません');
+    }
+    const slot = gameState.board.lobbySlots.find((entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive);
+    if (!slot) {
+        errors.push('使用済みの自分のロビーが配置されていません');
+    }
+    const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+    if (player.actionPoints < totalActionCost) {
+        errors.push('行動力が不足しています');
+    }
+    if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
+        errors.push('創造力が不足しています');
+    }
+    if (!canPayResourceCost(player.resources, lens.cost)) {
+        errors.push('必要な資源が不足しています');
     }
     return errors;
 };
@@ -325,12 +743,39 @@ const applyRefresh = async (action, context) => {
     if (!lens) {
         throw new Error('指定されたレンズが存在しません');
     }
+    const slot = gameState.board.lobbySlots.find((entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive);
+    if (!slot) {
+        throw new Error('使用済みの自分のロビーが配置されていません');
+    }
     player.actionPoints = Math.max(0, player.actionPoints - 3);
-    lens.status = 'available';
-    gameState.board.lobbySlots
-        .filter((slot) => slot.lensId === lensId)
-        .forEach((slot) => {
-        slot.isActive = true;
+    const cost = lens.cost;
+    if (cost.actionPoints) {
+        player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
+    }
+    payResourceCost(player.resources, cost);
+    if (cost.creativity) {
+        player.creativity = Math.max(0, player.creativity - cost.creativity);
+    }
+    // 入れ替えたロビーを使用状態にする
+    slot.isActive = false;
+    for (const reward of lens.rewards) {
+        applyReward(player, reward);
+    }
+    lens.status = 'exhausted';
+    if (lens.ownerId !== action.playerId) {
+        const owner = gameState.players[lens.ownerId];
+        if (owner) {
+            owner.vp += 2;
+        }
+        (0, triggerEngine_1.triggerEvent)(gameState, context.ruleset, 'lensActivatedByOther', {
+            actorId: action.playerId,
+            ownerId: lens.ownerId,
+            actionType: 'refresh',
+        });
+    }
+    (0, triggerEngine_1.triggerEvent)(gameState, context.ruleset, 'actionPerformed', {
+        actorId: action.playerId,
+        actionType: 'refresh',
     });
 };
 exports.applyRefresh = applyRefresh;
@@ -348,9 +793,23 @@ const validateCollect = async (action, context) => {
     if (player.actionPoints < 2) {
         errors.push('行動力が不足しています');
     }
-    const slotType = typeof action.payload.slotType === 'string' ? action.payload.slotType : undefined;
-    if (slotType !== 'development' && slotType !== 'vp') {
+    const slotTypeRaw = typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+    if (slotTypeRaw !== 'development' && slotTypeRaw !== 'vp' && slotTypeRaw !== 'foundation') {
         errors.push('カードの取得先が不正です');
+        return errors;
+    }
+    if (slotTypeRaw === 'foundation') {
+        const rawCost = action.payload.foundationCost;
+        const parsedCost = typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+        if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+            errors.push('土台カードのコスト指定が不正です');
+            return errors;
+        }
+        const cost = parsedCost;
+        const available = getAvailableFoundationStock(gameState, cost);
+        if (available <= 0) {
+            errors.push('指定された土台カードは在庫がありません');
+        }
         return errors;
     }
     const slotIndex = typeof action.payload.slotIndex === 'number' ? action.payload.slotIndex : NaN;
@@ -358,7 +817,7 @@ const validateCollect = async (action, context) => {
         errors.push('カードのスロット番号が不正です');
         return errors;
     }
-    if (slotType === 'development') {
+    if (slotTypeRaw === 'development') {
         const cards = gameState.board.publicDevelopmentCards ?? [];
         if (slotIndex >= cards.length || !cards[slotIndex]) {
             errors.push('公開開発カードのスロット番号が不正です');
@@ -380,9 +839,39 @@ const applyCollect = async (action, context) => {
         throw new Error('プレイヤーが存在しません');
     }
     player.actionPoints = Math.max(0, player.actionPoints - 2);
-    const slotType = (action.payload.slotType ?? 'development');
-    const slotIndex = action.payload.slotIndex;
-    if (slotType === 'vp') {
+    const slotTypeRaw = typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+    if (slotTypeRaw === 'foundation') {
+        const rawCost = action.payload.foundationCost;
+        const parsedCost = typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+        if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+            throw new Error('指定された土台カードが存在しません');
+        }
+        const cost = parsedCost;
+        ensureFoundationStockInitialized(gameState.board);
+        const stock = gameState.board.foundationStock;
+        const available = typeof stock[cost] === 'number' && Number.isFinite(stock[cost]) ? stock[cost] : 0;
+        if (available <= 0) {
+            throw new Error('指定された土台カードは在庫がありません');
+        }
+        const remaining = available - 1;
+        if (remaining > 0) {
+            stock[cost] = remaining;
+        }
+        else {
+            delete stock[cost];
+        }
+        if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
+            player.collectedFoundationCards = {};
+        }
+        const currentCount = typeof player.collectedFoundationCards[cost] === 'number'
+            ? player.collectedFoundationCards[cost]
+            : 0;
+        player.collectedFoundationCards[cost] = currentCount + 1;
+    }
+    else if (slotTypeRaw === 'vp') {
+        const slotIndex = typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+            ? action.payload.slotIndex
+            : -1;
         const cards = gameState.board.publicVpCards ?? [];
         const cardId = cards[slotIndex];
         if (!cardId) {
@@ -397,6 +886,9 @@ const applyCollect = async (action, context) => {
         }
     }
     else {
+        const slotIndex = typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+            ? action.payload.slotIndex
+            : -1;
         const cards = gameState.board.publicDevelopmentCards ?? [];
         const cardId = cards[slotIndex];
         if (!cardId) {
@@ -654,6 +1146,113 @@ const applyRooting = async (action, context) => {
     player.resources.light += 1;
 };
 exports.applyRooting = applyRooting;
+const validatePersuasion = async (action, context) => {
+    const errors = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+        errors.push('プレイヤーが存在しません');
+        return errors;
+    }
+    if (gameState.currentPlayerId !== action.playerId) {
+        errors.push('現在の手番プレイヤーではありません');
+    }
+    const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+    if (!lensId) {
+        errors.push('レンズIDが指定されていません');
+        return errors;
+    }
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+        errors.push('指定されたレンズが存在しません');
+        return errors;
+    }
+    if (lens.status !== 'available') {
+        errors.push('レンズは使用済みです');
+    }
+    const slot = gameState.board.lobbySlots.find((item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId);
+    if (!slot) {
+        errors.push('相手のロビーが配置されていません');
+    }
+    else if (slot.occupantId === action.playerId) {
+        errors.push('自分のロビーには説得できません');
+    }
+    const requiredActionPoints = 2 + (lens.cost.actionPoints ?? 0);
+    if (player.actionPoints < requiredActionPoints) {
+        errors.push('行動力が不足しています');
+    }
+    if (!canPayResourceCost(player.resources, lens.cost)) {
+        errors.push('必要な資源が不足しています');
+    }
+    if ((lens.cost.creativity ?? 0) > player.creativity) {
+        errors.push('創造力が不足しています');
+    }
+    lens.rewards
+        .filter((reward) => reward.type === 'resource')
+        .forEach((reward) => {
+        const value = reward.value;
+        for (const [resource, amount] of resourceRewardEntries(value)) {
+            if (!hasCapacity(player.resources, resource, amount)) {
+                errors.push(`${resource} の上限を超えます`);
+            }
+        }
+    });
+    return errors;
+};
+exports.validatePersuasion = validatePersuasion;
+const applyPersuasion = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+        throw new Error('プレイヤーが存在しません');
+    }
+    const lensId = action.payload.lensId;
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+        throw new Error('指定されたレンズが存在しません');
+    }
+    const slot = gameState.board.lobbySlots.find((item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId);
+    if (!slot || !slot.occupantId) {
+        throw new Error('相手のロビーが配置されていません');
+    }
+    const occupantId = slot.occupantId;
+    const occupantPlayer = gameState.players[occupantId];
+    player.actionPoints = Math.max(0, player.actionPoints - 2);
+    const extraAction = lens.cost.actionPoints ?? 0;
+    if (extraAction > 0) {
+        player.actionPoints = Math.max(0, player.actionPoints - extraAction);
+    }
+    payResourceCost(player.resources, lens.cost);
+    if (lens.cost.creativity) {
+        player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
+    }
+    for (const reward of lens.rewards) {
+        applyReward(player, reward);
+    }
+    // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
+    slot.occupantId = action.playerId;
+    slot.isActive = false;
+    if (occupantPlayer) {
+        incrementPlayerLobbyUsed(occupantPlayer, 1);
+    }
+    lens.status = 'exhausted';
+    if (lens.ownerId !== action.playerId) {
+        const owner = gameState.players[lens.ownerId];
+        if (owner) {
+            owner.vp += 2;
+        }
+        (0, triggerEngine_1.triggerEvent)(gameState, context.ruleset, 'lensActivatedByOther', {
+            actorId: action.playerId,
+            ownerId: lens.ownerId,
+            actionType: 'persuasion',
+        });
+    }
+    (0, triggerEngine_1.triggerEvent)(gameState, context.ruleset, 'actionPerformed', {
+        actorId: action.playerId,
+        actionType: 'persuasion',
+    });
+};
+exports.applyPersuasion = applyPersuasion;
 const validatePass = async (action, context) => {
     const errors = [];
     const { gameState } = context;
@@ -834,6 +1433,37 @@ function ensureUnlimitedMap(wallet) {
     if (!wallet.unlimited) {
         wallet.unlimited = {};
     }
+}
+function toResourceKey(label) {
+    if (!label) {
+        return null;
+    }
+    const normalized = label.toLowerCase();
+    if (normalized.includes('光') || normalized.includes('light')) {
+        return 'light';
+    }
+    if (normalized.includes('虹') || normalized.includes('rainbow')) {
+        return 'rainbow';
+    }
+    if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) {
+        return 'stagnation';
+    }
+    return null;
+}
+function accumulateResourceFromItems(items) {
+    const reward = {};
+    if (!Array.isArray(items)) {
+        return reward;
+    }
+    items.forEach((item) => {
+        const key = toResourceKey(item.item);
+        if (!key) {
+            return;
+        }
+        const amount = typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
+        reward[key] = (reward[key] ?? 0) + amount;
+    });
+    return reward;
 }
 function canActivateLens(lensId, ownerId, playerId, gameState) {
     if (ownerId === playerId) {

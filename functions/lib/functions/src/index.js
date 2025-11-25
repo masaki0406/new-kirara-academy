@@ -6,6 +6,7 @@ const firestore_1 = require("firebase-admin/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const firestoreAdapter_1 = require("../../packages/domain/src/firestoreAdapter");
 const roomService_1 = require("../../packages/domain/src/roomService");
+const types_1 = require("../../packages/domain/src/types");
 const gameSession_1 = require("../../packages/domain/src/gameSession");
 const phaseManager_1 = require("../../packages/domain/src/phaseManager");
 const turnOrder_1 = require("../../packages/domain/src/turnOrder");
@@ -161,6 +162,16 @@ function createGameSession(roomId) {
         logWriter: (entry) => firestoreAdapter.appendLog(roomId, entry),
     });
 }
+function createFoundationStock() {
+    const stock = {};
+    types_1.FOUNDATION_COSTS.forEach((cost) => {
+        const value = types_1.DEFAULT_FOUNDATION_STOCK[cost];
+        if (typeof value === 'number') {
+            stock[cost] = value;
+        }
+    });
+    return stock;
+}
 function createInitialState(roomId) {
     return {
         roomId,
@@ -175,6 +186,7 @@ function createInitialState(roomId) {
             lobbySlots: [],
             publicDevelopmentCards: [],
             publicVpCards: [],
+            foundationStock: createFoundationStock(),
         },
         developmentDeck: [],
         vpDeck: [],
