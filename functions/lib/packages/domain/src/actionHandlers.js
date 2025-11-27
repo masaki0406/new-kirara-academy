@@ -294,7 +294,6 @@ function applyPolishResult(action, context, player, payload) {
         board.lobbySlots.push({
             lensId,
             ownerId: action.playerId,
-            occupantId: undefined,
             isActive: true,
         });
     }

@@ -59,7 +59,7 @@ export class PhaseManagerImpl implements PhaseManager {
     replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
     // 共有ボード初期化（各レンズのロビー状態リセット）
     gameState.board.lobbySlots.forEach((slot) => {
-      slot.occupantId = undefined;
+      delete slot.occupantId;
       slot.isActive = true;
     });
     await state.save();

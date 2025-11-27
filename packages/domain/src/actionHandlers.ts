@@ -355,7 +355,6 @@ function applyPolishResult(
     board.lobbySlots.push({
       lensId,
       ownerId: action.playerId,
-      occupantId: undefined,
       isActive: true,
     });
   }
