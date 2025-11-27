@@ -1503,7 +1503,7 @@ function accumulateResourceFromItems(items) {
         return reward;
     }
     items.forEach((item) => {
-        const key = toResourceKey(item.item);
+        const key = toResourceKey(item.item ?? item.cardId);
         if (!key) {
             return;
         }
