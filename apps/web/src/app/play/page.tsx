@@ -516,7 +516,12 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       description:
         description ||
         "集光ボードにロビーを配置し、創造力を消費して光トークンを 1 つ得ます。",
-      requirement: combineRequirements(requireCreativity(1), requireLobbyStock()),
+      requirement: combineRequirements(
+        requireActionPoints(1),
+        requireCreativity(1),
+        requireLobbyStock(),
+        requireResourceCapacity("light", 1),
+      ),
       implemented: true,
     };
   })(),
@@ -559,14 +564,6 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     description: "所有するレンズを起動し、対応する効果を発動します。",
     requirement: combineRequirements(requireActionPoints(1), requireLensActivateTarget()),
     highlight: "primary",
-  },
-  {
-    id: "move",
-    label: "移動",
-    category: "general",
-    summary: "行動力 1 / ロビーを移動",
-    description: "ロビーコマを移動して、研究や交渉を行うポジションを調整します。",
-    requirement: combineRequirements(requireActionPoints(1), requireLobbyStock()),
   },
   {
     id: "restart",
