@@ -337,7 +337,7 @@ function applyPolishResult(
     const craftedLensState: LensState = {
       lensId,
       ownerId: action.playerId,
-      cost: {},
+      cost: { actionPoints: payload.foundationCost },
       rewards: [],
       slots: 1,
       tags: ['crafted'],
@@ -927,6 +927,10 @@ export const validateRefresh: Validator = async (action, context) => {
     errors.push('使用済みの自分のロビーが配置されていません');
   }
 
+  if (getPlayerLobbyStock(player) <= 0) {
+    errors.push('未使用のロビーが不足しています');
+  }
+
   const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
   if (player.actionPoints < totalActionCost) {
     errors.push('行動力が不足しています');
@@ -934,7 +938,17 @@ export const validateRefresh: Validator = async (action, context) => {
   if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
     errors.push('創造力が不足しています');
   }
-  if (!canPayResourceCost(player.resources, lens.cost)) {
+  const itemCost = accumulateResourceFromItems(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+  );
+  const mergedCost: ResourceCost = {
+    light: (lens.cost.light ?? 0) + (itemCost.light ?? 0),
+    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.rainbow ?? 0),
+    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.stagnation ?? 0),
+    creativity: lens.cost.creativity,
+    actionPoints: lens.cost.actionPoints,
+  };
+  if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
 
@@ -968,15 +982,41 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
   }
   payResourceCost(player.resources, cost);
+  const itemCost = accumulateResourceFromItems(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+  );
+  payResourceCost(player.resources, itemCost);
   if (cost.creativity) {
     player.creativity = Math.max(0, player.creativity - cost.creativity);
   }
 
-  // 入れ替えたロビーを使用状態にする
+  // 手元の未使用ロビーを消費して、使用済みロビーを補充
+  const configuredStock =
+    typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
+      ? player.lobbyStock
+      : null;
+  if (configuredStock !== null) {
+    player.lobbyStock = Math.max(0, configuredStock - 1);
+  }
+  incrementPlayerLobbyUsed(player, 1);
+
+  // スロット上のロビーを使用状態にする
   slot.isActive = false;
 
   for (const reward of lens.rewards) {
     applyReward(player, reward);
+  }
+  const itemReward = accumulateResourceFromItems(
+    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+  );
+  if (
+    itemReward.light ||
+    itemReward.rainbow ||
+    itemReward.stagnation ||
+    itemReward.actionPoints ||
+    itemReward.creativity
+  ) {
+    applyReward(player, { type: 'resource', value: itemReward });
   }
 
   lens.status = 'exhausted';
