@@ -342,12 +342,17 @@ function resolveLabCost(lab) {
         lobby: lab.cost.lobby,
     };
 }
-function getPlayerLobbyStock(player) {
-    if (typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)) {
-        return Math.max(0, player.lobbyStock);
+function getLobbyReserve(player) {
+    if (typeof player.lobbyReserve === 'number' && Number.isFinite(player.lobbyReserve)) {
+        return Math.max(0, player.lobbyReserve);
     }
-    const used = getPlayerLobbyUsed(player);
-    return Math.max(0, DEFAULT_LOBBY_STOCK - used);
+    return DEFAULT_LOBBY_STOCK;
+}
+function getLobbyAvailable(player) {
+    if (typeof player.lobbyAvailable === 'number' && Number.isFinite(player.lobbyAvailable)) {
+        return Math.max(0, player.lobbyAvailable);
+    }
+    return DEFAULT_LOBBY_STOCK;
 }
 function getPlayerLobbyUsed(player) {
     if (typeof player.lobbyUsed === 'number' && Number.isFinite(player.lobbyUsed)) {
@@ -358,7 +363,7 @@ function getPlayerLobbyUsed(player) {
 function incrementPlayerLobbyUsed(player, amount) {
     const current = getPlayerLobbyUsed(player);
     const next = Math.max(0, current + amount);
-    player.lobbyUsed = Math.min(DEFAULT_LOBBY_STOCK, next);
+    player.lobbyUsed = next;
 }
 function createActionHandler({ validate, apply, }) {
     return async (action, context) => {
@@ -413,7 +418,7 @@ const validateLabActivate = async (action, context) => {
         errors.push('必要な資源が不足しています');
     }
     if (cost.lobby) {
-        const stock = getPlayerLobbyStock(player);
+        const stock = getLobbyAvailable(player);
         if (stock < cost.lobby) {
             errors.push('ロビー在庫が不足しています');
         }
@@ -543,9 +548,9 @@ const applyLabActivate = async (action, context) => {
         payResourceCost(player.resources, cost.resources);
     }
     if (cost.lobby) {
-        const currentStock = getPlayerLobbyStock(player);
+        const currentStock = getLobbyAvailable(player);
         const nextStock = Math.max(0, currentStock - cost.lobby);
-        player.lobbyStock = nextStock;
+        player.lobbyAvailable = nextStock;
         const placements = gameState.labPlacements;
         const existingPlacement = placements.find((placement) => placement.labId === labId && placement.playerId === action.playerId);
         if (existingPlacement) {
@@ -689,15 +694,11 @@ const applyLensActivate = async (action, context) => {
         if (!occupiedSlot) {
             throw new Error('ロビー枠がありません');
         }
-        const configuredStock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
-            ? player.lobbyStock
-            : null;
-        if (configuredStock !== null) {
-            player.lobbyStock = Math.max(0, configuredStock - 1);
+        const available = getLobbyAvailable(player);
+        if (available <= 0) {
+            throw new Error('ロビーが不足しています');
         }
-        else {
-            incrementPlayerLobbyUsed(player, 1);
-        }
+        player.lobbyAvailable = available - 1;
         occupiedSlot.occupantId = action.playerId;
     }
     occupiedSlot.isActive = false;
@@ -795,7 +796,7 @@ const validateRefresh = async (action, context) => {
     if (!slot) {
         errors.push('使用済みの自分のロビーが配置されていません');
     }
-    if (getPlayerLobbyStock(player) <= 0) {
+    if (getLobbyAvailable(player) <= 0) {
         errors.push('未使用のロビーが不足しています');
     }
     const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
@@ -870,11 +871,9 @@ const applyRefresh = async (action, context) => {
         }
     }
     // 手元の未使用ロビーを消費して、使用済みロビーを補充
-    const configuredStock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
-        ? player.lobbyStock
-        : null;
-    if (configuredStock !== null) {
-        player.lobbyStock = Math.max(0, configuredStock - 1);
+    const available = getLobbyAvailable(player);
+    if (available > 0) {
+        player.lobbyAvailable = available - 1;
     }
     incrementPlayerLobbyUsed(player, 1);
     // スロット上のロビーを使用状態にする
@@ -1240,8 +1239,8 @@ const applyTask = async (action, context) => {
             break;
         }
         case 'lobby': {
-            const currentStock = typeof player.lobbyStock === 'number' ? player.lobbyStock : DEFAULT_LOBBY_STOCK;
-            player.lobbyStock = currentStock + 1;
+            const reserve = getLobbyReserve(player);
+            player.lobbyReserve = reserve + 1;
             break;
         }
         default:
@@ -1690,7 +1689,7 @@ function canActivateLens(lensId, ownerId, playerId, gameState) {
     }
     const hasEmptySlot = slots.some((slot) => !slot.occupantId);
     const player = gameState.players[playerId];
-    const hasLobbyToken = player ? getPlayerLobbyStock(player) > 0 : false;
+    const hasLobbyToken = player ? getLobbyAvailable(player) > 0 : false;
     return hasEmptySlot && hasLobbyToken;
 }
 function canPayResourceCost(wallet, cost) {
@@ -1742,12 +1741,10 @@ function gainLobbyFromStock(player, amount) {
     if (amount <= 0) {
         return;
     }
-    const stock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
-        ? Math.max(0, player.lobbyStock)
-        : 0;
+    const stock = getLobbyReserve(player);
     const transferable = Math.min(stock, amount);
     if (transferable > 0) {
-        player.lobbyStock = stock - transferable;
+        player.lobbyReserve = stock - transferable;
         incrementPlayerLobbyUsed(player, transferable);
     }
 }
@@ -1764,22 +1761,26 @@ function returnLobbyToStock(player, gameState, lensId, amount) {
             delete slot.occupantId;
             slot.isActive = true;
             remaining -= 1;
+            player.lobbyReserve = getLobbyReserve(player) + 1;
         }
     });
     if (remaining > 0) {
-        const currentUsed = getPlayerLobbyUsed(player);
-        const returnable = Math.min(currentUsed, remaining);
-        if (returnable > 0) {
-            player.lobbyUsed = Math.max(0, currentUsed - returnable);
-            remaining -= returnable;
+        const available = getLobbyAvailable(player);
+        const takeAvail = Math.min(available, remaining);
+        if (takeAvail > 0) {
+            player.lobbyAvailable = available - takeAvail;
+            player.lobbyReserve = getLobbyReserve(player) + takeAvail;
+            remaining -= takeAvail;
         }
     }
-    if (remaining < amount) {
-        const currentStock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
-            ? player.lobbyStock
-            : 0;
-        const restored = amount - remaining;
-        player.lobbyStock = currentStock + restored;
+    if (remaining > 0) {
+        const currentUsed = getPlayerLobbyUsed(player);
+        const takeUsed = Math.min(currentUsed, remaining);
+        if (takeUsed > 0) {
+            player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
+            player.lobbyReserve = getLobbyReserve(player) + takeUsed;
+            remaining -= takeUsed;
+        }
     }
 }
 function applyGrowthReward(player, reward) {

@@ -94,11 +94,11 @@ export class PhaseManagerImpl implements PhaseManager {
       if (!player) {
         return;
       }
-      const currentStock =
-        typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
-          ? player.lobbyStock
+      const currentAvailable =
+        typeof player.lobbyAvailable === 'number' && Number.isFinite(player.lobbyAvailable)
+          ? Math.max(0, player.lobbyAvailable)
           : 0;
-      player.lobbyStock = currentStock + count;
+      player.lobbyAvailable = currentAvailable + count;
     });
     gameState.labPlacements = [];
 

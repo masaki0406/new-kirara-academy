@@ -262,6 +262,25 @@ function ensureStateDefaults(state: GameState): void {
       if (legacyHand) {
         (player as { hand?: string[] }).hand = [];
       }
+      const legacyStock =
+        typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
+          ? Math.max(0, Math.floor(player.lobbyStock))
+          : null;
+      if (legacyStock !== null) {
+        player.lobbyReserve = player.lobbyReserve ?? legacyStock;
+        player.lobbyAvailable = player.lobbyAvailable ?? legacyStock;
+      }
+      if (typeof player.lobbyReserve !== 'number' || Number.isNaN(player.lobbyReserve)) {
+        player.lobbyReserve = RoomService.DEFAULT_LOBBY_STOCK;
+      }
+      if (typeof player.lobbyAvailable !== 'number' || Number.isNaN(player.lobbyAvailable)) {
+        player.lobbyAvailable = RoomService.DEFAULT_LOBBY_STOCK;
+      }
+      if (typeof player.lobbyUsed !== 'number' || Number.isNaN(player.lobbyUsed)) {
+        player.lobbyUsed = 0;
+      } else {
+        player.lobbyUsed = Math.max(0, Math.floor(player.lobbyUsed));
+      }
     });
   }
 }
@@ -269,7 +288,7 @@ function ensureStateDefaults(state: GameState): void {
 export class RoomService {
   constructor(private readonly adapter: FirestoreAdapter) {}
 
-  private static readonly DEFAULT_LOBBY_STOCK = 4;
+  public static readonly DEFAULT_LOBBY_STOCK = 4;
 
   async createRoom(params: CreateRoomParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
@@ -306,7 +325,9 @@ export class RoomService {
       hasPassed: false,
       isRooting: false,
       unlockedCharacterNodes: [],
-      lobbyStock: state.players[params.hostId]?.lobbyStock ?? RoomService.DEFAULT_LOBBY_STOCK,
+      lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
+      lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
+      lobbyUsed: 0,
     };
 
     if (!state.currentPlayerId) {
@@ -374,16 +395,18 @@ export class RoomService {
         resources,
         collectedDevelopmentCards: [],
         collectedVpCards: [],
-        collectedFoundationCards: {},
-        craftedLenses: [],
-        ownedLenses: [],
-        tasksCompleted: [],
-        hasPassed: false,
-        isRooting: false,
-        unlockedCharacterNodes: [],
-        lobbyStock: RoomService.DEFAULT_LOBBY_STOCK,
-      };
-    }
+      collectedFoundationCards: {},
+      craftedLenses: [],
+      ownedLenses: [],
+      tasksCompleted: [],
+      hasPassed: false,
+      isRooting: false,
+      unlockedCharacterNodes: [],
+      lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
+      lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
+      lobbyUsed: 0,
+    };
+  }
 
     if (!state.turnOrder.includes(params.playerId)) {
       state.turnOrder.push(params.playerId);
@@ -475,8 +498,11 @@ export class RoomService {
       throw new Error('Player not found.');
     }
 
-    if (typeof player.lobbyStock !== 'number' || Number.isNaN(player.lobbyStock)) {
-      player.lobbyStock = RoomService.DEFAULT_LOBBY_STOCK;
+    if (typeof player.lobbyReserve !== 'number' || Number.isNaN(player.lobbyReserve)) {
+      player.lobbyReserve = RoomService.DEFAULT_LOBBY_STOCK;
+    }
+    if (typeof player.lobbyAvailable !== 'number' || Number.isNaN(player.lobbyAvailable)) {
+      player.lobbyAvailable = RoomService.DEFAULT_LOBBY_STOCK;
     }
 
     if (params.resources) {
@@ -488,12 +514,19 @@ export class RoomService {
       });
     }
 
-    if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
-      player.lobbyStock = Math.max(0, Math.floor(params.lobbyStock));
+    if (typeof params.lobbyReserve === 'number' && Number.isFinite(params.lobbyReserve)) {
+      player.lobbyReserve = Math.max(0, Math.floor(params.lobbyReserve));
     }
-
+    if (typeof params.lobbyAvailable === 'number' && Number.isFinite(params.lobbyAvailable)) {
+      player.lobbyAvailable = Math.max(0, Math.floor(params.lobbyAvailable));
+    }
     if (typeof params.lobbyUsed === 'number' && Number.isFinite(params.lobbyUsed)) {
       player.lobbyUsed = Math.max(0, Math.floor(params.lobbyUsed));
+    }
+    if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
+      const stock = Math.max(0, Math.floor(params.lobbyStock));
+      player.lobbyReserve = stock;
+      player.lobbyAvailable = stock;
     }
 
     if (typeof params.lensCount === 'number' && Number.isFinite(params.lensCount)) {

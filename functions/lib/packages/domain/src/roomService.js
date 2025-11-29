@@ -198,6 +198,25 @@ function ensureStateDefaults(state) {
             if (legacyHand) {
                 player.hand = [];
             }
+            const legacyStock = typeof player.lobbyStock === 'number' && Number.isFinite(player.lobbyStock)
+                ? Math.max(0, Math.floor(player.lobbyStock))
+                : null;
+            if (legacyStock !== null) {
+                player.lobbyReserve = player.lobbyReserve ?? legacyStock;
+                player.lobbyAvailable = player.lobbyAvailable ?? legacyStock;
+            }
+            if (typeof player.lobbyReserve !== 'number' || Number.isNaN(player.lobbyReserve)) {
+                player.lobbyReserve = RoomService.DEFAULT_LOBBY_STOCK;
+            }
+            if (typeof player.lobbyAvailable !== 'number' || Number.isNaN(player.lobbyAvailable)) {
+                player.lobbyAvailable = RoomService.DEFAULT_LOBBY_STOCK;
+            }
+            if (typeof player.lobbyUsed !== 'number' || Number.isNaN(player.lobbyUsed)) {
+                player.lobbyUsed = 0;
+            }
+            else {
+                player.lobbyUsed = Math.max(0, Math.floor(player.lobbyUsed));
+            }
         });
     }
 }
@@ -237,7 +256,9 @@ class RoomService {
             hasPassed: false,
             isRooting: false,
             unlockedCharacterNodes: [],
-            lobbyStock: state.players[params.hostId]?.lobbyStock ?? RoomService.DEFAULT_LOBBY_STOCK,
+            lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
+            lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
+            lobbyUsed: 0,
         };
         if (!state.currentPlayerId) {
             state.currentPlayerId = params.hostId;
@@ -304,7 +325,9 @@ class RoomService {
                 hasPassed: false,
                 isRooting: false,
                 unlockedCharacterNodes: [],
-                lobbyStock: RoomService.DEFAULT_LOBBY_STOCK,
+                lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
+                lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
+                lobbyUsed: 0,
             };
         }
         if (!state.turnOrder.includes(params.playerId)) {
@@ -383,8 +406,11 @@ class RoomService {
         if (!player) {
             throw new Error('Player not found.');
         }
-        if (typeof player.lobbyStock !== 'number' || Number.isNaN(player.lobbyStock)) {
-            player.lobbyStock = RoomService.DEFAULT_LOBBY_STOCK;
+        if (typeof player.lobbyReserve !== 'number' || Number.isNaN(player.lobbyReserve)) {
+            player.lobbyReserve = RoomService.DEFAULT_LOBBY_STOCK;
+        }
+        if (typeof player.lobbyAvailable !== 'number' || Number.isNaN(player.lobbyAvailable)) {
+            player.lobbyAvailable = RoomService.DEFAULT_LOBBY_STOCK;
         }
         if (params.resources) {
             ['light', 'rainbow', 'stagnation'].forEach((resource) => {
@@ -394,11 +420,19 @@ class RoomService {
                 }
             });
         }
-        if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
-            player.lobbyStock = Math.max(0, Math.floor(params.lobbyStock));
+        if (typeof params.lobbyReserve === 'number' && Number.isFinite(params.lobbyReserve)) {
+            player.lobbyReserve = Math.max(0, Math.floor(params.lobbyReserve));
+        }
+        if (typeof params.lobbyAvailable === 'number' && Number.isFinite(params.lobbyAvailable)) {
+            player.lobbyAvailable = Math.max(0, Math.floor(params.lobbyAvailable));
         }
         if (typeof params.lobbyUsed === 'number' && Number.isFinite(params.lobbyUsed)) {
             player.lobbyUsed = Math.max(0, Math.floor(params.lobbyUsed));
+        }
+        if (typeof params.lobbyStock === 'number' && Number.isFinite(params.lobbyStock)) {
+            const stock = Math.max(0, Math.floor(params.lobbyStock));
+            player.lobbyReserve = stock;
+            player.lobbyAvailable = stock;
         }
         if (typeof params.lensCount === 'number' && Number.isFinite(params.lensCount)) {
             const target = Math.max(0, Math.floor(params.lensCount));

@@ -423,7 +423,7 @@ function requireLensActivateTarget(): PlayerActionRequirement {
 
 function requireLobbyStock(): PlayerActionRequirement {
   return ({ lobby }) =>
-    lobby.reserveUnused > 0
+    lobby.handUnused > 0
       ? { available: true }
       : { available: false, reason: "ロビー在庫が不足しています" };
 }
@@ -917,13 +917,12 @@ interface JournalSlotData extends JournalSlotDefinition {
 }
 
 interface LobbySummary {
-  reserveUnused: number;
-  reserveUsed: number;
+  reserve: number;
+  handUnused: number;
+  handUsed: number;
   boardActive: number;
   boardFatigued: number;
   labCommitted: number;
-  totalDeployed: number;
-  totalTokens: number;
 }
 
 interface LensTargetOption {
@@ -1340,13 +1339,12 @@ export default function PlayPage(): JSX.Element {
   const lobbySummary = useMemo<LobbySummary>(() => {
     if (!gameState || !localGamePlayer) {
       return {
-        reserveUnused: 0,
-        reserveUsed: 0,
+        reserve: 0,
+        handUnused: 0,
+        handUsed: 0,
         boardActive: 0,
         boardFatigued: 0,
         labCommitted: 0,
-        totalDeployed: 0,
-        totalTokens: 0,
       };
     }
 
@@ -1364,30 +1362,29 @@ export default function PlayPage(): JSX.Element {
       return sum;
     }, 0);
 
-    const reserveUsed =
+    const handUsed =
       typeof localGamePlayer.lobbyUsed === "number" && Number.isFinite(localGamePlayer.lobbyUsed)
         ? Math.max(0, localGamePlayer.lobbyUsed)
         : 0;
 
-    const hasConfiguredStock =
-      typeof localGamePlayer.lobbyStock === "number" && Number.isFinite(localGamePlayer.lobbyStock);
-    const reserveUnused = hasConfiguredStock
-      ? Math.max(0, localGamePlayer.lobbyStock!)
-      : Math.max(
-          0,
-          DEFAULT_LOBBY_STOCK - reserveUsed - playerSlots.length - labCommitted,
-        );
+    const reserve =
+      typeof localGamePlayer.lobbyReserve === "number" && Number.isFinite(localGamePlayer.lobbyReserve)
+        ? Math.max(0, localGamePlayer.lobbyReserve)
+        : DEFAULT_LOBBY_STOCK;
 
-    const totalTokens = reserveUnused + reserveUsed + playerSlots.length + labCommitted;
+    const handUnused =
+      typeof localGamePlayer.lobbyAvailable === "number" &&
+      Number.isFinite(localGamePlayer.lobbyAvailable)
+        ? Math.max(0, localGamePlayer.lobbyAvailable)
+        : DEFAULT_LOBBY_STOCK;
 
     return {
-      reserveUnused,
-      reserveUsed,
+      reserve,
+      handUnused,
+      handUsed,
       boardActive,
       boardFatigued,
       labCommitted,
-      totalDeployed: playerSlots.length,
-      totalTokens,
     };
   }, [gameState, localGamePlayer]);
 
@@ -1782,7 +1779,7 @@ export default function PlayPage(): JSX.Element {
     const lenses = gameState.board?.lenses ?? {};
     const slots = gameState.board?.lobbySlots ?? [];
     const players = gameState.players ?? {};
-    const availableLobbyTokens = lobbySummary.reserveUnused;
+    const availableLobbyTokens = lobbySummary.handUnused;
     return Object.values(lenses)
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
@@ -1802,7 +1799,7 @@ export default function PlayPage(): JSX.Element {
         status: lens.status,
         ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
       }));
-  }, [gameState, localPlayer?.id, lobbySummary.reserveUnused]);
+  }, [gameState, localPlayer?.id, lobbySummary.handUnused]);
 
   const exhaustedLensTargets = useMemo<ExhaustedLensOption[]>(() => {
     if (!gameState || !localPlayer?.id) {
@@ -3249,9 +3246,9 @@ export default function PlayPage(): JSX.Element {
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>ロビー管理</span>
                       <span className={styles.characterValue}>
-                        ストック 未使用 {lobbySummary.reserveUnused} / 使用済み {lobbySummary.reserveUsed} ｜ レンズ
-                        未使用 {lobbySummary.boardActive} / 使用済み {lobbySummary.boardFatigued} ｜ ラボ配置{" "}
-                        {lobbySummary.labCommitted} ｜ 合計 {lobbySummary.totalTokens}
+                        ストック {lobbySummary.reserve} ｜ ロビー 未使用 {lobbySummary.handUnused} / 使用済み{" "}
+                        {lobbySummary.handUsed} ｜ レンズ 使用 {lobbySummary.boardActive + lobbySummary.boardFatigued}（未使用 {lobbySummary.boardActive} / 使用済み {lobbySummary.boardFatigued}） ｜ ラボ配置{" "}
+                        {lobbySummary.labCommitted}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>

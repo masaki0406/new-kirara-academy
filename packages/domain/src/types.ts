@@ -154,6 +154,8 @@ export interface PlayerState {
   hasPassed: boolean;
   isRooting?: boolean;
   unlockedCharacterNodes?: string[];
+  lobbyReserve?: number;
+  lobbyAvailable?: number;
   lobbyStock?: number;
   lobbyUsed?: number;
 }
@@ -237,6 +239,8 @@ export interface AdjustPlayerForTestPayload {
   playerId: PlayerId;
   resources?: Partial<Record<ResourceType, number>>;
   lobbyStock?: number;
+  lobbyReserve?: number;
+  lobbyAvailable?: number;
   lobbyUsed?: number;
   lensCount?: number;
 }
