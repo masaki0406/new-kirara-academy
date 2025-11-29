@@ -1851,6 +1851,15 @@ export default function PlayPage(): JSX.Element {
     const removableGrowth = (localGamePlayer.unlockedCharacterNodes ?? []).filter(
       (id) => !id.endsWith(":s"),
     ).length;
+    const boardReturnable = slots.filter(
+      (slot) => slot.occupantId === localPlayer.id,
+    ).length;
+    const labReturnable = (gameState.labPlacements ?? []).reduce((sum, placement) => {
+      if (placement.playerId === localPlayer.id) {
+        return sum + (placement.count ?? 0);
+      }
+      return sum;
+    }, 0);
     return Object.values(lenses)
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
@@ -1885,7 +1894,12 @@ export default function PlayPage(): JSX.Element {
         if (mergedCreativity > (localGamePlayer.creativity ?? 0)) {
           return false;
         }
-        if (itemCost.lobbyReturn > lobbySummary.handUsed) {
+        const returnableLobby =
+          boardReturnable - lensSlots.filter((slot) => slot.occupantId === localPlayer.id).length +
+          labReturnable +
+          lobbySummary.handUnused +
+          lobbySummary.handUsed;
+        if (itemCost.lobbyReturn > returnableLobby) {
           return false;
         }
         if (itemCost.growthLoss > removableGrowth) {

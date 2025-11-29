@@ -1794,6 +1794,19 @@ function returnLobbyToStock(player, gameState, lensId, amount) {
             player.lobbyReserve = getLobbyReserve(player) + 1;
         }
     });
+    if (remaining > 0 && Array.isArray(gameState.labPlacements)) {
+        for (const placement of gameState.labPlacements) {
+            if (remaining <= 0) {
+                break;
+            }
+            if (placement.playerId === player.playerId && placement.count > 0) {
+                const take = Math.min(placement.count, remaining);
+                placement.count -= take;
+                player.lobbyReserve = getLobbyReserve(player) + take;
+                remaining -= take;
+            }
+        }
+    }
     if (remaining > 0) {
         const available = getLobbyAvailable(player);
         const takeAvail = Math.min(available, remaining);
