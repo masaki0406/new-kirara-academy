@@ -1,6 +1,6 @@
 "use client";
 
-import type { JSX } from "react";
+import type { JSX, SetStateAction } from "react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
@@ -384,6 +384,18 @@ function describeRewardDefinition(reward: RewardDefinition): string {
     default:
       return "効果を解決";
   }
+}
+
+function countGrow(items: CraftedLensSideItem[] | undefined): number {
+  if (!Array.isArray(items)) {
+    return 0;
+  }
+  return items.reduce((total, item) => {
+    const label = (item.item ?? item.cardId ?? "").toLowerCase();
+    const amount =
+      typeof item.quantity === "number" && Number.isFinite(item.quantity) ? item.quantity : 1;
+    return label.includes("grow") ? total + amount : total;
+  }, 0);
 }
 
 function combineRequirements(
@@ -934,6 +946,8 @@ interface LensTargetOption {
   slotActive: boolean;
   cost: ResourceCost;
   rewards: RewardDefinition[];
+  leftItems?: CraftedLensSideItem[];
+  rightItems?: CraftedLensSideItem[];
 }
 
 interface LensActivateOption {
@@ -942,6 +956,8 @@ interface LensActivateOption {
   rewards: RewardDefinition[];
   status: string;
   ownerName?: string;
+  leftItems?: CraftedLensSideItem[];
+  rightItems?: CraftedLensSideItem[];
 }
 
 interface ExhaustedLensOption {
@@ -949,6 +965,8 @@ interface ExhaustedLensOption {
   ownerName?: string;
   status: string;
   slotActive: boolean;
+  leftItems?: CraftedLensSideItem[];
+  rightItems?: CraftedLensSideItem[];
 }
 
 const JOURNAL_SLOT_LAYOUT: JournalSlotDefinition[] = [
@@ -1064,12 +1082,15 @@ export default function PlayPage(): JSX.Element {
   const [isLensActivateDialogOpen, setIsLensActivateDialogOpen] = useState(false);
   const [selectedLensActivateId, setSelectedLensActivateId] = useState<string | null>(null);
   const [isLensActivateSubmitting, setIsLensActivateSubmitting] = useState(false);
+  const [lensActivateGrowthSelections, setLensActivateGrowthSelections] = useState<string[]>([]);
   const [isRefreshDialogOpen, setIsRefreshDialogOpen] = useState(false);
   const [selectedRefreshLensId, setSelectedRefreshLensId] = useState<string | null>(null);
   const [isRefreshSubmitting, setIsRefreshSubmitting] = useState(false);
+  const [refreshGrowthSelections, setRefreshGrowthSelections] = useState<string[]>([]);
   const [isPersuasionDialogOpen, setIsPersuasionDialogOpen] = useState(false);
   const [selectedPersuasionLensId, setSelectedPersuasionLensId] = useState<string | null>(null);
   const [isPersuasionSubmitting, setIsPersuasionSubmitting] = useState(false);
+  const [persuasionGrowthSelections, setPersuasionGrowthSelections] = useState<string[]>([]);
   const [pendingCollectKey, setPendingCollectKey] = useState<string | null>(null);
   const [pendingPolishResult, setPendingPolishResult] = useState<PendingPolishResult | null>(null);
   const collectSectionRef = useRef<HTMLDivElement | null>(null);
@@ -1798,6 +1819,8 @@ export default function PlayPage(): JSX.Element {
         rewards: lens.rewards,
         status: lens.status,
         ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
+        leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+        rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
       }));
   }, [gameState, localPlayer?.id, lobbySummary.handUnused]);
 
@@ -1823,6 +1846,8 @@ export default function PlayPage(): JSX.Element {
           ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
           status: lens.status,
           slotActive: slot.isActive,
+          leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+          rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
         };
       });
   }, [gameState, localPlayer?.id]);
@@ -1865,6 +1890,7 @@ export default function PlayPage(): JSX.Element {
     setIsLensActivateDialogOpen(false);
     setSelectedLensActivateId(null);
     setIsLensActivateSubmitting(false);
+    setLensActivateGrowthSelections([]);
   }, []);
 
   const openRefreshDialog = useCallback(() => {
@@ -1885,6 +1911,7 @@ export default function PlayPage(): JSX.Element {
     setIsRefreshDialogOpen(false);
     setSelectedRefreshLensId(null);
     setIsRefreshSubmitting(false);
+    setRefreshGrowthSelections([]);
   }, []);
 
   const selectedLensActivateTarget = useMemo(
@@ -1907,6 +1934,17 @@ export default function PlayPage(): JSX.Element {
         : [],
     [selectedLensActivateTarget],
   );
+  const lensActivateGrowthNeeded = useMemo(
+    () => countGrow((selectedLensActivateTarget as { rightItems?: CraftedLensSideItem[] } | null)?.rightItems),
+    [selectedLensActivateTarget],
+  );
+  useEffect(() => {
+    if (lensActivateGrowthNeeded <= 0) {
+      setLensActivateGrowthSelections([]);
+      return;
+    }
+    setLensActivateGrowthSelections(Array.from({ length: lensActivateGrowthNeeded }, () => ""));
+  }, [lensActivateGrowthNeeded, selectedLensActivateTarget?.lensId]);
 
   const selectedRefreshTarget = useMemo(
     () =>
@@ -1915,6 +1953,17 @@ export default function PlayPage(): JSX.Element {
       null,
     [exhaustedLensTargets, selectedRefreshLensId],
   );
+  const refreshGrowthNeeded = useMemo(
+    () => countGrow((selectedRefreshTarget as { rightItems?: CraftedLensSideItem[] } | null)?.rightItems),
+    [selectedRefreshTarget],
+  );
+  useEffect(() => {
+    if (refreshGrowthNeeded <= 0) {
+      setRefreshGrowthSelections([]);
+      return;
+    }
+    setRefreshGrowthSelections(Array.from({ length: refreshGrowthNeeded }, () => ""));
+  }, [refreshGrowthNeeded, selectedRefreshTarget?.lensId]);
 
   const handleSubmitWill = useCallback(async () => {
     if (!localPlayer?.id) {
@@ -1986,7 +2035,11 @@ export default function PlayPage(): JSX.Element {
         action: {
           playerId: localPlayer.id,
           actionType: "lensActivate",
-          payload: { lensId },
+          payload: {
+            lensId,
+            growthSelections:
+              lensActivateGrowthNeeded > 0 ? lensActivateGrowthSelections.filter(Boolean) : undefined,
+          },
         },
       });
       setFeedback(`レンズ ${lensId} を起動しました。`);
@@ -2034,7 +2087,11 @@ export default function PlayPage(): JSX.Element {
         action: {
           playerId: localPlayer.id,
           actionType: "refresh",
-          payload: { lensId },
+          payload: {
+            lensId,
+            growthSelections:
+              refreshGrowthNeeded > 0 ? refreshGrowthSelections.filter(Boolean) : undefined,
+          },
         },
       });
       setFeedback(`レンズ ${lensId} を再起動しました。`);
@@ -2113,6 +2170,8 @@ export default function PlayPage(): JSX.Element {
           slotActive: slot.isActive,
           cost: lens.cost,
           rewards: lens.rewards,
+          leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+          rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
         });
       }
     });
@@ -2128,6 +2187,55 @@ export default function PlayPage(): JSX.Element {
       null,
     [lensOpponentTargets, selectedPersuasionLensId],
   );
+  const persuasionGrowthNeeded = useMemo(
+    () => countGrow((selectedPersuasionTarget as { rightItems?: CraftedLensSideItem[] } | null)?.rightItems),
+    [selectedPersuasionTarget],
+  );
+  useEffect(() => {
+    if (persuasionGrowthNeeded <= 0) {
+      setPersuasionGrowthSelections([]);
+      return;
+    }
+    setPersuasionGrowthSelections(Array.from({ length: persuasionGrowthNeeded }, () => ""));
+  }, [persuasionGrowthNeeded, selectedPersuasionTarget?.lensId]);
+
+  const renderGrowthSelector = (
+    need: number,
+    selections: string[],
+    setSelections: (value: SetStateAction<string[]>) => void,
+    keyPrefix: string,
+  ): JSX.Element | null => {
+    if (need <= 0) {
+      return null;
+    }
+    const handleChange = (index: number, value: string) => {
+      setSelections((prev) => {
+        const next = [...prev];
+        next[index] = value;
+        return next;
+      });
+    };
+    return (
+      <div className={styles.actionConfirmSection}>
+        <h5 className={styles.actionConfirmHeading}>成長選択</h5>
+        {Array.from({ length: need }).map((_, index) => (
+          <div key={`${keyPrefix}-${index}`} className={styles.formRow}>
+            <select
+              value={selections[index] ?? ""}
+              onChange={(event) => handleChange(index, event.target.value)}
+            >
+              <option value="">自動選択</option>
+              {availableGrowthNodes.map((node) => (
+                <option key={node.id} value={node.id}>
+                  {node.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+    );
+  };
   const persuasionLensCostDescriptions = useMemo(
     () =>
       selectedPersuasionTarget ? describeResourceCost(selectedPersuasionTarget.cost) : [],
@@ -2247,6 +2355,7 @@ export default function PlayPage(): JSX.Element {
     setIsPersuasionDialogOpen(false);
     setSelectedPersuasionLensId(null);
     setIsPersuasionSubmitting(false);
+    setPersuasionGrowthSelections([]);
   }, []);
 
   const handleSubmitPersuasion = useCallback(async () => {
@@ -2270,7 +2379,11 @@ export default function PlayPage(): JSX.Element {
         action: {
           playerId: localPlayer.id,
           actionType: "persuasion",
-          payload: { lensId },
+          payload: {
+            lensId,
+            growthSelections:
+              persuasionGrowthNeeded > 0 ? persuasionGrowthSelections.filter(Boolean) : undefined,
+          },
         },
       });
       setFeedback(`説得でレンズ ${lensId} を起動しました。`);
@@ -3946,6 +4059,12 @@ export default function PlayPage(): JSX.Element {
                 )}
               </ul>
             </div>
+            {renderGrowthSelector(
+              lensActivateGrowthNeeded,
+              lensActivateGrowthSelections,
+              setLensActivateGrowthSelections,
+              "lens-activate",
+            )}
             <div className={styles.willFooter}>
               <button
                 type="button"
@@ -4046,6 +4165,12 @@ export default function PlayPage(): JSX.Element {
                 <li>選択したレンズを再び使用可能にします。</li>
               </ul>
             </div>
+            {renderGrowthSelector(
+              refreshGrowthNeeded,
+              refreshGrowthSelections,
+              setRefreshGrowthSelections,
+              "refresh",
+            )}
             <div className={styles.willFooter}>
               <button
                 type="button"
@@ -4160,6 +4285,12 @@ export default function PlayPage(): JSX.Element {
                 )}
               </ul>
             </div>
+            {renderGrowthSelector(
+              persuasionGrowthNeeded,
+              persuasionGrowthSelections,
+              setPersuasionGrowthSelections,
+              "persuasion",
+            )}
             <div className={styles.willFooter}>
               <button
                 type="button"
