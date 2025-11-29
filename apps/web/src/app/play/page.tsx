@@ -3249,7 +3249,7 @@ export default function PlayPage(): JSX.Element {
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>ロビー管理</span>
                       <span className={styles.characterValue}>
-                        シート 未使用 {lobbySummary.reserveUnused} / 使用済み {lobbySummary.reserveUsed} ｜ レンズ
+                        ストック 未使用 {lobbySummary.reserveUnused} / 使用済み {lobbySummary.reserveUsed} ｜ レンズ
                         未使用 {lobbySummary.boardActive} / 使用済み {lobbySummary.boardFatigued} ｜ ラボ配置{" "}
                         {lobbySummary.labCommitted} ｜ 合計 {lobbySummary.totalTokens}
                       </span>
