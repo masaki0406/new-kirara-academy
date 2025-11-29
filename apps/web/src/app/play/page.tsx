@@ -1523,14 +1523,40 @@ export default function PlayPage(): JSX.Element {
     if (!gameState?.players) {
       return [];
     }
-    return Object.values(gameState.players).flatMap((player) =>
+    const fromPlayers = Object.values(gameState.players).flatMap((player) =>
       (player.craftedLenses ?? []).map((lens) => ({
         lens,
         ownerId: player.playerId,
         ownerName: player.displayName ?? player.playerId,
       })),
     );
-  }, [gameState?.players]);
+    const boardLenses = Object.values(gameState.board?.lenses ?? {}).map((lens) => {
+      const owner = gameState.players[lens.ownerId];
+      return {
+        lens: {
+          lensId: lens.lensId,
+          foundationCost: (lens as unknown as { foundationCost?: number }).foundationCost ?? 0,
+          leftTotal: (lens as unknown as { leftTotal?: number }).leftTotal ?? 0,
+          rightTotal: (lens as unknown as { rightTotal?: number }).rightTotal ?? 0,
+          vpTotal: (lens as unknown as { vpTotal?: number }).vpTotal ?? 0,
+          createdAt: Date.now(),
+          leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems ?? [],
+          rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems ?? [],
+          sourceCards: [],
+        } as CraftedLens,
+        ownerId: lens.ownerId,
+        ownerName: owner?.displayName ?? lens.ownerId,
+      };
+    });
+    const merged = [...fromPlayers];
+    boardLenses.forEach((entry) => {
+      const already = merged.find((item) => item.lens.lensId === entry.lens.lensId);
+      if (!already) {
+        merged.push(entry);
+      }
+    });
+    return merged;
+  }, [gameState?.players, gameState?.board?.lenses]);
 
   const openPolishDialog = useCallback(() => {
     setPolishSelectionMap({});
