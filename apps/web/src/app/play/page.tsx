@@ -398,6 +398,52 @@ function countGrow(items: CraftedLensSideItem[] | undefined): number {
   }, 0);
 }
 
+function accumulateItemCostEffects(
+  items: CraftedLensSideItem[] | undefined,
+): {
+  resources: Partial<Record<ResourceKey | "creativity", number>>;
+  lobbyReturn: number;
+  growthLoss: number;
+} {
+  const summary = {
+    resources: {} as Partial<Record<ResourceKey | "creativity", number>>,
+    lobbyReturn: 0,
+    growthLoss: 0,
+  };
+  if (!Array.isArray(items)) {
+    return summary;
+  }
+  items.forEach((item) => {
+    const label = (item.item ?? item.cardId ?? "").toLowerCase();
+    const amount =
+      typeof item.quantity === "number" && Number.isFinite(item.quantity) ? item.quantity : 1;
+    if (label.includes("光") || label.includes("light")) {
+      summary.resources.light = (summary.resources.light ?? 0) + amount;
+      return;
+    }
+    if (label.includes("虹") || label.includes("rainbow")) {
+      summary.resources.rainbow = (summary.resources.rainbow ?? 0) + amount;
+      return;
+    }
+    if (label.includes("淀") || label.includes("stagnation") || label.includes("yodomi")) {
+      summary.resources.stagnation = (summary.resources.stagnation ?? 0) + amount;
+      return;
+    }
+    if (label.includes("img") || label.includes("creativity") || label.includes("想") || label.includes("創")) {
+      summary.resources.creativity = (summary.resources.creativity ?? 0) + amount;
+      return;
+    }
+    if (label.includes("grow")) {
+      summary.growthLoss += amount;
+      return;
+    }
+    if (label.includes("loby") || label.includes("lobby") || label.includes("ロビー")) {
+      summary.lobbyReturn += amount;
+    }
+  });
+  return summary;
+}
+
 function combineRequirements(
   ...requirements: PlayerActionRequirement[]
 ): PlayerActionRequirement {
@@ -1794,13 +1840,17 @@ export default function PlayPage(): JSX.Element {
   const willAbilityCount = availableWillNodes.length;
 
   const lensActivateTargets = useMemo<LensActivateOption[]>(() => {
-    if (!gameState || !localPlayer?.id) {
+    if (!gameState || !localPlayer?.id || !localGamePlayer) {
       return [];
     }
     const lenses = gameState.board?.lenses ?? {};
     const slots = gameState.board?.lobbySlots ?? [];
     const players = gameState.players ?? {};
     const availableLobbyTokens = lobbySummary.handUnused;
+    const resources = effectiveResources ?? localGamePlayer.resources;
+    const removableGrowth = (localGamePlayer.unlockedCharacterNodes ?? []).filter(
+      (id) => !id.endsWith(":s"),
+    ).length;
     return Object.values(lenses)
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
@@ -1811,7 +1861,37 @@ export default function PlayPage(): JSX.Element {
         }
         const hasEmptySlot = lensSlots.some((slot) => !slot.occupantId);
         const canUseOwnLobby = hasEmptySlot && availableLobbyTokens > 0;
-        return canUseOwnLobby;
+        if (!canUseOwnLobby) {
+          return false;
+        }
+        const itemCost = accumulateItemCostEffects(
+          (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+        );
+        const mergedLight = (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0);
+        const mergedRainbow = (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0);
+        const mergedStagnation = (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0);
+        const mergedCreativity = (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0);
+        const totalAction = 1 + (lens.cost.actionPoints ?? 0);
+        if (localGamePlayer.actionPoints < totalAction) {
+          return false;
+        }
+        if (
+          resources.light < mergedLight ||
+          resources.rainbow < mergedRainbow ||
+          resources.stagnation < mergedStagnation
+        ) {
+          return false;
+        }
+        if (mergedCreativity > (localGamePlayer.creativity ?? 0)) {
+          return false;
+        }
+        if (itemCost.lobbyReturn > lobbySummary.handUsed) {
+          return false;
+        }
+        if (itemCost.growthLoss > removableGrowth) {
+          return false;
+        }
+        return true;
       })
       .map((lens) => ({
         lensId: lens.lensId,
@@ -1822,7 +1902,14 @@ export default function PlayPage(): JSX.Element {
         leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
         rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
       }));
-  }, [gameState, localPlayer?.id, lobbySummary.handUnused]);
+  }, [
+    gameState,
+    localPlayer?.id,
+    localGamePlayer,
+    effectiveResources,
+    lobbySummary.handUnused,
+    lobbySummary.handUsed,
+  ]);
 
   const exhaustedLensTargets = useMemo<ExhaustedLensOption[]>(() => {
     if (!gameState || !localPlayer?.id) {
