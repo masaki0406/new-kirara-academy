@@ -821,14 +821,15 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   ) {
     applyReward(player, { type: 'resource', value: itemReward.resources });
   }
-  if (itemReward.lobbyGain > 0) {
-    gainLobbyFromStock(player, itemReward.lobbyGain);
-  }
-  if (itemReward.growthGain > 0) {
-    for (let i = 0; i < itemReward.growthGain; i += 1) {
-      applyGrowthDelta(player, 1);
+    if (itemReward.lobbyGain > 0) {
+      gainLobbyFromStock(player, itemReward.lobbyGain);
     }
-  }
+    if (itemReward.growthGain > 0) {
+      const growthSelections = Array.isArray(action.payload.growthSelections)
+        ? (action.payload.growthSelections as string[])
+        : undefined;
+      applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+    }
 
   lens.status = 'exhausted';
   const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
@@ -1083,9 +1084,10 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     gainLobbyFromStock(player, itemReward.lobbyGain);
   }
   if (itemReward.growthGain > 0) {
-    for (let i = 0; i < itemReward.growthGain; i += 1) {
-      applyGrowthDelta(player, 1);
-    }
+    const growthSelections = Array.isArray(action.payload.growthSelections)
+      ? (action.payload.growthSelections as string[])
+      : undefined;
+    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
   }
 
   lens.status = 'exhausted';
@@ -1679,9 +1681,10 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
     gainLobbyFromStock(player, itemReward.lobbyGain);
   }
   if (itemReward.growthGain > 0) {
-    for (let i = 0; i < itemReward.growthGain; i += 1) {
-      applyGrowthDelta(player, 1);
-    }
+    const growthSelections = Array.isArray(action.payload.growthSelections)
+      ? (action.payload.growthSelections as string[])
+      : undefined;
+    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
   }
 
   // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
@@ -2062,6 +2065,41 @@ function applyGrowthDelta(player: PlayerState, delta: number): void {
     if (target) {
       player.unlockedCharacterNodes = player.unlockedCharacterNodes.filter((id) => id !== target);
     }
+  }
+}
+
+function applyGrowthSelection(
+  player: PlayerState,
+  selections: string[] | undefined,
+  amount: number,
+): void {
+  if (!player.characterId || amount <= 0) {
+    return;
+  }
+  if (!player.unlockedCharacterNodes) {
+    player.unlockedCharacterNodes = [];
+  }
+  const unlocked = new Set(buildUnlockedSetWithAuto(player.characterId, player.unlockedCharacterNodes));
+  const requested = selections && selections.length ? [...selections] : [];
+  for (let i = 0; i < amount; i += 1) {
+    const nextId =
+      requested.length > 0
+        ? requested.shift()
+        : Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId] ?? {}).find((nodeId) => {
+            return (
+              !unlocked.has(nodeId) &&
+              !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
+              canUnlockGrowthNode(player.characterId!, nodeId, unlocked)
+            );
+          });
+    if (!nextId) {
+      break;
+    }
+    if (!canUnlockGrowthNode(player.characterId!, nextId, unlocked)) {
+      continue;
+    }
+    player.unlockedCharacterNodes.push(nextId);
+    unlocked.add(nextId);
   }
 }
 

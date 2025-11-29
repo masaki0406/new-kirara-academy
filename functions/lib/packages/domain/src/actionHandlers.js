@@ -682,9 +682,10 @@ const applyLensActivate = async (action, context) => {
         gainLobbyFromStock(player, itemReward.lobbyGain);
     }
     if (itemReward.growthGain > 0) {
-        for (let i = 0; i < itemReward.growthGain; i += 1) {
-            applyGrowthDelta(player, 1);
-        }
+        const growthSelections = Array.isArray(action.payload.growthSelections)
+            ? action.payload.growthSelections
+            : undefined;
+        applyGrowthSelection(player, growthSelections, itemReward.growthGain);
     }
     lens.status = 'exhausted';
     const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
@@ -893,9 +894,10 @@ const applyRefresh = async (action, context) => {
         gainLobbyFromStock(player, itemReward.lobbyGain);
     }
     if (itemReward.growthGain > 0) {
-        for (let i = 0; i < itemReward.growthGain; i += 1) {
-            applyGrowthDelta(player, 1);
-        }
+        const growthSelections = Array.isArray(action.payload.growthSelections)
+            ? action.payload.growthSelections
+            : undefined;
+        applyGrowthSelection(player, growthSelections, itemReward.growthGain);
     }
     lens.status = 'exhausted';
     if (lens.ownerId !== action.playerId) {
@@ -1408,9 +1410,10 @@ const applyPersuasion = async (action, context) => {
         gainLobbyFromStock(player, itemReward.lobbyGain);
     }
     if (itemReward.growthGain > 0) {
-        for (let i = 0; i < itemReward.growthGain; i += 1) {
-            applyGrowthDelta(player, 1);
-        }
+        const growthSelections = Array.isArray(action.payload.growthSelections)
+            ? action.payload.growthSelections
+            : undefined;
+        applyGrowthSelection(player, growthSelections, itemReward.growthGain);
     }
     // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
     slot.occupantId = action.playerId;
@@ -1735,6 +1738,33 @@ function applyGrowthDelta(player, delta) {
         if (target) {
             player.unlockedCharacterNodes = player.unlockedCharacterNodes.filter((id) => id !== target);
         }
+    }
+}
+function applyGrowthSelection(player, selections, amount) {
+    if (!player.characterId || amount <= 0) {
+        return;
+    }
+    if (!player.unlockedCharacterNodes) {
+        player.unlockedCharacterNodes = [];
+    }
+    const unlocked = new Set((0, characterGrowth_1.buildUnlockedSetWithAuto)(player.characterId, player.unlockedCharacterNodes));
+    const requested = selections && selections.length ? [...selections] : [];
+    for (let i = 0; i < amount; i += 1) {
+        const nextId = requested.length > 0
+            ? requested.shift()
+            : Object.keys(characterGrowth_1.CHARACTER_GROWTH_DEFINITIONS[player.characterId] ?? {}).find((nodeId) => {
+                return (!unlocked.has(nodeId) &&
+                    !(0, characterGrowth_1.isGrowthNodeAutoUnlocked)(player.characterId, nodeId) &&
+                    (0, characterGrowth_1.canUnlockGrowthNode)(player.characterId, nodeId, unlocked));
+            });
+        if (!nextId) {
+            break;
+        }
+        if (!(0, characterGrowth_1.canUnlockGrowthNode)(player.characterId, nextId, unlocked)) {
+            continue;
+        }
+        player.unlockedCharacterNodes.push(nextId);
+        unlocked.add(nextId);
     }
 }
 function gainLobbyFromStock(player, amount) {
