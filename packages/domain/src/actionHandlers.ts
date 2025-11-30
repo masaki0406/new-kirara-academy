@@ -2140,6 +2140,8 @@ function returnLobbyToStock(
     return;
   }
   let remaining = amount;
+
+  // ボード上（今回のレンズ以外）
   gameState.board.lobbySlots.forEach((slot) => {
     if (remaining <= 0) {
       return;
@@ -2151,19 +2153,24 @@ function returnLobbyToStock(
       player.lobbyReserve = getLobbyReserve(player) + 1;
     }
   });
+
+  // ラボ配置
   if (remaining > 0 && Array.isArray(gameState.labPlacements)) {
     for (const placement of gameState.labPlacements) {
       if (remaining <= 0) {
         break;
       }
-      if (placement.playerId === player.playerId && placement.count > 0) {
-        const take = Math.min(placement.count, remaining);
-        placement.count -= take;
-        player.lobbyReserve = getLobbyReserve(player) + take;
-        remaining -= take;
+      if (placement.playerId !== player.playerId || placement.count <= 0) {
+        continue;
       }
+      const take = Math.min(placement.count, remaining);
+      placement.count -= take;
+      remaining -= take;
+      player.lobbyReserve = getLobbyReserve(player) + take;
     }
   }
+
+  // 手持ち未使用
   if (remaining > 0) {
     const available = getLobbyAvailable(player);
     const takeAvail = Math.min(available, remaining);
@@ -2173,6 +2180,8 @@ function returnLobbyToStock(
       remaining -= takeAvail;
     }
   }
+
+  // 手持ち使用済み
   if (remaining > 0) {
     const currentUsed = getPlayerLobbyUsed(player);
     const takeUsed = Math.min(currentUsed, remaining);
@@ -2181,6 +2190,10 @@ function returnLobbyToStock(
       player.lobbyReserve = getLobbyReserve(player) + takeUsed;
       remaining -= takeUsed;
     }
+  }
+
+  if (remaining > 0) {
+    throw new Error('ロビー返却コストを支払うためのロビーが不足しています');
   }
 }
 function applyGrowthReward(
