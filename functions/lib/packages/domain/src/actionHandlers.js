@@ -899,6 +899,15 @@ const applyRefresh = async (action, context) => {
             : undefined;
         applyGrowthSelection(player, growthSelections, itemReward.growthGain);
     }
+    if (itemReward.vpGain > 0) {
+        player.vp += itemReward.vpGain;
+    }
+    if (itemReward.vpGain > 0) {
+        player.vp += itemReward.vpGain;
+    }
+    if (itemReward.vpGain > 0) {
+        player.vp += itemReward.vpGain;
+    }
     lens.status = 'exhausted';
     if (lens.ownerId !== action.playerId) {
         const owner = gameState.players[lens.ownerId];
@@ -1647,6 +1656,7 @@ function accumulateItemEffects(items, direction) {
         growthGain: 0,
         growthLoss: 0,
         creativityCost: 0,
+        vpGain: 0,
     };
     if (!Array.isArray(items)) {
         return summary;
@@ -1680,6 +1690,9 @@ function accumulateItemEffects(items, direction) {
                 summary.lobbyReturn += amount;
             }
             return;
+        }
+        if (label.includes('vp')) {
+            summary.vpGain += amount;
         }
     });
     return summary;

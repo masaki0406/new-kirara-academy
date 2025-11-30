@@ -1089,6 +1089,15 @@ export const applyRefresh: EffectApplier = async (action, context) => {
       : undefined;
     applyGrowthSelection(player, growthSelections, itemReward.growthGain);
   }
+  if (itemReward.vpGain > 0) {
+    player.vp += itemReward.vpGain;
+  }
+  if (itemReward.vpGain > 0) {
+    player.vp += itemReward.vpGain;
+  }
+  if (itemReward.vpGain > 0) {
+    player.vp += itemReward.vpGain;
+  }
 
   lens.status = 'exhausted';
 
@@ -1945,6 +1954,7 @@ interface ItemEffectSummary {
   growthGain: number;
   growthLoss: number;
   creativityCost: number;
+  vpGain: number;
 }
 
 function accumulateItemEffects(
@@ -1953,12 +1963,13 @@ function accumulateItemEffects(
 ): ItemEffectSummary {
   const summary: ItemEffectSummary = {
     resources: {},
-    lobbyGain: 0,
-    lobbyReturn: 0,
-    growthGain: 0,
-    growthLoss: 0,
-    creativityCost: 0,
-  };
+  lobbyGain: 0,
+  lobbyReturn: 0,
+  growthGain: 0,
+  growthLoss: 0,
+  creativityCost: 0,
+  vpGain: 0,
+};
   if (!Array.isArray(items)) {
     return summary;
   }
@@ -1995,6 +2006,10 @@ function accumulateItemEffects(
         summary.lobbyReturn += amount;
       }
       return;
+    }
+
+    if (label.includes('vp')) {
+      summary.vpGain += amount;
     }
   });
 
