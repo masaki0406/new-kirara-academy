@@ -834,32 +834,29 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   // 既存のスロットを探す（自分が既に占有している場合など）
   // ただし、レンズ起動は通常「空きスロット」を使う
   const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
-  let occupiedSlot = targetSlots.find((slot) => slot.occupantId === action.playerId);
 
+  // 空きスロットを探す
+  let occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
+
+  // 空きスロットがなければ新規作成（ただしレンズのスロット数上限チェックが必要だが、ここでは簡易的に追加）
+  // 本来は lens.slots をチェックすべき
   if (!occupiedSlot) {
-    // 空きスロットを探す
-    occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
-
-    // 空きスロットがなければ新規作成（ただしレンズのスロット数上限チェックが必要だが、ここでは簡易的に追加）
-    // 本来は lens.slots をチェックすべき
-    if (!occupiedSlot) {
-      const newSlot: LobbySlot = {
-        lensId,
-        ownerId: lens.ownerId,
-        occupantId: undefined,
-        isActive: false
-      };
-      gameState.board.lobbySlots.push(newSlot);
-      occupiedSlot = newSlot;
-    }
-
-    const available = getLobbyAvailable(player);
-    if (available <= 0) {
-      throw new Error('ロビー在庫が不足しています');
-    }
-    player.lobbyAvailable = available - 1;
-    occupiedSlot.occupantId = action.playerId;
+    const newSlot: LobbySlot = {
+      lensId,
+      ownerId: lens.ownerId,
+      occupantId: undefined,
+      isActive: false
+    };
+    gameState.board.lobbySlots.push(newSlot);
+    occupiedSlot = newSlot;
   }
+
+  const available = getLobbyAvailable(player);
+  if (available <= 0) {
+    throw new Error('ロビー在庫が不足しています');
+  }
+  player.lobbyAvailable = available - 1;
+  occupiedSlot.occupantId = action.playerId;
 
   // 起動後は使用済み（isActive=false）にする？
   // デザインでは「起動時は使用済み」とは限らないが、ロビー回収の対象になるには「使用済み」である必要がある？
