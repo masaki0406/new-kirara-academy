@@ -799,67 +799,141 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   if (itemCost.lobbyReturn > 0) {
     returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
   }
-  if (itemCost.growthLoss > 0) {
-    for (let i = 0; i < itemCost.growthLoss; i += 1) {
-      applyGrowthDelta(player, -1);
-    }
+
+  // ロビーを1つ消費してスロットを埋める
+  const currentLobby = getLobbyAvailable(player);
+  if (currentLobby < 1) {
+    throw new Error('ロビー在庫が不足しています');
   }
+  player.lobbyAvailable = currentLobby - 1;
+
+  if (!gameState.board.lobbySlots) {
+    gameState.board.lobbySlots = [];
+  }
+  gameState.board.lobbySlots.push({
+    lensId,
+    ownerId: lens.ownerId,
+    occupantId: action.playerId,
+    isActive: false, // 置いた直後は使用済み扱い
+  });
 
   for (const reward of lens.rewards) {
     applyReward(player, reward);
   }
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  if (
-    itemReward.resources.light ||
-    itemReward.resources.rainbow ||
-    itemReward.resources.stagnation ||
-    itemReward.resources.actionPoints ||
-    itemReward.resources.creativity
-  ) {
-    applyReward(player, { type: 'resource', value: itemReward.resources });
+  for (const reward of itemCost.rewards) {
+    applyReward(player, reward);
   }
-    if (itemReward.lobbyGain > 0) {
-      gainLobbyFromStock(player, itemReward.lobbyGain);
-    }
-    if (itemReward.growthGain > 0) {
-      const growthSelections = Array.isArray(action.payload.growthSelections)
-        ? (action.payload.growthSelections as string[])
-        : undefined;
-      applyGrowthSelection(player, growthSelections, itemReward.growthGain);
-    }
 
-  lens.status = 'exhausted';
-  const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
-  let occupiedSlot = targetSlots.find((slot) => slot.occupantId === action.playerId);
+  triggerEvent(context, {
+    type: 'lensActivatedByOther',
+    payload: { lensId, activatorId: action.playerId },
+  });
+};
+
+function returnLobbyToStock(
+  player: PlayerState,
+  gameState: GameState,
+  currentLensId: string,
+  count: number,
+): void {
+  let remaining = count;
+
+  // 1. ラボ配置からの回収
+  if (gameState.labPlacements) {
+    const playerPlacements = gameState.labPlacements.filter(
+      (p) => p.playerId === player.playerId,
+    );
+    for (const placement of playerPlacements) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, placement.count);
+      placement.count -= take;
+      remaining -= take;
+    }
+    gameState.labPlacements = gameState.labPlacements.filter((p) => p.count > 0);
+  }
+
+  // 2. レンズ配置からの回収（現在のレンズ以外）
+  if (remaining > 0 && gameState.board.lobbySlots) {
+    const returnableSlots = gameState.board.lobbySlots.filter(
+      (slot) =>
+        slot.occupantId === player.playerId && slot.lensId !== currentLensId,
+    );
+
+    for (const slot of returnableSlots) {
+      if (remaining <= 0) break;
+      const idx = gameState.board.lobbySlots.indexOf(slot);
+      if (idx !== -1) {
+        gameState.board.lobbySlots.splice(idx, 1);
+        remaining--;
+      }
+    }
+  }
+
+  // 回収した分をAvailableに戻す
+  const recovered = count - remaining;
+  player.lobbyAvailable = (player.lobbyAvailable ?? 0) + recovered;
+}
+if (itemCost.growthLoss > 0) {
+  for (let i = 0; i < itemCost.growthLoss; i += 1) {
+    applyGrowthDelta(player, -1);
+  }
+}
+
+for (const reward of lens.rewards) {
+  applyReward(player, reward);
+}
+const itemReward = accumulateItemEffects(
+  (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+  'reward',
+);
+if (
+  itemReward.resources.light ||
+  itemReward.resources.rainbow ||
+  itemReward.resources.stagnation ||
+  itemReward.resources.actionPoints ||
+  itemReward.resources.creativity
+) {
+  applyReward(player, { type: 'resource', value: itemReward.resources });
+}
+if (itemReward.lobbyGain > 0) {
+  gainLobbyFromStock(player, itemReward.lobbyGain);
+}
+if (itemReward.growthGain > 0) {
+  const growthSelections = Array.isArray(action.payload.growthSelections)
+    ? (action.payload.growthSelections as string[])
+    : undefined;
+  applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+}
+
+lens.status = 'exhausted';
+const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
+let occupiedSlot = targetSlots.find((slot) => slot.occupantId === action.playerId);
+if (!occupiedSlot) {
+  occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
   if (!occupiedSlot) {
-    occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
-    if (!occupiedSlot) {
-      throw new Error('ロビー枠がありません');
-    }
-    const available = getLobbyAvailable(player);
-    if (available <= 0) {
-      throw new Error('ロビーが不足しています');
-    }
-    player.lobbyAvailable = available - 1;
-    occupiedSlot.occupantId = action.playerId;
+    throw new Error('ロビー枠がありません');
   }
-  occupiedSlot.isActive = false;
-
-  if (lens.ownerId !== action.playerId) {
-    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
-      actorId: action.playerId,
-      ownerId: lens.ownerId,
-      actionType: 'lensActivate',
-    });
+  const available = getLobbyAvailable(player);
+  if (available <= 0) {
+    throw new Error('ロビーが不足しています');
   }
+  player.lobbyAvailable = available - 1;
+  occupiedSlot.occupantId = action.playerId;
+}
+occupiedSlot.isActive = false;
 
-  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+if (lens.ownerId !== action.playerId) {
+  triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
     actorId: action.playerId,
+    ownerId: lens.ownerId,
     actionType: 'lensActivate',
   });
+}
+
+triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+  actorId: action.playerId,
+  actionType: 'lensActivate',
+});
 };
 
 export const validateMove: Validator = async (action, context) => {
@@ -1963,13 +2037,13 @@ function accumulateItemEffects(
 ): ItemEffectSummary {
   const summary: ItemEffectSummary = {
     resources: {},
-  lobbyGain: 0,
-  lobbyReturn: 0,
-  growthGain: 0,
-  growthLoss: 0,
-  creativityCost: 0,
-  vpGain: 0,
-};
+    lobbyGain: 0,
+    lobbyReturn: 0,
+    growthGain: 0,
+    growthLoss: 0,
+    creativityCost: 0,
+    vpGain: 0,
+  };
   if (!Array.isArray(items)) {
     return summary;
   }
@@ -2101,12 +2175,12 @@ function applyGrowthSelection(
       requested.length > 0
         ? requested.shift()
         : Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId] ?? {}).find((nodeId) => {
-            return (
-              !unlocked.has(nodeId) &&
-              !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
-              canUnlockGrowthNode(player.characterId!, nodeId, unlocked)
-            );
-          });
+          return (
+            !unlocked.has(nodeId) &&
+            !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
+            canUnlockGrowthNode(player.characterId!, nodeId, unlocked)
+          );
+        });
     if (!nextId) {
       break;
     }
