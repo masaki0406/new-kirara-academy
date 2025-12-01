@@ -308,7 +308,7 @@ export default function HomePage(): JSX.Element {
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
-        <h1 className={styles.heroTitle}>Kirara Academy ロビー</h1>
+        <h1 className={styles.heroTitle}>Kirara Academy ロビー (v1.1)</h1>
         <p className={styles.heroDescription}>
           Firebase Functions を介してルームを作成・参加し、ゲーム進行の準備を整えます。
         </p>
@@ -514,9 +514,8 @@ export default function HomePage(): JSX.Element {
             <span className={styles.metaLabel}>ローカルプレイヤー</span>
             <span className={styles.metaValue}>
               {localPlayer
-                ? `${localPlayer.name} (${
-                    localPlayer.role === "host" ? "ホスト" : "参加者"
-                  })`
+                ? `${localPlayer.name} (${localPlayer.role === "host" ? "ホスト" : "参加者"
+                })`
                 : "未登録"}
             </span>
           </div>
