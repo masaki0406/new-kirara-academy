@@ -286,7 +286,7 @@ function ensureStateDefaults(state: GameState): void {
 }
 
 export class RoomService {
-  constructor(private readonly adapter: FirestoreAdapter) {}
+  constructor(private readonly adapter: FirestoreAdapter) { }
 
   public static readonly DEFAULT_LOBBY_STOCK = 4;
 
@@ -311,9 +311,9 @@ export class RoomService {
       creativity: 0,
       vp: 0,
       resources: existingResources ?? {
-        light: 0,
-        rainbow: 0,
-        stagnation: 0,
+        light: 2,
+        rainbow: 2,
+        stagnation: 2,
         maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
       },
       collectedDevelopmentCards: [],
@@ -379,9 +379,9 @@ export class RoomService {
 
     if (!state.players[params.playerId]) {
       const resources = state.players[params.playerId]?.resources ?? {
-        light: 0,
-        rainbow: 0,
-        stagnation: 0,
+        light: 2,
+        rainbow: 2,
+        stagnation: 2,
         maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
       };
       state.players[params.playerId] = {
@@ -395,18 +395,18 @@ export class RoomService {
         resources,
         collectedDevelopmentCards: [],
         collectedVpCards: [],
-      collectedFoundationCards: {},
-      craftedLenses: [],
-      ownedLenses: [],
-      tasksCompleted: [],
-      hasPassed: false,
-      isRooting: false,
-      unlockedCharacterNodes: [],
-      lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
-      lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
-      lobbyUsed: 0,
-    };
-  }
+        collectedFoundationCards: {},
+        craftedLenses: [],
+        ownedLenses: [],
+        tasksCompleted: [],
+        hasPassed: false,
+        isRooting: false,
+        unlockedCharacterNodes: [],
+        lobbyReserve: RoomService.DEFAULT_LOBBY_STOCK,
+        lobbyAvailable: RoomService.DEFAULT_LOBBY_STOCK,
+        lobbyUsed: 0,
+      };
+    }
 
     if (!state.turnOrder.includes(params.playerId)) {
       state.turnOrder.push(params.playerId);
