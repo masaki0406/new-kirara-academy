@@ -27,6 +27,7 @@ import type {
   CraftedLens,
   CraftedLensSideItem,
   PolishActionPayload,
+  LobbyLocation,
 } from "@domain/types";
 import { CraftedLensPreview } from "../../components/CraftedLensPreview";
 
@@ -1998,6 +1999,60 @@ export default function PlayPage(): JSX.Element {
     setIsWillSubmitting(false);
   }, []);
 
+  const renderLobbyReturnSelector = () => {
+    if (lensActivateLobbyReturnNeeded <= 0) return null;
+
+    const handleToggle = (key: string) => {
+      setLensActivateLobbyReturnSelectedKeys(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          if (next.size < lensActivateLobbyReturnNeeded) {
+            next.add(key);
+          }
+        }
+        return Array.from(next);
+      });
+    };
+
+    return (
+      <div className={styles.actionConfirmSection}>
+        <h5 className={styles.actionConfirmHeading}>ロビー返却選択 (必要: {lensActivateLobbyReturnNeeded})</h5>
+        <div className={styles.willList} role="group" aria-label="ロビー返却選択">
+          {lobbyReturnOptions.length > 0 ? (
+            lobbyReturnOptions.map((option) => {
+              const checked = lensActivateLobbyReturnSelectedKeys.includes(option.key);
+              const disabled = !checked && lensActivateLobbyReturnSelectedKeys.length >= lensActivateLobbyReturnNeeded;
+              return (
+                <label
+                  key={option.key}
+                  className={classNames(
+                    styles.willOption,
+                    checked ? styles.willOptionActive : undefined,
+                    disabled ? styles.willOptionDisabled : undefined
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => handleToggle(option.key)}
+                    disabled={disabled}
+                  />
+                  <div>
+                    <span className={styles.willAbilityTitle}>{option.label}</span>
+                  </div>
+                </label>
+              );
+            })
+          ) : (
+            <p className={styles.willAbilityDescription}>返却可能なロビーがありません。</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const openLensActivateDialog = useCallback(() => {
     if (lensActivateTargets.length === 0) {
       setFeedback("起動できるレンズがありません。");
@@ -2071,6 +2126,67 @@ export default function PlayPage(): JSX.Element {
     }
     setLensActivateGrowthSelections(Array.from({ length: lensActivateGrowthNeeded }, () => ""));
   }, [lensActivateGrowthNeeded, selectedLensActivateTarget?.lensId]);
+
+  const lensActivateLobbyReturnNeeded = useMemo(() => {
+    if (!selectedLensActivateTarget) return 0;
+    const items = (selectedLensActivateTarget as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems;
+    const cost = accumulateItemCostEffects(items);
+    return cost.lobbyReturn;
+  }, [selectedLensActivateTarget]);
+
+  const lobbyReturnOptions = useMemo(() => {
+    if (lensActivateLobbyReturnNeeded <= 0 || !gameState || !localPlayer) return [];
+    const options: { label: string; value: LobbyLocation; key: string }[] = [];
+
+    // Board Lenses
+    gameState.board?.lobbySlots?.forEach((slot, index) => {
+      if (slot.occupantId === localPlayer.id) {
+        options.push({
+          label: `レンズ ${slot.lensId}`,
+          value: { type: 'lens', id: slot.lensId },
+          key: `lens-${slot.lensId}-${index}`
+        });
+      }
+    });
+
+    // Labs
+    gameState.labPlacements?.forEach((placement, index) => {
+      if (placement.playerId === localPlayer.id) {
+        for (let i = 0; i < placement.count; i++) {
+          options.push({
+            label: `ラボ ${placement.labId}`,
+            value: { type: 'lab', id: placement.labId },
+            key: `lab-${placement.labId}-${index}-${i}`
+          });
+        }
+      }
+    });
+
+    // Hand Used
+    for (let i = 0; i < lobbySummary.handUsed; i++) {
+      options.push({
+        label: '手元（使用済み）',
+        value: { type: 'hand', id: 'used' },
+        key: `hand-used-${i}`
+      });
+    }
+
+    // Hand Unused
+    for (let i = 0; i < lobbySummary.handUnused; i++) {
+      options.push({
+        label: '手元（未使用）',
+        value: { type: 'hand', id: 'unused' },
+        key: `hand-unused-${i}`
+      });
+    }
+    return options;
+  }, [lensActivateLobbyReturnNeeded, gameState, localPlayer, lobbySummary]);
+
+  const [lensActivateLobbyReturnSelectedKeys, setLensActivateLobbyReturnSelectedKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    setLensActivateLobbyReturnSelectedKeys([]);
+  }, [lensActivateLobbyReturnNeeded, selectedLensActivateTarget?.lensId]);
 
   const selectedRefreshTarget = useMemo(
     () =>
@@ -2154,6 +2270,15 @@ export default function PlayPage(): JSX.Element {
       setFeedback("起動するレンズを選択してください。");
       return;
     }
+    if (lensActivateLobbyReturnNeeded > 0 && lensActivateLobbyReturnSelectedKeys.length < lensActivateLobbyReturnNeeded) {
+      setFeedback(`戻すロビーを ${lensActivateLobbyReturnNeeded} 個選択してください。`);
+      return;
+    }
+    const returnLobbyLocations = lensActivateLobbyReturnSelectedKeys.map(key => {
+      const option = lobbyReturnOptions.find(o => o.key === key);
+      return option?.value;
+    }).filter(Boolean) as LobbyLocation[];
+
     setIsLensActivateSubmitting(true);
     setPendingActionId("lens-activate");
     try {
@@ -2165,6 +2290,8 @@ export default function PlayPage(): JSX.Element {
             lensId,
             growthSelections:
               lensActivateGrowthNeeded > 0 ? lensActivateGrowthSelections.filter(Boolean) : undefined,
+            returnLobbyLocations:
+              lensActivateLobbyReturnNeeded > 0 ? returnLobbyLocations : undefined,
           },
         },
       });
@@ -3648,8 +3775,8 @@ export default function PlayPage(): JSX.Element {
                                 <li
                                   key={node.id}
                                   className={`${styles.growthItem} ${node.isUnlocked
-                                      ? styles.growthItemUnlocked
-                                      : styles.growthItemLocked
+                                    ? styles.growthItemUnlocked
+                                    : styles.growthItemLocked
                                     }`}
                                 >
                                   <div className={styles.growthHeader}>
@@ -3657,8 +3784,8 @@ export default function PlayPage(): JSX.Element {
                                     <span className={styles.growthName}>{node.name}</span>
                                     <span
                                       className={`${styles.growthStatus} ${node.isUnlocked
-                                          ? styles.growthStatusUnlocked
-                                          : styles.growthStatusLocked
+                                        ? styles.growthStatusUnlocked
+                                        : styles.growthStatusLocked
                                         }`}
                                     >
                                       {node.isUnlocked ? "解放済み" : "未解放"}
@@ -4183,6 +4310,7 @@ export default function PlayPage(): JSX.Element {
                 )}
               </ul>
             </div>
+            {renderLobbyReturnSelector()}
             {renderGrowthSelector(
               lensActivateGrowthNeeded,
               lensActivateGrowthSelections,

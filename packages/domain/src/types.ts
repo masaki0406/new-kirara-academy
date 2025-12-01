@@ -96,6 +96,17 @@ export type ActionType =
   | 'rooting'
   | 'pass';
 
+export interface LobbyLocation {
+  type: 'lens' | 'lab' | 'hand';
+  id: string; // 'used' for hand? or just ignore id for hand
+}
+
+export interface LensActivatePayload {
+  lensId: string;
+  growthSelections?: string[];
+  returnLobbyLocations?: LobbyLocation[];
+}
+
 export interface PlayerAction {
   playerId: PlayerId;
   actionType: ActionType;
@@ -348,11 +359,11 @@ export interface CharacterEffect {
   payload: Record<string, unknown>;
 }
 
-export interface LensDefinition extends LensState {}
+export interface LensDefinition extends LensState { }
 
-export interface DevelopmentCardDefinition extends DevelopmentCardState {}
+export interface DevelopmentCardDefinition extends DevelopmentCardState { }
 
-export interface TaskDefinition extends TaskState {}
+export interface TaskDefinition extends TaskState { }
 
 export interface LabCostDefinition {
   actionPoints?: number;

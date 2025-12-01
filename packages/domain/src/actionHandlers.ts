@@ -23,6 +23,8 @@ import {
   LabDefinition,
   LabCostDefinition,
   LobbySlot,
+  LensActivatePayload,
+  LobbyLocation,
 } from './types';
 import { triggerEvent } from './triggerEngine';
 import {
@@ -754,8 +756,52 @@ export const validateLensActivate: Validator = async (action, context) => {
     errors.push('創造力が不足しています');
   }
 
-  if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
-    errors.push('戻せるロビーが不足しています');
+  if (itemCost.lobbyReturn > 0) {
+    if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+      errors.push('戻せるロビーが不足しています');
+    } else {
+      const payload = action.payload as unknown as LensActivatePayload;
+      const returnLocations = payload.returnLobbyLocations;
+
+      if (!returnLocations || !Array.isArray(returnLocations)) {
+        errors.push('戻すロビーが指定されていません');
+      } else if (returnLocations.length !== itemCost.lobbyReturn) {
+        errors.push(`戻すロビーの数が正しくありません（必要: ${itemCost.lobbyReturn}, 指定: ${returnLocations.length}）`);
+      } else {
+        // Check validity of each location
+        let handUsedCount = 0;
+        for (const loc of returnLocations) {
+          if (loc.type === 'lens') {
+            const slot = gameState.board.lobbySlots.find(s => s.lensId === loc.id && s.occupantId === action.playerId);
+            if (!slot) {
+              errors.push(`指定されたレンズ（${loc.id}）にあなたのロビーはありません`);
+            }
+          } else if (loc.type === 'lab') {
+            const placement = gameState.labPlacements.find(p => p.labId === loc.id && p.playerId === action.playerId);
+            if (!placement || placement.count <= 0) {
+              errors.push(`指定されたラボ（${loc.id}）にあなたのロビーはありません`);
+            }
+          } else if (loc.type === 'hand') {
+            handUsedCount++;
+          } else {
+            errors.push('不明なロビーの場所タイプです');
+          }
+        }
+
+        if (handUsedCount > 0) {
+          const boardUsed =
+            gameState.board.lobbySlots.filter(s => s.occupantId === action.playerId).length +
+            gameState.labPlacements.filter(p => p.playerId === action.playerId).reduce((sum, p) => sum + p.count, 0);
+
+          const totalUsed = getPlayerLobbyUsed(player);
+          const handUsed = Math.max(0, totalUsed - boardUsed);
+
+          if (handUsedCount > handUsed) {
+            errors.push('手持ちの使用済みロビーが不足しています');
+          }
+        }
+      }
+    }
   }
 
   if (itemCost.growthLoss > 0) {
@@ -798,7 +844,39 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
   }
   if (itemCost.lobbyReturn > 0) {
-    returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    const payload = action.payload as unknown as LensActivatePayload;
+    const locations = payload.returnLobbyLocations;
+
+    if (locations && locations.length === itemCost.lobbyReturn) {
+      for (const loc of locations) {
+        if (loc.type === 'lens') {
+          const slot = gameState.board.lobbySlots.find(s => s.lensId === loc.id && s.occupantId === action.playerId);
+          if (slot) {
+            delete slot.occupantId;
+            slot.isActive = true;
+          }
+        } else if (loc.type === 'lab') {
+          const placement = gameState.labPlacements.find(p => p.labId === loc.id && p.playerId === action.playerId);
+          if (placement) {
+            placement.count -= 1;
+            if (placement.count <= 0) {
+              gameState.labPlacements = gameState.labPlacements.filter(p => p !== placement);
+            }
+          }
+        } else if (loc.type === 'hand') {
+          const currentUsed = getPlayerLobbyUsed(player);
+          player.lobbyUsed = Math.max(0, currentUsed - 1);
+        }
+
+        const currentAvailable = getLobbyAvailable(player);
+        player.lobbyAvailable = currentAvailable + 1;
+        if (typeof player.lobbyReserve === 'number') {
+          player.lobbyReserve = player.lobbyReserve + 1;
+        }
+      }
+    } else {
+      returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    }
   }
 
   if (itemCost.growthLoss > 0) {
