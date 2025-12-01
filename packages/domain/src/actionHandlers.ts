@@ -965,6 +965,111 @@ export const validateMove: Validator = async (action, context) => {
   return errors;
 };
 
+export const applyMove: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+
+  const lensId = action.payload.lensId as string;
+  const slot = gameState.board.lobbySlots.find(
+    (item) => item.lensId === lensId && !item.occupantId,
+  );
+  if (!slot) {
+    throw new Error('空きロビーがありません');
+  }
+
+  player.actionPoints = Math.max(0, player.actionPoints - 2);
+  slot.occupantId = action.playerId;
+  slot.isActive = true;
+};
+
+export const validateRefresh: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.currentPlayerId !== action.playerId) {
+    errors.push('現在の手番プレイヤーではありません');
+  }
+
+  if (player.actionPoints < 3) {
+    errors.push('行動力が不足しています');
+  }
+
+  const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+  if (!lensId) {
+    errors.push('再起動するレンズIDが指定されていません');
+    return errors;
+  }
+
+  const lens = gameState.board.lenses[lensId];
+  if (!lens) {
+    errors.push('指定されたレンズが存在しません');
+    return errors;
+  }
+
+  if (lens.status !== 'exhausted') {
+    errors.push('レンズは再起動の必要がありません');
+  }
+
+  const slot = gameState.board.lobbySlots.find(
+    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+  );
+  if (!slot) {
+    errors.push('使用済みの自分のロビーが配置されていません');
+  }
+
+  if (getLobbyAvailable(player) <= 0) {
+    errors.push('未使用のロビーが不足しています');
+  }
+
+  const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+  if (player.actionPoints < totalActionCost) {
+    errors.push('行動力が不足しています');
+  }
+  if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
+    errors.push('創造力が不足しています');
+  }
+  const itemCost = accumulateItemEffects(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+    'cost',
+  );
+  const mergedCost: ResourceCost = {
+    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
+    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
+    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
+    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
+    actionPoints: lens.cost.actionPoints,
+  };
+  if (!canPayResourceCost(player.resources, mergedCost)) {
+    errors.push('必要な資源が不足しています');
+  }
+  if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
+    errors.push('創造力が不足しています');
+  }
+  if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+    errors.push('戻せるロビーが不足しています');
+  }
+  if (itemCost.growthLoss > 0) {
+    const current = new Set(player.unlockedCharacterNodes ?? []);
+    const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
+    if (removable.length < itemCost.growthLoss) {
+      errors.push('戻せる成長が不足しています');
+    }
+  }
+
+  return errors;
+};
+
+
+
+
 export const applyRefresh: EffectApplier = async (action, context) => {
   const { gameState } = context;
   const player = gameState.players[action.playerId];
