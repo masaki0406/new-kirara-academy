@@ -923,9 +923,8 @@ function buildDraftCraftedLens(
       detail.type === "vp"
         ? vpReward.amount !== null
           ? `VP × ${formatDisplayNumber(vpReward.amount)}`
-          : `${detail.card?.cardId ?? detail.cardId} ｜ 上(${formatCostRowText(detail.values.right.top)}) 下(${formatCostRowText(detail.values.right.bottom)}) ｜ ${
-              detailVpValue ? `VP × ${detailVpValue}` : "-"
-            }`
+          : `${detail.card?.cardId ?? detail.cardId} ｜ 上(${formatCostRowText(detail.values.right.top)}) 下(${formatCostRowText(detail.values.right.bottom)}) ｜ ${detailVpValue ? `VP × ${detailVpValue}` : "-"
+          }`
         : detail.costItem ?? detail.cardId;
     const item: CraftedLensSideItem = {
       cardId: detail.cardId,
@@ -1441,7 +1440,7 @@ export default function PlayPage(): JSX.Element {
 
     const handUnused =
       typeof localGamePlayer.lobbyAvailable === "number" &&
-      Number.isFinite(localGamePlayer.lobbyAvailable)
+        Number.isFinite(localGamePlayer.lobbyAvailable)
         ? Math.max(0, localGamePlayer.lobbyAvailable)
         : DEFAULT_LOBBY_STOCK;
 
@@ -1649,17 +1648,17 @@ export default function PlayPage(): JSX.Element {
     const selectedFoundation =
       polishFoundationChoice !== null
         ? collectedFoundationEntries.find(
-            (entry) => entry.cost === polishFoundationChoice && entry.count > 0,
-          ) ?? null
+          (entry) => entry.cost === polishFoundationChoice && entry.count > 0,
+        ) ?? null
         : null;
     const foundationMet =
       foundationRequirement <= 0
         ? Boolean(selectedFoundation && selectedFoundation.count > 0)
         : Boolean(
-            selectedFoundation &&
-            selectedFoundation.count > 0 &&
-            selectedFoundation.cost >= foundationRequirement,
-          );
+          selectedFoundation &&
+          selectedFoundation.count > 0 &&
+          selectedFoundation.cost >= foundationRequirement,
+        );
     const leftPositions = new Set<number>();
     const rightPositions = new Set<number>();
     let leftConflict = false;
@@ -2128,10 +2127,10 @@ export default function PlayPage(): JSX.Element {
       console.error(error);
       setFeedback(error instanceof Error ? error.message : "意思アクションの実行に失敗しました。");
     } finally {
-    setIsWillSubmitting(false);
-    setPendingActionId(null);
-  }
-}, [
+      setIsWillSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
     localPlayer?.id,
     selectedWillNodeId,
     availableWillNodes,
@@ -2148,7 +2147,7 @@ export default function PlayPage(): JSX.Element {
     }
     const lensId =
       selectedLensActivateId &&
-      lensActivateTargets.some((lens) => lens.lensId === selectedLensActivateId)
+        lensActivateTargets.some((lens) => lens.lensId === selectedLensActivateId)
         ? selectedLensActivateId
         : lensActivateTargets[0]?.lensId ?? null;
     if (!lensId) {
@@ -2174,24 +2173,24 @@ export default function PlayPage(): JSX.Element {
       closeLensActivateDialog();
     } catch (error) {
       console.error(error);
-    setFeedback(
-      error instanceof Error
-        ? error.message
-        : "レンズ起動アクションの実行に失敗しました。",
-    );
-  } finally {
-    setIsLensActivateSubmitting(false);
-    setPendingActionId(null);
-  }
-}, [
-  localPlayer?.id,
-  selectedLensActivateId,
-  lensActivateTargets,
-  performAction,
-  refresh,
-  closeLensActivateDialog,
-  setFeedback,
-]);
+      setFeedback(
+        error instanceof Error
+          ? error.message
+          : "レンズ起動アクションの実行に失敗しました。",
+      );
+    } finally {
+      setIsLensActivateSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
+    localPlayer?.id,
+    selectedLensActivateId,
+    lensActivateTargets,
+    performAction,
+    refresh,
+    closeLensActivateDialog,
+    setFeedback,
+  ]);
 
   const handleSubmitRefresh = useCallback(async () => {
     if (!localPlayer?.id) {
@@ -2200,7 +2199,7 @@ export default function PlayPage(): JSX.Element {
     }
     const lensId =
       selectedRefreshLensId &&
-      exhaustedLensTargets.some((lens) => lens.lensId === selectedRefreshLensId)
+        exhaustedLensTargets.some((lens) => lens.lensId === selectedRefreshLensId)
         ? selectedRefreshLensId
         : exhaustedLensTargets[0]?.lensId ?? null;
     if (!lensId) {
@@ -2230,18 +2229,18 @@ export default function PlayPage(): JSX.Element {
         error instanceof Error ? error.message : "再起動アクションの実行に失敗しました。",
       );
     } finally {
-    setIsRefreshSubmitting(false);
-    setPendingActionId(null);
-  }
-}, [
-  localPlayer?.id,
-  selectedRefreshLensId,
-  exhaustedLensTargets,
-  performAction,
-  refresh,
-  closeRefreshDialog,
-  setFeedback,
-]);
+      setIsRefreshSubmitting(false);
+      setPendingActionId(null);
+    }
+  }, [
+    localPlayer?.id,
+    selectedRefreshLensId,
+    exhaustedLensTargets,
+    performAction,
+    refresh,
+    closeRefreshDialog,
+    setFeedback,
+  ]);
 
   const handleSubmitPass = useCallback(async () => {
     if (!localPlayer?.id) {
@@ -2492,7 +2491,7 @@ export default function PlayPage(): JSX.Element {
     }
     const lensId =
       selectedPersuasionLensId &&
-      lensOpponentTargets.some((target) => target.lensId === selectedPersuasionLensId)
+        lensOpponentTargets.some((target) => target.lensId === selectedPersuasionLensId)
         ? selectedPersuasionLensId
         : lensOpponentTargets[0]?.lensId ?? null;
     if (!lensId) {
@@ -2566,7 +2565,7 @@ export default function PlayPage(): JSX.Element {
         console.error(error);
         setFeedback(
           error instanceof Error ? error.message : "収集アクションの実行に失敗しました。",
-      );
+        );
       } finally {
         setPendingCollectKey(null);
       }
@@ -2973,14 +2972,14 @@ export default function PlayPage(): JSX.Element {
                 return (
                   <li
                     key={player.playerId}
-                    className={`${styles.playerItem} ${
-                      isCurrent ? styles.playerItemActive : ""
-                    }`}
+                    className={`${styles.playerItem} ${isCurrent ? styles.playerItemActive : ""
+                      }`}
                   >
                     <div className={styles.playerRow}>
-                      <span className={styles.playerName}>
-                        {player.displayName}
-                      </span>
+                      <div className={styles.playerName}>
+                        {player.displayName} {player.isHost ? "(Host)" : ""}
+                        <span style={{ fontSize: "0.8em", opacity: 0.5, marginLeft: "8px" }}>v1.1</span>
+                      </div>
                       <div className={styles.badgeRow}>
                         {player.isHost && (
                           <span className={`${styles.badge} ${styles.badgeHost}`}>
@@ -3553,11 +3552,11 @@ export default function PlayPage(): JSX.Element {
                                 ) : null,
                               )}
                             </ul>
-                        )}
-                      </section>
-                      <section className={styles.collectedColumn}>
-                        <header className={styles.collectedSummary}>
-                          VPカード {polishVpOptions.length} 枚
+                          )}
+                        </section>
+                        <section className={styles.collectedColumn}>
+                          <header className={styles.collectedSummary}>
+                            VPカード {polishVpOptions.length} 枚
                           </header>
                           {polishVpOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
@@ -3648,21 +3647,19 @@ export default function PlayPage(): JSX.Element {
                               {growthNodesWithStatus.map((node) => (
                                 <li
                                   key={node.id}
-                                  className={`${styles.growthItem} ${
-                                    node.isUnlocked
+                                  className={`${styles.growthItem} ${node.isUnlocked
                                       ? styles.growthItemUnlocked
                                       : styles.growthItemLocked
-                                  }`}
+                                    }`}
                                 >
                                   <div className={styles.growthHeader}>
                                     <span className={styles.growthPosition}>{node.position}</span>
                                     <span className={styles.growthName}>{node.name}</span>
                                     <span
-                                      className={`${styles.growthStatus} ${
-                                        node.isUnlocked
+                                      className={`${styles.growthStatus} ${node.isUnlocked
                                           ? styles.growthStatusUnlocked
                                           : styles.growthStatusLocked
-                                      }`}
+                                        }`}
                                     >
                                       {node.isUnlocked ? "解放済み" : "未解放"}
                                     </span>
@@ -3677,7 +3674,7 @@ export default function PlayPage(): JSX.Element {
                               ))}
                             </ul>
                           </div>
-                    ) : (
+                        ) : (
                           <p className={styles.muted}>
                             このキャラクターの成長能力データはまだ登録されていません。
                           </p>
@@ -3794,8 +3791,8 @@ export default function PlayPage(): JSX.Element {
                                           </p>
                                         ) : null}
                                         {action.id === "lens-activate" &&
-                                        implemented &&
-                                        !hasLensActivateSources ? (
+                                          implemented &&
+                                          !hasLensActivateSources ? (
                                           <p className={styles.playerActionHint}>
                                             起動できるレンズがありません。
                                           </p>
@@ -4206,7 +4203,7 @@ export default function PlayPage(): JSX.Element {
                 className={styles.willPrimaryButton}
                 onClick={() => void handleSubmitLensActivate()}
                 disabled={
-                isLensActivateSubmitting || lensActivateTargets.length === 0 || !selectedLensActivateTarget
+                  isLensActivateSubmitting || lensActivateTargets.length === 0 || !selectedLensActivateTarget
                 }
               >
                 {isLensActivateSubmitting ? "送信中..." : "起動する"}
@@ -4670,9 +4667,8 @@ export default function PlayPage(): JSX.Element {
             </p>
             <div className={styles.rewardOptionList}>
               <label
-                className={`${styles.rewardOption} ${
-                  taskRewardDialog.choice === "growth" ? styles.rewardOptionActive : ""
-                } ${growthOptionDisabled ? styles.rewardOptionDisabled : ""}`}
+                className={`${styles.rewardOption} ${taskRewardDialog.choice === "growth" ? styles.rewardOptionActive : ""
+                  } ${growthOptionDisabled ? styles.rewardOptionDisabled : ""}`}
               >
                 <input
                   type="radio"
@@ -4684,14 +4680,14 @@ export default function PlayPage(): JSX.Element {
                     setTaskRewardDialog((prev) =>
                       prev
                         ? {
-                            ...prev,
-                            choice: "growth",
-                            nodeId:
-                              prev.nodeId &&
+                          ...prev,
+                          choice: "growth",
+                          nodeId:
+                            prev.nodeId &&
                               availableGrowthNodes.some((node) => node.id === prev.nodeId)
-                                ? prev.nodeId
-                                : availableGrowthNodes[0]?.id,
-                          }
+                              ? prev.nodeId
+                              : availableGrowthNodes[0]?.id,
+                        }
                         : prev,
                     )
                   }
@@ -4723,9 +4719,8 @@ export default function PlayPage(): JSX.Element {
                 )
               ) : null}
               <label
-                className={`${styles.rewardOption} ${
-                  taskRewardDialog.choice === "lobby" ? styles.rewardOptionActive : ""
-                }`}
+                className={`${styles.rewardOption} ${taskRewardDialog.choice === "lobby" ? styles.rewardOptionActive : ""
+                  }`}
               >
                 <input
                   type="radio"
