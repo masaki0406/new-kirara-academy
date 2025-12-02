@@ -903,6 +903,40 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     applyGrowthSelection(player, growthSelections, itemReward.growthGain);
   }
 
+  if (itemReward.lobbyGain > 0) {
+    const currentStock = player.lobbyStock ?? DEFAULT_LOBBY_STOCK;
+    player.lobbyStock = currentStock + itemReward.lobbyGain;
+    const currentAvailable = getLobbyAvailable(player);
+    player.lobbyAvailable = currentAvailable + itemReward.lobbyGain;
+    if (typeof player.lobbyReserve === 'number') {
+      player.lobbyReserve = player.lobbyReserve + itemReward.lobbyGain;
+    }
+  }
+
+  if (itemReward.resources) {
+    // Handle standard resources
+    (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
+      const amount = itemReward.resources[resource];
+      if (amount && amount > 0) {
+        const current = player.resources[resource] ?? 0;
+        const cap = player.resources.maxCapacity?.[resource] ?? 99;
+        player.resources[resource] = Math.min(cap, current + amount);
+      }
+    });
+
+    // Handle special resources
+    if (itemReward.resources.actionPoints && itemReward.resources.actionPoints > 0) {
+      player.actionPoints += itemReward.resources.actionPoints;
+    }
+    if (itemReward.resources.creativity && itemReward.resources.creativity > 0) {
+      player.creativity += itemReward.resources.creativity;
+    }
+  }
+
+  if (itemReward.vpGain > 0) {
+    player.vp = (player.vp ?? 0) + itemReward.vpGain;
+  }
+
   // ロビー消費とスロット占有
   // スロットが存在しない場合は作成する（push）
   if (!gameState.board.lobbySlots) {
