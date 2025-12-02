@@ -869,7 +869,16 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
         }
 
         const currentAvailable = getLobbyAvailable(player);
-        player.lobbyAvailable = currentAvailable + 1;
+        // Return to Stock (Reserve): Available stays same (consumed), Reserve increases
+        // Wait, if we return from Hand, we lose it from Hand (Available/Used).
+        // If we return from Available, Available decreases.
+        // But here we are iterating 'locations'.
+        // If loc.type === 'hand' (Used), we decreased Used.
+        // If loc.type === 'lens'/'lab', we removed from board.
+        // So the token is already "gone" from Active.
+        // Now we just need to add it to Reserve.
+        // AND we should NOT add it to Available.
+
         if (typeof player.lobbyReserve === 'number') {
           player.lobbyReserve = player.lobbyReserve + 1;
         }
@@ -904,13 +913,16 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   }
 
   if (itemReward.lobbyGain > 0) {
-    const currentStock = player.lobbyStock ?? DEFAULT_LOBBY_STOCK;
-    player.lobbyStock = currentStock + itemReward.lobbyGain;
-    const currentAvailable = getLobbyAvailable(player);
-    player.lobbyAvailable = currentAvailable + itemReward.lobbyGain;
-    if (typeof player.lobbyReserve === 'number') {
-      player.lobbyReserve = player.lobbyReserve + itemReward.lobbyGain;
-    }
+    // Gain (Recruit): Stock (Reserve) -> Used
+    const currentReserve = player.lobbyReserve ?? DEFAULT_LOBBY_STOCK;
+    // Ensure we have reserve to recruit from? User didn't specify, but usually yes.
+    // But for now let's just decrement Reserve and increment Used.
+    player.lobbyReserve = Math.max(0, currentReserve - itemReward.lobbyGain);
+
+    const currentUsed = player.lobbyUsed ?? 0;
+    player.lobbyUsed = currentUsed + itemReward.lobbyGain;
+
+    // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
   }
 
   if (itemReward.resources) {
