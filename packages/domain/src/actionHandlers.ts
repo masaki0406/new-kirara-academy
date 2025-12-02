@@ -728,7 +728,12 @@ export const validateLensActivate: Validator = async (action, context) => {
     errors.push('レンズは使用済みです');
   }
 
-  if (!canActivateLens(lensId, lens.ownerId, action.playerId, gameState)) {
+  const itemCost = accumulateItemEffects(
+    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+    'cost',
+  );
+
+  if (!canActivateLens(lensId, lens.ownerId, action.playerId, gameState, itemCost.lobbyReturn)) {
     errors.push('このレンズを起動する条件を満たしていません');
   }
 
@@ -736,11 +741,6 @@ export const validateLensActivate: Validator = async (action, context) => {
   if (player.actionPoints < totalActionCost) {
     errors.push('行動力が不足しています');
   }
-
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
   const mergedCost: ResourceCost = {
     light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
     rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
@@ -2159,6 +2159,7 @@ function canActivateLens(
   ownerId: string,
   playerId: string,
   gameState: GameState,
+  extraLobby: number = 0,
 ): boolean {
   const slots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
   const hasOccupant = slots.some((slot) => Boolean(slot.occupantId));
@@ -2167,7 +2168,7 @@ function canActivateLens(
   }
   const hasEmptySlot = slots.some((slot) => !slot.occupantId);
   const player = gameState.players[playerId];
-  const hasLobbyToken = player ? getLobbyAvailable(player) > 0 : false;
+  const hasLobbyToken = player ? (getLobbyAvailable(player) + extraLobby) > 0 : false;
   return hasEmptySlot && hasLobbyToken;
 }
 
