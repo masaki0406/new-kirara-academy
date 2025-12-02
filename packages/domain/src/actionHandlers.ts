@@ -864,24 +864,19 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
             }
           }
         } else if (loc.type === 'hand') {
-          const currentUsed = getPlayerLobbyUsed(player);
-          player.lobbyUsed = Math.max(0, currentUsed - 1);
+          if (loc.id === 'unused') {
+            const currentAvailable = getLobbyAvailable(player);
+            player.lobbyAvailable = Math.max(0, currentAvailable - 1);
+          } else {
+            const currentUsed = getPlayerLobbyUsed(player);
+            player.lobbyUsed = Math.max(0, currentUsed - 1);
+          }
         }
 
-        const currentAvailable = getLobbyAvailable(player);
-        // Return to Stock (Reserve): Available stays same (consumed), Reserve increases
-        // Wait, if we return from Hand, we lose it from Hand (Available/Used).
-        // If we return from Available, Available decreases.
-        // But here we are iterating 'locations'.
-        // If loc.type === 'hand' (Used), we decreased Used.
-        // If loc.type === 'lens'/'lab', we removed from board.
-        // So the token is already "gone" from Active.
-        // Now we just need to add it to Reserve.
-        // AND we should NOT add it to Available.
-
-        if (typeof player.lobbyReserve === 'number') {
-          player.lobbyReserve = player.lobbyReserve + 1;
-        }
+        // Return to Stock (Reserve)
+        // We removed the token from Active (Hand/Board), now add to Reserve.
+        const currentReserve = getLobbyReserve(player);
+        player.lobbyReserve = currentReserve + 1;
       }
     } else {
       returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
