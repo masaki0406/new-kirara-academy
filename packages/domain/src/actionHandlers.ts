@@ -2326,6 +2326,17 @@ function returnLobbyToStock(
   }
   let remaining = amount;
 
+  // 手持ち使用済み (Prioritize returning Used first)
+  if (remaining > 0) {
+    const currentUsed = getPlayerLobbyUsed(player);
+    const takeUsed = Math.min(currentUsed, remaining);
+    if (takeUsed > 0) {
+      player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
+      player.lobbyReserve = getLobbyReserve(player) + takeUsed;
+      remaining -= takeUsed;
+    }
+  }
+
   // ボード上（今回のレンズ以外）
   gameState.board.lobbySlots.forEach((slot) => {
     if (remaining <= 0) {
@@ -2355,7 +2366,7 @@ function returnLobbyToStock(
     }
   }
 
-  // 手持ち未使用
+  // 手持ち未使用 (Last resort)
   if (remaining > 0) {
     const available = getLobbyAvailable(player);
     const takeAvail = Math.min(available, remaining);
@@ -2363,17 +2374,6 @@ function returnLobbyToStock(
       player.lobbyAvailable = available - takeAvail;
       player.lobbyReserve = getLobbyReserve(player) + takeAvail;
       remaining -= takeAvail;
-    }
-  }
-
-  // 手持ち使用済み
-  if (remaining > 0) {
-    const currentUsed = getPlayerLobbyUsed(player);
-    const takeUsed = Math.min(currentUsed, remaining);
-    if (takeUsed > 0) {
-      player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
-      player.lobbyReserve = getLobbyReserve(player) + takeUsed;
-      remaining -= takeUsed;
     }
   }
 
