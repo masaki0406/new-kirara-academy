@@ -1092,8 +1092,11 @@ export default function PlayPage(): JSX.Element {
   useEffect(() => {
     if (gameState?.logs) {
       const lastLog = gameState.logs[gameState.logs.length - 1];
-      if (lastLog && lastLog.payload && (lastLog.payload as any).message && (lastLog.payload as any).message.startsWith('[DEBUG]')) {
-        console.log('SERVER LOG:', (lastLog.payload as any).message, (lastLog.payload as any));
+      if (lastLog && lastLog.payload) {
+        const message = lastLog.payload.message;
+        if (typeof message === 'string' && message.startsWith('[DEBUG]')) {
+          console.log('SERVER LOG:', message, lastLog.payload);
+        }
       }
     }
   }, [gameState?.logs]);
