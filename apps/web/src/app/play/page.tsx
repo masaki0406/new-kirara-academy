@@ -4903,6 +4903,39 @@ export default function PlayPage(): JSX.Element {
           </div>
         </div>
       )}
+      {/* DEBUG OVERLAY */}
+      <div style={{
+        position: 'fixed',
+        bottom: '10px',
+        right: '10px',
+        maxWidth: '400px',
+        maxHeight: '200px',
+        overflow: 'auto',
+        background: 'rgba(0,0,0,0.8)',
+        color: 'lime',
+        padding: '10px',
+        zIndex: 9999,
+        fontSize: '12px',
+        fontFamily: 'monospace',
+        pointerEvents: 'none'
+      }}>
+        <div>Logs: {gameState?.logs?.length ?? 0}</div>
+        <div>
+          Last Debug: {
+            gameState?.logs?.slice().reverse().find(l =>
+              l.payload && typeof l.payload.message === 'string' && l.payload.message.startsWith('[DEBUG]')
+            )?.payload.message ?? 'None'
+          }
+        </div>
+        <pre style={{ whiteSpace: 'pre-wrap' }}>
+          {JSON.stringify(
+            gameState?.logs?.slice().reverse().find(l =>
+              l.payload && typeof l.payload.message === 'string' && l.payload.message.startsWith('[DEBUG]')
+            )?.payload ?? {},
+            null, 2
+          )}
+        </pre>
+      </div>
     </div>
   );
 }
