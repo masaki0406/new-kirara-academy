@@ -817,6 +817,11 @@ export const validateLensActivate: Validator = async (action, context) => {
 
 export const applyLensActivate: EffectApplier = async (action, context) => {
   const { gameState } = context;
+  console.log('[DEBUG] applyLensActivate called', {
+    playerId: action.playerId,
+    lensId: action.payload.lensId,
+    payload: action.payload
+  });
   const player = gameState.players[action.playerId];
   if (!player) {
     throw new Error('プレイヤーが存在しません');
@@ -835,6 +840,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
     'cost',
   );
+  console.log('[DEBUG] Item Cost calculated', itemCost);
   payResourceCost(player.resources, lens.cost);
   payResourceCost(player.resources, itemCost.resources);
   if (lens.cost.creativity) {
@@ -846,9 +852,11 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   if (itemCost.lobbyReturn > 0) {
     const payload = action.payload as unknown as LensActivatePayload;
     const locations = payload.returnLobbyLocations;
+    console.log('[DEBUG] Lobby Return required', { needed: itemCost.lobbyReturn, providedLocations: locations });
 
     if (locations && locations.length === itemCost.lobbyReturn) {
       for (const loc of locations) {
+        console.log('[DEBUG] Processing return location', loc);
         if (loc.type === 'lens') {
           const slot = gameState.board.lobbySlots.find(s => s.lensId === loc.id && s.occupantId === action.playerId);
           if (slot) {
@@ -877,8 +885,10 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
         // We removed the token from Active (Hand/Board), now add to Reserve.
         const currentReserve = getLobbyReserve(player);
         player.lobbyReserve = currentReserve + 1;
+        console.log('[DEBUG] Lobby returned to reserve', { prevReserve: currentReserve, newReserve: player.lobbyReserve });
       }
     } else {
+      console.log('[DEBUG] Auto-returning lobby (no locations provided)');
       returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
     }
   }
@@ -900,6 +910,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
     'reward',
   );
+  console.log('[DEBUG] Item Reward calculated', itemReward);
   if (itemReward.growthGain > 0) {
     const growthSelections = Array.isArray(action.payload.growthSelections)
       ? (action.payload.growthSelections as string[])
