@@ -4922,14 +4922,14 @@ export default function PlayPage(): JSX.Element {
         <div>Logs: {gameState?.logs?.length ?? 0}</div>
         <div>
           Last Debug: {
-            gameState?.logs?.slice().reverse().find(l =>
+            (gameState?.logs ?? []).slice().reverse().find(l =>
               l.payload && typeof l.payload.message === 'string' && l.payload.message.startsWith('[DEBUG]')
             )?.payload.message ?? 'None'
           }
         </div>
         <pre style={{ whiteSpace: 'pre-wrap' }}>
           {JSON.stringify(
-            gameState?.logs?.slice().reverse().find(l =>
+            (gameState?.logs ?? []).slice().reverse().find(l =>
               l.payload && typeof l.payload.message === 'string' && l.payload.message.startsWith('[DEBUG]')
             )?.payload ?? {},
             null, 2
