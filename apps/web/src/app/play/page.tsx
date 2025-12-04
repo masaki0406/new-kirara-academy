@@ -1091,13 +1091,16 @@ export default function PlayPage(): JSX.Element {
   // DEBUG: Print logs from server
   useEffect(() => {
     if (gameState?.logs) {
-      const lastLog = gameState.logs[gameState.logs.length - 1];
-      if (lastLog && lastLog.payload) {
-        const message = lastLog.payload.message;
-        if (typeof message === 'string' && message.startsWith('[DEBUG]')) {
-          console.log('SERVER LOG:', message, lastLog.payload);
+      // Check the last 10 logs for debug messages
+      const recentLogs = gameState.logs.slice(-10);
+      recentLogs.forEach(log => {
+        if (log && log.payload) {
+          const message = log.payload.message;
+          if (typeof message === 'string' && message.startsWith('[DEBUG]')) {
+            console.log('SERVER LOG:', message, log.payload);
+          }
         }
-      }
+      });
     }
   }, [gameState?.logs]);
 
