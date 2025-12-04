@@ -1088,6 +1088,16 @@ export default function PlayPage(): JSX.Element {
   );
   const [roomIdInput, setRoomIdInput] = useState(sessionRoomId ?? "");
   const [feedback, setFeedback] = useState<string | null>(null);
+  // DEBUG: Print logs from server
+  useEffect(() => {
+    if (gameState?.logs) {
+      const lastLog = gameState.logs[gameState.logs.length - 1];
+      if (lastLog && lastLog.payload && (lastLog.payload as any).message && (lastLog.payload as any).message.startsWith('[DEBUG]')) {
+        console.log('SERVER LOG:', (lastLog.payload as any).message, (lastLog.payload as any));
+      }
+    }
+  }, [gameState?.logs]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [taskRewardDialog, setTaskRewardDialog] = useState<{

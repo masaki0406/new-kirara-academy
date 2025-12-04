@@ -817,10 +817,14 @@ export const validateLensActivate: Validator = async (action, context) => {
 
 export const applyLensActivate: EffectApplier = async (action, context) => {
   const { gameState } = context;
-  console.log('[DEBUG] applyLensActivate called', {
+  // DEBUG LOG
+  gameState.logs.push({
+    id: `debug-${Date.now()}-${Math.random()}`,
+    timestamp: Date.now(),
     playerId: action.playerId,
-    lensId: action.payload.lensId,
-    payload: action.payload
+    actionType: 'pass',
+    payload: { message: '[DEBUG] applyLensActivate called', lensId: action.payload.lensId, payload: action.payload },
+    result: { success: true }
   });
   const player = gameState.players[action.playerId];
   if (!player) {
@@ -840,7 +844,15 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
     'cost',
   );
-  console.log('[DEBUG] Item Cost calculated', itemCost);
+  // DEBUG LOG
+  gameState.logs.push({
+    id: `debug-${Date.now()}-${Math.random()}`,
+    timestamp: Date.now(),
+    playerId: action.playerId,
+    actionType: 'pass',
+    payload: { message: '[DEBUG] Item Cost', itemCost },
+    result: { success: true }
+  });
   payResourceCost(player.resources, lens.cost);
   payResourceCost(player.resources, itemCost.resources);
   if (lens.cost.creativity) {
@@ -852,7 +864,15 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
   if (itemCost.lobbyReturn > 0) {
     const payload = action.payload as unknown as LensActivatePayload;
     const locations = payload.returnLobbyLocations;
-    console.log('[DEBUG] Lobby Return required', { needed: itemCost.lobbyReturn, providedLocations: locations });
+    // DEBUG LOG
+    gameState.logs.push({
+      id: `debug-${Date.now()}-${Math.random()}`,
+      timestamp: Date.now(),
+      playerId: action.playerId,
+      actionType: 'pass',
+      payload: { message: '[DEBUG] Lobby Return Logic', needed: itemCost.lobbyReturn, locations },
+      result: { success: true }
+    });
 
     if (locations && locations.length === itemCost.lobbyReturn) {
       for (const loc of locations) {
@@ -885,10 +905,26 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
         // We removed the token from Active (Hand/Board), now add to Reserve.
         const currentReserve = getLobbyReserve(player);
         player.lobbyReserve = currentReserve + 1;
-        console.log('[DEBUG] Lobby returned to reserve', { prevReserve: currentReserve, newReserve: player.lobbyReserve });
+        // DEBUG LOG
+        gameState.logs.push({
+          id: `debug-${Date.now()}-${Math.random()}`,
+          timestamp: Date.now(),
+          playerId: action.playerId,
+          actionType: 'pass',
+          payload: { message: '[DEBUG] Returned to Reserve', prev: currentReserve, new: player.lobbyReserve },
+          result: { success: true }
+        });
       }
     } else {
-      console.log('[DEBUG] Auto-returning lobby (no locations provided)');
+      // DEBUG LOG
+      gameState.logs.push({
+        id: `debug-${Date.now()}-${Math.random()}`,
+        timestamp: Date.now(),
+        playerId: action.playerId,
+        actionType: 'pass',
+        payload: { message: '[DEBUG] Auto-return triggered' },
+        result: { success: true }
+      });
       returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
     }
   }
