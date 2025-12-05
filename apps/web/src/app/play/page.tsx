@@ -4920,6 +4920,8 @@ export default function PlayPage(): JSX.Element {
         pointerEvents: 'none'
       }}>
         <div>Logs: {gameState?.logs?.length ?? 0}</div>
+        <div>Needed: {lensActivateLobbyReturnNeeded}</div>
+        <div>Selected: {lensActivateLobbyReturnSelectedKeys.length}</div>
         <div>
           Last Debug: {
             ((gameState?.logs ?? []).slice().reverse().find(l =>
