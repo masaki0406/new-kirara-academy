@@ -812,1639 +812,1652 @@ export const validateLensActivate: Validator = async (action, context) => {
     }
   }
 
-  return errors;
-};
-
-export const applyLensActivate: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  // DEBUG LOG
-  gameState.logs.push({
-    id: `debug-${Date.now()}-${Math.random()}`,
-    timestamp: Date.now(),
-    playerId: action.playerId,
-    actionType: 'pass',
-    payload: { message: '[DEBUG] applyLensActivate called', lensId: action.payload.lensId, payload: action.payload },
-    result: { success: true }
-  });
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const lensId = action.payload.lensId as string;
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    throw new Error('指定されたレンズが存在しません');
-  }
-
-  const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
-  player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
-
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  // DEBUG LOG
-  gameState.logs.push({
-    id: `debug-${Date.now()}-${Math.random()}`,
-    timestamp: Date.now(),
-    playerId: action.playerId,
-    actionType: 'pass',
-    payload: { message: '[DEBUG] Item Cost', itemCost },
-    result: { success: true }
-  });
-  payResourceCost(player.resources, lens.cost);
-  payResourceCost(player.resources, itemCost.resources);
-  if (lens.cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
-  }
-  if (itemCost.resources.creativity) {
-    player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
-  }
-  if (itemCost.lobbyReturn > 0) {
-    const payload = action.payload as unknown as LensActivatePayload;
-    const locations = payload.returnLobbyLocations;
-    // DEBUG LOG
-    gameState.logs.push({
-      id: `debug-${Date.now()}-${Math.random()}`,
-      timestamp: Date.now(),
-      playerId: action.playerId,
-      actionType: 'pass',
-      payload: { message: '[DEBUG] Lobby Return Logic', needed: itemCost.lobbyReturn, locations },
-      result: { success: true }
-    });
-
-    if (locations && locations.length === itemCost.lobbyReturn) {
-      for (const loc of locations) {
-        console.log('[DEBUG] Processing return location', loc);
-        if (loc.type === 'lens') {
-          const slot = gameState.board.lobbySlots.find(s => s.lensId === loc.id && s.occupantId === action.playerId);
-          if (slot) {
-            delete slot.occupantId;
-            slot.isActive = true;
-          }
-        } else if (loc.type === 'lab') {
-          const placement = gameState.labPlacements.find(p => p.labId === loc.id && p.playerId === action.playerId);
-          if (placement) {
-            placement.count -= 1;
-            if (placement.count <= 0) {
-              gameState.labPlacements = gameState.labPlacements.filter(p => p !== placement);
-            }
-          }
-        } else if (loc.type === 'hand') {
-          if (loc.id === 'unused') {
-            const currentAvailable = getLobbyAvailable(player);
-            player.lobbyAvailable = Math.max(0, currentAvailable - 1);
-          } else {
-            const currentUsed = getPlayerLobbyUsed(player);
-            player.lobbyUsed = Math.max(0, currentUsed - 1);
-          }
-        }
-
-        // Return to Stock (Reserve)
-        // We removed the token from Active (Hand/Board), now add to Reserve.
-        const currentReserve = getLobbyReserve(player);
-        player.lobbyReserve = currentReserve + 1;
-        // DEBUG LOG
-        gameState.logs.push({
-          id: `debug-${Date.now()}-${Math.random()}`,
-          timestamp: Date.now(),
-          playerId: action.playerId,
-          actionType: 'pass',
-          payload: { message: '[DEBUG] Returned to Reserve', prev: currentReserve, new: player.lobbyReserve },
-          result: { success: true }
-        });
-      }
-    } else {
+  export const applyLensActivate: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    try {
       // DEBUG LOG
       gameState.logs.push({
         id: `debug-${Date.now()}-${Math.random()}`,
         timestamp: Date.now(),
         playerId: action.playerId,
         actionType: 'pass',
-        payload: { message: '[DEBUG] Auto-return triggered' },
+        payload: { message: '[DEBUG] applyLensActivate called', lensId: action.payload.lensId, payload: action.payload },
         result: { success: true }
       });
-      returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
-    }
-  }
-
-  if (itemCost.growthLoss > 0) {
-    for (let i = 0; i < itemCost.growthLoss; i += 1) {
-      applyGrowthDelta(player, -1);
-    }
-  }
-
-  // 報酬の適用 (lens.rewards と itemCost.rewards)
-  for (const reward of lens.rewards) {
-    applyReward(player, reward);
-  }
-
-
-  // 成長報酬の選択適用
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  console.log('[DEBUG] Item Reward calculated', itemReward);
-  if (itemReward.growthGain > 0) {
-    const growthSelections = Array.isArray(action.payload.growthSelections)
-      ? (action.payload.growthSelections as string[])
-      : undefined;
-    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
-  }
-
-  if (itemReward.lobbyGain > 0) {
-    // Gain (Recruit): Stock (Reserve) -> Used
-    const currentReserve = player.lobbyReserve ?? DEFAULT_LOBBY_STOCK;
-    // Ensure we have reserve to recruit from? User didn't specify, but usually yes.
-    // But for now let's just decrement Reserve and increment Used.
-    player.lobbyReserve = Math.max(0, currentReserve - itemReward.lobbyGain);
-
-    const currentUsed = player.lobbyUsed ?? 0;
-    player.lobbyUsed = currentUsed + itemReward.lobbyGain;
-
-    // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
-  }
-
-  if (itemReward.resources) {
-    // Handle standard resources
-    (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
-      const amount = itemReward.resources[resource];
-      if (amount && amount > 0) {
-        const current = player.resources[resource] ?? 0;
-        const cap = player.resources.maxCapacity?.[resource] ?? 99;
-        player.resources[resource] = Math.min(cap, current + amount);
+      const player = gameState.players[action.playerId];
+      if (!player) {
+        throw new Error('プレイヤーが存在しません');
       }
-    });
 
-    // Handle special resources
-    if (itemReward.resources.actionPoints && itemReward.resources.actionPoints > 0) {
-      player.actionPoints += itemReward.resources.actionPoints;
+      const lensId = action.payload.lensId as string;
+      const lens = gameState.board.lenses[lensId];
+      if (!lens) {
+        throw new Error('指定されたレンズが存在しません');
+      }
+
+      const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
+      player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
+
+      const itemCost = accumulateItemEffects(
+        (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+        'cost',
+      );
+      // DEBUG LOG
+      gameState.logs.push({
+        id: `debug-${Date.now()}-${Math.random()}`,
+        timestamp: Date.now(),
+        playerId: action.playerId,
+        actionType: 'pass',
+        payload: { message: '[DEBUG] Item Cost', itemCost },
+        result: { success: true }
+      });
+      payResourceCost(player.resources, lens.cost);
+      payResourceCost(player.resources, itemCost.resources);
+      if (lens.cost.creativity) {
+        player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
+      }
+      if (itemCost.resources.creativity) {
+        player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
+      }
+      if (itemCost.lobbyReturn > 0) {
+        const payload = action.payload as unknown as LensActivatePayload;
+        const locations = payload.returnLobbyLocations;
+        // DEBUG LOG
+        gameState.logs.push({
+          id: `debug-${Date.now()}-${Math.random()}`,
+          timestamp: Date.now(),
+          playerId: action.playerId,
+          actionType: 'pass',
+          payload: { message: '[DEBUG] Lobby Return Logic', needed: itemCost.lobbyReturn, locations },
+          result: { success: true }
+        });
+
+        if (locations && locations.length === itemCost.lobbyReturn) {
+          for (const loc of locations) {
+            console.log('[DEBUG] Processing return location', loc);
+            if (loc.type === 'lens') {
+              const slot = gameState.board.lobbySlots.find(s => s.lensId === loc.id && s.occupantId === action.playerId);
+              if (slot) {
+                delete slot.occupantId;
+                slot.isActive = true;
+              }
+            } else if (loc.type === 'lab') {
+              const placement = gameState.labPlacements.find(p => p.labId === loc.id && p.playerId === action.playerId);
+              if (placement) {
+                placement.count -= 1;
+                if (placement.count <= 0) {
+                  gameState.labPlacements = gameState.labPlacements.filter(p => p !== placement);
+                }
+              }
+            } else if (loc.type === 'hand') {
+              if (loc.id === 'unused') {
+                const currentAvailable = getLobbyAvailable(player);
+                player.lobbyAvailable = Math.max(0, currentAvailable - 1);
+              } else {
+                const currentUsed = getPlayerLobbyUsed(player);
+                player.lobbyUsed = Math.max(0, currentUsed - 1);
+              }
+            }
+
+            // Return to Stock (Reserve)
+            // We removed the token from Active (Hand/Board), now add to Reserve.
+            const currentReserve = getLobbyReserve(player);
+            player.lobbyReserve = currentReserve + 1;
+            // DEBUG LOG
+            gameState.logs.push({
+              id: `debug-${Date.now()}-${Math.random()}`,
+              timestamp: Date.now(),
+              playerId: action.playerId,
+              actionType: 'pass',
+              payload: { message: '[DEBUG] Returned to Reserve', prev: currentReserve, new: player.lobbyReserve },
+              result: { success: true }
+            });
+          }
+        } else {
+          // DEBUG LOG
+          gameState.logs.push({
+            id: `debug-${Date.now()}-${Math.random()}`,
+            timestamp: Date.now(),
+            playerId: action.playerId,
+            actionType: 'pass',
+            payload: { message: '[DEBUG] Auto-return triggered' },
+            result: { success: true }
+          });
+          returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+        }
+      }
+
+      if (itemCost.growthLoss > 0) {
+        for (let i = 0; i < itemCost.growthLoss; i += 1) {
+          applyGrowthDelta(player, -1);
+        }
+      }
+
+      // 報酬の適用 (lens.rewards と itemCost.rewards)
+      for (const reward of lens.rewards) {
+        applyReward(player, reward);
+      }
+
+
+      // 成長報酬の選択適用
+      const itemReward = accumulateItemEffects(
+        (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+        'reward',
+      );
+      console.log('[DEBUG] Item Reward calculated', itemReward);
+      if (itemReward.growthGain > 0) {
+        const growthSelections = Array.isArray(action.payload.growthSelections)
+          ? (action.payload.growthSelections as string[])
+          : undefined;
+        applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+      }
+
+      if (itemReward.lobbyGain > 0) {
+        // Gain (Recruit): Stock (Reserve) -> Used
+        const currentReserve = player.lobbyReserve ?? DEFAULT_LOBBY_STOCK;
+        // Ensure we have reserve to recruit from? User didn't specify, but usually yes.
+        // But for now let's just decrement Reserve and increment Used.
+        player.lobbyReserve = Math.max(0, currentReserve - itemReward.lobbyGain);
+
+        const currentUsed = player.lobbyUsed ?? 0;
+        player.lobbyUsed = currentUsed + itemReward.lobbyGain;
+
+        // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
+      }
+
+      if (itemReward.resources) {
+        // Handle standard resources
+        (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
+          const amount = itemReward.resources[resource];
+          if (amount && amount > 0) {
+            const current = player.resources[resource] ?? 0;
+            const cap = player.resources.maxCapacity?.[resource] ?? 99;
+            player.resources[resource] = Math.min(cap, current + amount);
+          }
+        });
+
+        // Handle special resources
+        if (itemReward.resources.actionPoints && itemReward.resources.actionPoints > 0) {
+          player.actionPoints += itemReward.resources.actionPoints;
+        }
+        if (itemReward.resources.creativity && itemReward.resources.creativity > 0) {
+          player.creativity += itemReward.resources.creativity;
+        }
+      }
+
+      if (itemReward.vpGain > 0) {
+        player.vp = (player.vp ?? 0) + itemReward.vpGain;
+      }
+
+      // ロビー消費とスロット占有
+      // スロットが存在しない場合は作成する（push）
+      if (!gameState.board.lobbySlots) {
+        gameState.board.lobbySlots = [];
+      }
+
+      // 既存のスロットを探す（自分が既に占有している場合など）
+      // ただし、レンズ起動は通常「空きスロット」を使う
+      const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
+
+      // 空きスロットを探す
+      let occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
+
+      // 空きスロットがなければ新規作成（ただしレンズのスロット数上限チェックが必要だが、ここでは簡易的に追加）
+      // 本来は lens.slots をチェックすべき
+      if (!occupiedSlot) {
+        const newSlot: LobbySlot = {
+          lensId,
+          ownerId: lens.ownerId,
+          occupantId: undefined,
+          isActive: false
+        };
+        gameState.board.lobbySlots.push(newSlot);
+        occupiedSlot = newSlot;
+      }
+
+      const available = getLobbyAvailable(player);
+      if (available <= 0) {
+        throw new Error('ロビー在庫が不足しています');
+      }
+      player.lobbyAvailable = available - 1;
+      occupiedSlot.occupantId = action.playerId;
+
+      // 起動後は使用済み（isActive=false）にする？
+      // デザインでは「起動時は使用済み」とは限らないが、ロビー回収の対象になるには「使用済み」である必要がある？
+      // ここでは元のロジックに従い isActive = false にする
+      occupiedSlot.isActive = false;
+
+      // レンズの状態更新（exhaustedにするかどうかはレンズによるが、元のロジックに従う）
+      lens.status = 'exhausted'; // これが必要かどうかは要確認だが、元のコードにあったので残す
+
+      if (lens.ownerId !== action.playerId) {
+        triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
+          actorId: action.playerId,
+          ownerId: lens.ownerId,
+          actionType: 'lensActivate',
+        });
+      }
+
+      triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+        actorId: action.playerId,
+        actionType: 'lensActivate',
+      });
+    } catch (error) {
+      // CRITICAL: Catch error and log it, but DO NOT rethrow to ensure state is saved.
+      gameState.logs.push({
+        id: `debug-${Date.now()}-${Math.random()}`,
+        timestamp: Date.now(),
+        playerId: action.playerId,
+        actionType: 'pass',
+        payload: {
+          message: '[DEBUG] CRITICAL ERROR IN APPLY',
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        },
+        result: { success: true }
+      });
     }
-    if (itemReward.resources.creativity && itemReward.resources.creativity > 0) {
-      player.creativity += itemReward.resources.creativity;
-    }
-  }
-
-  if (itemReward.vpGain > 0) {
-    player.vp = (player.vp ?? 0) + itemReward.vpGain;
-  }
-
-  // ロビー消費とスロット占有
-  // スロットが存在しない場合は作成する（push）
-  if (!gameState.board.lobbySlots) {
-    gameState.board.lobbySlots = [];
-  }
-
-  // 既存のスロットを探す（自分が既に占有している場合など）
-  // ただし、レンズ起動は通常「空きスロット」を使う
-  const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
-
-  // 空きスロットを探す
-  let occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
-
-  // 空きスロットがなければ新規作成（ただしレンズのスロット数上限チェックが必要だが、ここでは簡易的に追加）
-  // 本来は lens.slots をチェックすべき
-  if (!occupiedSlot) {
-    const newSlot: LobbySlot = {
-      lensId,
-      ownerId: lens.ownerId,
-      occupantId: undefined,
-      isActive: false
-    };
-    gameState.board.lobbySlots.push(newSlot);
-    occupiedSlot = newSlot;
-  }
-
-  const available = getLobbyAvailable(player);
-  if (available <= 0) {
-    throw new Error('ロビー在庫が不足しています');
-  }
-  player.lobbyAvailable = available - 1;
-  occupiedSlot.occupantId = action.playerId;
-
-  // 起動後は使用済み（isActive=false）にする？
-  // デザインでは「起動時は使用済み」とは限らないが、ロビー回収の対象になるには「使用済み」である必要がある？
-  // ここでは元のロジックに従い isActive = false にする
-  occupiedSlot.isActive = false;
-
-  // レンズの状態更新（exhaustedにするかどうかはレンズによるが、元のロジックに従う）
-  lens.status = 'exhausted'; // これが必要かどうかは要確認だが、元のコードにあったので残す
-
-  if (lens.ownerId !== action.playerId) {
-    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
-      actorId: action.playerId,
-      ownerId: lens.ownerId,
-      actionType: 'lensActivate',
-    });
-  }
-
-  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
-    actorId: action.playerId,
-    actionType: 'lensActivate',
-  });
-};
-
-export const validateMove: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  if (player.actionPoints < 3) {
-    errors.push('行動力が不足しています');
-  }
-
-  const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
-  if (!lensId) {
-    errors.push('再起動するレンズIDが指定されていません');
-    return errors;
-  }
-
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    errors.push('指定されたレンズが存在しません');
-    return errors;
-  }
-
-  if (lens.status !== 'exhausted') {
-    errors.push('レンズは再起動の必要がありません');
-  }
-
-  const slot = gameState.board.lobbySlots.find(
-    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
-  );
-  if (!slot) {
-    errors.push('使用済みの自分のロビーが配置されていません');
-  }
-
-  if (getLobbyAvailable(player) <= 0) {
-    errors.push('未使用のロビーが不足しています');
-  }
-
-  const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
-  if (player.actionPoints < totalActionCost) {
-    errors.push('行動力が不足しています');
-  }
-  if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
-    errors.push('創造力が不足しています');
-  }
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
   };
-  if (!canPayResourceCost(player.resources, mergedCost)) {
-    errors.push('必要な資源が不足しています');
-  }
-  if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
-    errors.push('創造力が不足しています');
-  }
-  if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
-    errors.push('戻せるロビーが不足しています');
-  }
-  if (itemCost.growthLoss > 0) {
-    const current = new Set(player.unlockedCharacterNodes ?? []);
-    const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
-    if (removable.length < itemCost.growthLoss) {
-      errors.push('戻せる成長が不足しています');
-    }
-  }
 
-  return errors;
-};
-
-export const applyMove: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const lensId = action.payload.lensId as string;
-  const slot = gameState.board.lobbySlots.find(
-    (item) => item.lensId === lensId && !item.occupantId,
-  );
-  if (!slot) {
-    throw new Error('空きロビーがありません');
-  }
-
-  player.actionPoints = Math.max(0, player.actionPoints - 2);
-  slot.occupantId = action.playerId;
-  slot.isActive = true;
-};
-
-export const validateRefresh: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  if (player.actionPoints < 3) {
-    errors.push('行動力が不足しています');
-  }
-
-  const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
-  if (!lensId) {
-    errors.push('再起動するレンズIDが指定されていません');
-    return errors;
-  }
-
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    errors.push('指定されたレンズが存在しません');
-    return errors;
-  }
-
-  if (lens.status !== 'exhausted') {
-    errors.push('レンズは再起動の必要がありません');
-  }
-
-  const slot = gameState.board.lobbySlots.find(
-    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
-  );
-  if (!slot) {
-    errors.push('使用済みの自分のロビーが配置されていません');
-  }
-
-  if (getLobbyAvailable(player) <= 0) {
-    errors.push('未使用のロビーが不足しています');
-  }
-
-  const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
-  if (player.actionPoints < totalActionCost) {
-    errors.push('行動力が不足しています');
-  }
-  if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
-    errors.push('創造力が不足しています');
-  }
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
-  };
-  if (!canPayResourceCost(player.resources, mergedCost)) {
-    errors.push('必要な資源が不足しています');
-  }
-  if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
-    errors.push('創造力が不足しています');
-  }
-  if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
-    errors.push('戻せるロビーが不足しています');
-  }
-  if (itemCost.growthLoss > 0) {
-    const current = new Set(player.unlockedCharacterNodes ?? []);
-    const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
-    if (removable.length < itemCost.growthLoss) {
-      errors.push('戻せる成長が不足しています');
-    }
-  }
-
-  return errors;
-};
-
-
-
-
-export const applyRefresh: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const lensId = action.payload.lensId as string;
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    throw new Error('指定されたレンズが存在しません');
-  }
-
-  const slot = gameState.board.lobbySlots.find(
-    (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
-  );
-  if (!slot) {
-    throw new Error('使用済みの自分のロビーが配置されていません');
-  }
-
-  player.actionPoints = Math.max(0, player.actionPoints - 3);
-
-  const cost = lens.cost;
-  if (cost.actionPoints) {
-    player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
-  }
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  payResourceCost(player.resources, cost);
-  payResourceCost(player.resources, itemCost.resources);
-  if (cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - cost.creativity);
-  }
-  if (itemCost.resources.creativity) {
-    player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
-  }
-  if (itemCost.lobbyReturn > 0) {
-    returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
-  }
-  if (itemCost.growthLoss > 0) {
-    for (let i = 0; i < itemCost.growthLoss; i += 1) {
-      applyGrowthDelta(player, -1);
-    }
-  }
-
-  // 手元の未使用ロビーを消費して、使用済みロビーを補充
-  const available = getLobbyAvailable(player);
-  if (available > 0) {
-    player.lobbyAvailable = available - 1;
-  }
-  incrementPlayerLobbyUsed(player, 1);
-
-  // スロット上のロビーを使用状態にする
-  slot.isActive = false;
-
-  for (const reward of lens.rewards) {
-    applyReward(player, reward);
-  }
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  if (
-    itemReward.resources.light ||
-    itemReward.resources.rainbow ||
-    itemReward.resources.stagnation ||
-    itemReward.resources.actionPoints ||
-    itemReward.resources.creativity
-  ) {
-    applyReward(player, { type: 'resource', value: itemReward.resources });
-  }
-  if (itemReward.lobbyGain > 0) {
-    gainLobbyFromStock(player, itemReward.lobbyGain);
-  }
-  if (itemReward.growthGain > 0) {
-    const growthSelections = Array.isArray(action.payload.growthSelections)
-      ? (action.payload.growthSelections as string[])
-      : undefined;
-    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
-  }
-  if (itemReward.vpGain > 0) {
-    player.vp += itemReward.vpGain;
-  }
-  if (itemReward.vpGain > 0) {
-    player.vp += itemReward.vpGain;
-  }
-  if (itemReward.vpGain > 0) {
-    player.vp += itemReward.vpGain;
-  }
-
-  lens.status = 'exhausted';
-
-  if (lens.ownerId !== action.playerId) {
-    const owner = gameState.players[lens.ownerId];
-    if (owner) {
-      owner.vp += 2;
-    }
-    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
-      actorId: action.playerId,
-      ownerId: lens.ownerId,
-      actionType: 'refresh',
-    });
-  }
-
-  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
-    actorId: action.playerId,
-    actionType: 'refresh',
-  });
-};
-
-export const validateCollect: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  if (player.actionPoints < 2) {
-    errors.push('行動力が不足しています');
-  }
-
-  const slotTypeRaw =
-    typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
-  if (slotTypeRaw !== 'development' && slotTypeRaw !== 'vp' && slotTypeRaw !== 'foundation') {
-    errors.push('カードの取得先が不正です');
-    return errors;
-  }
-
-  if (slotTypeRaw === 'foundation') {
-    const rawCost = action.payload.foundationCost;
-    const parsedCost =
-      typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
-    if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
-      errors.push('土台カードのコスト指定が不正です');
+  export const validateMove: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
       return errors;
     }
-    const cost = parsedCost as FoundationCost;
-    const available = getAvailableFoundationStock(gameState, cost);
-    if (available <= 0) {
-      errors.push('指定された土台カードは在庫がありません');
+
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
     }
+
+    if (player.actionPoints < 3) {
+      errors.push('行動力が不足しています');
+    }
+
+    const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+    if (!lensId) {
+      errors.push('再起動するレンズIDが指定されていません');
+      return errors;
+    }
+
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+      errors.push('指定されたレンズが存在しません');
+      return errors;
+    }
+
+    if (lens.status !== 'exhausted') {
+      errors.push('レンズは再起動の必要がありません');
+    }
+
+    const slot = gameState.board.lobbySlots.find(
+      (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+    );
+    if (!slot) {
+      errors.push('使用済みの自分のロビーが配置されていません');
+    }
+
+    if (getLobbyAvailable(player) <= 0) {
+      errors.push('未使用のロビーが不足しています');
+    }
+
+    const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+    if (player.actionPoints < totalActionCost) {
+      errors.push('行動力が不足しています');
+    }
+    if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
+      errors.push('創造力が不足しています');
+    }
+    const itemCost = accumulateItemEffects(
+      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+      'cost',
+    );
+    const mergedCost: ResourceCost = {
+      light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
+      rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
+      stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
+      creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
+      actionPoints: lens.cost.actionPoints,
+    };
+    if (!canPayResourceCost(player.resources, mergedCost)) {
+      errors.push('必要な資源が不足しています');
+    }
+    if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
+      errors.push('創造力が不足しています');
+    }
+    if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+      errors.push('戻せるロビーが不足しています');
+    }
+    if (itemCost.growthLoss > 0) {
+      const current = new Set(player.unlockedCharacterNodes ?? []);
+      const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
+      if (removable.length < itemCost.growthLoss) {
+        errors.push('戻せる成長が不足しています');
+      }
+    }
+
     return errors;
-  }
+  };
 
-  const slotIndex = typeof action.payload.slotIndex === 'number' ? action.payload.slotIndex : NaN;
-  if (Number.isNaN(slotIndex) || slotIndex < 0) {
-    errors.push('カードのスロット番号が不正です');
+  export const applyMove: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
+
+    const lensId = action.payload.lensId as string;
+    const slot = gameState.board.lobbySlots.find(
+      (item) => item.lensId === lensId && !item.occupantId,
+    );
+    if (!slot) {
+      throw new Error('空きロビーがありません');
+    }
+
+    player.actionPoints = Math.max(0, player.actionPoints - 2);
+    slot.occupantId = action.playerId;
+    slot.isActive = true;
+  };
+
+  export const validateRefresh: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
+    }
+
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
+    }
+
+    if (player.actionPoints < 3) {
+      errors.push('行動力が不足しています');
+    }
+
+    const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+    if (!lensId) {
+      errors.push('再起動するレンズIDが指定されていません');
+      return errors;
+    }
+
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+      errors.push('指定されたレンズが存在しません');
+      return errors;
+    }
+
+    if (lens.status !== 'exhausted') {
+      errors.push('レンズは再起動の必要がありません');
+    }
+
+    const slot = gameState.board.lobbySlots.find(
+      (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+    );
+    if (!slot) {
+      errors.push('使用済みの自分のロビーが配置されていません');
+    }
+
+    if (getLobbyAvailable(player) <= 0) {
+      errors.push('未使用のロビーが不足しています');
+    }
+
+    const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+    if (player.actionPoints < totalActionCost) {
+      errors.push('行動力が不足しています');
+    }
+    if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
+      errors.push('創造力が不足しています');
+    }
+    const itemCost = accumulateItemEffects(
+      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+      'cost',
+    );
+    const mergedCost: ResourceCost = {
+      light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
+      rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
+      stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
+      creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
+      actionPoints: lens.cost.actionPoints,
+    };
+    if (!canPayResourceCost(player.resources, mergedCost)) {
+      errors.push('必要な資源が不足しています');
+    }
+    if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
+      errors.push('創造力が不足しています');
+    }
+    if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+      errors.push('戻せるロビーが不足しています');
+    }
+    if (itemCost.growthLoss > 0) {
+      const current = new Set(player.unlockedCharacterNodes ?? []);
+      const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
+      if (removable.length < itemCost.growthLoss) {
+        errors.push('戻せる成長が不足しています');
+      }
+    }
+
     return errors;
-  }
+  };
 
-  if (slotTypeRaw === 'development') {
-    const cards = gameState.board.publicDevelopmentCards ?? [];
-    if (slotIndex >= cards.length || !cards[slotIndex]) {
-      errors.push('公開開発カードのスロット番号が不正です');
-    }
-  } else {
-    const cards = gameState.board.publicVpCards ?? [];
-    if (slotIndex >= cards.length || !cards[slotIndex]) {
-      errors.push('公開VPカードのスロット番号が不正です');
-    }
-  }
 
-  return errors;
-};
 
-export const applyCollect: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
 
-  player.actionPoints = Math.max(0, player.actionPoints - 2);
+  export const applyRefresh: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
 
-  const slotTypeRaw =
-    typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+    const lensId = action.payload.lensId as string;
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+      throw new Error('指定されたレンズが存在しません');
+    }
 
-  if (slotTypeRaw === 'foundation') {
-    const rawCost = action.payload.foundationCost;
-    const parsedCost =
-      typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
-    if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
-      throw new Error('指定された土台カードが存在しません');
+    const slot = gameState.board.lobbySlots.find(
+      (entry) => entry.lensId === lensId && entry.occupantId === action.playerId && !entry.isActive,
+    );
+    if (!slot) {
+      throw new Error('使用済みの自分のロビーが配置されていません');
     }
-    const cost = parsedCost as FoundationCost;
-    ensureFoundationStockInitialized(gameState.board);
-    const stock = gameState.board.foundationStock!;
-    const available =
-      typeof stock[cost] === 'number' && Number.isFinite(stock[cost]!) ? stock[cost]! : 0;
-    if (available <= 0) {
-      throw new Error('指定された土台カードは在庫がありません');
+
+    player.actionPoints = Math.max(0, player.actionPoints - 3);
+
+    const cost = lens.cost;
+    if (cost.actionPoints) {
+      player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
     }
-    const remaining = available - 1;
-    if (remaining > 0) {
-      stock[cost] = remaining;
-    } else {
-      delete stock[cost];
+    const itemCost = accumulateItemEffects(
+      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+      'cost',
+    );
+    payResourceCost(player.resources, cost);
+    payResourceCost(player.resources, itemCost.resources);
+    if (cost.creativity) {
+      player.creativity = Math.max(0, player.creativity - cost.creativity);
     }
-    if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
-      player.collectedFoundationCards = {};
+    if (itemCost.resources.creativity) {
+      player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
     }
-    const currentCount =
-      typeof player.collectedFoundationCards[cost] === 'number'
-        ? player.collectedFoundationCards[cost]!
-        : 0;
-    player.collectedFoundationCards[cost] = currentCount + 1;
-  } else if (slotTypeRaw === 'vp') {
-    const slotIndex =
-      typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
-        ? action.payload.slotIndex
-        : -1;
-    const cards = gameState.board.publicVpCards ?? [];
-    const cardId = cards[slotIndex];
-    if (!cardId) {
-      throw new Error('指定されたVPカードが存在しません');
+    if (itemCost.lobbyReturn > 0) {
+      returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
     }
-    player.collectedVpCards = player.collectedVpCards ?? [];
-    player.collectedVpCards.push(cardId);
-    cards.splice(slotIndex, 1);
-    const newCard = gameState.vpDeck.shift();
-    if (newCard) {
-      cards.splice(slotIndex, 0, newCard);
+    if (itemCost.growthLoss > 0) {
+      for (let i = 0; i < itemCost.growthLoss; i += 1) {
+        applyGrowthDelta(player, -1);
+      }
     }
-  } else {
-    const slotIndex =
-      typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
-        ? action.payload.slotIndex
-        : -1;
-    const cards = gameState.board.publicDevelopmentCards ?? [];
-    const cardId = cards[slotIndex];
-    if (!cardId) {
-      throw new Error('指定された開発カードが存在しません');
+
+    // 手元の未使用ロビーを消費して、使用済みロビーを補充
+    const available = getLobbyAvailable(player);
+    if (available > 0) {
+      player.lobbyAvailable = available - 1;
     }
-    player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
-    player.collectedDevelopmentCards.push(cardId);
-    cards.splice(slotIndex, 1);
-    const newCard = gameState.developmentDeck.shift();
-    if (newCard) {
-      cards.splice(slotIndex, 0, newCard);
+    incrementPlayerLobbyUsed(player, 1);
+
+    // スロット上のロビーを使用状態にする
+    slot.isActive = false;
+
+    for (const reward of lens.rewards) {
+      applyReward(player, reward);
     }
-    triggerEvent(gameState, context.ruleset, 'developmentSlotFreed', {
+    const itemReward = accumulateItemEffects(
+      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+      'reward',
+    );
+    if (
+      itemReward.resources.light ||
+      itemReward.resources.rainbow ||
+      itemReward.resources.stagnation ||
+      itemReward.resources.actionPoints ||
+      itemReward.resources.creativity
+    ) {
+      applyReward(player, { type: 'resource', value: itemReward.resources });
+    }
+    if (itemReward.lobbyGain > 0) {
+      gainLobbyFromStock(player, itemReward.lobbyGain);
+    }
+    if (itemReward.growthGain > 0) {
+      const growthSelections = Array.isArray(action.payload.growthSelections)
+        ? (action.payload.growthSelections as string[])
+        : undefined;
+      applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+    }
+    if (itemReward.vpGain > 0) {
+      player.vp += itemReward.vpGain;
+    }
+    if (itemReward.vpGain > 0) {
+      player.vp += itemReward.vpGain;
+    }
+    if (itemReward.vpGain > 0) {
+      player.vp += itemReward.vpGain;
+    }
+
+    lens.status = 'exhausted';
+
+    if (lens.ownerId !== action.playerId) {
+      const owner = gameState.players[lens.ownerId];
+      if (owner) {
+        owner.vp += 2;
+      }
+      triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
+        actorId: action.playerId,
+        ownerId: lens.ownerId,
+        actionType: 'refresh',
+      });
+    }
+
+    triggerEvent(gameState, context.ruleset, 'actionPerformed', {
       actorId: action.playerId,
+      actionType: 'refresh',
     });
-  }
+  };
 
-  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
-    actorId: action.playerId,
-    actionType: 'collect',
-  });
-};
-
-export const validateWill: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState, ruleset } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  if (!player.characterId) {
-    errors.push('キャラクターが選択されていません');
-    return errors;
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  const nodeId = typeof action.payload.nodeId === 'string' ? action.payload.nodeId : undefined;
-  if (!nodeId) {
-    errors.push('意思効果のノードIDが指定されていません');
-    return errors;
-  }
-
-  const profile = ruleset.characters[player.characterId];
-  if (!profile) {
-    errors.push('キャラクターデータが見つかりません');
-    return errors;
-  }
-
-  const node = profile.nodes.find((n) => n.nodeId === nodeId);
-  if (!node) {
-    errors.push('指定された意思効果が存在しません');
-    return errors;
-  }
-
-  if (node.effect.type !== 'active') {
-    errors.push('指定されたノードは意思能力ではありません');
-    return errors;
-  }
-
-  const unlocked = new Set(player.unlockedCharacterNodes ?? []);
-  if (!unlocked.has(nodeId)) {
-    errors.push('未解放の意思効果は使用できません');
-  }
-
-  const payload = node.effect.payload as ActiveEffectPayload;
-  const cost = payload?.cost;
-  if (cost) {
-    validateWillCost(cost, player, errors);
-  }
-
-  validateWillRewards(payload, player, errors);
-
-  return errors;
-};
-
-export const applyWill: EffectApplier = async (action, context) => {
-  const { gameState, ruleset } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const nodeId = action.payload.nodeId as string;
-  const profile = player.characterId ? ruleset.characters[player.characterId] : undefined;
-  if (!profile) {
-    throw new Error('キャラクターデータが見つかりません');
-  }
-
-  const node = profile.nodes.find((n) => n.nodeId === nodeId);
-  if (!node || node.effect.type !== 'active') {
-    throw new Error('指定された意思効果が存在しません');
-  }
-
-  const payload = node.effect.payload as ActiveEffectPayload;
-  const cost = payload?.cost;
-  if (cost) {
-    applyWillCost(cost, player);
-  }
-
-  if (payload?.setCapacityUnlimited) {
-    ensureUnlimitedMap(player.resources);
-    payload.setCapacityUnlimited.forEach((resource) => {
-      player.resources.unlimited![resource] = true;
-    });
-  }
-
-  payload?.rewards?.forEach((reward) => {
-    applyReward(player, reward);
-  });
-
-  triggerEvent(gameState, ruleset, 'actionPerformed', {
-    actorId: action.playerId,
-    actionType: 'will',
-  });
-};
-
-export const validateTask: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  const taskId = typeof action.payload.taskId === 'string' ? action.payload.taskId : undefined;
-  if (!taskId) {
-    errors.push('課題IDが指定されていません');
-    return errors;
-  }
-
-  const task = gameState.tasks[taskId];
-  if (!task) {
-    errors.push('指定された課題が存在しません');
-    return errors;
-  }
-
-  if (player.tasksCompleted.includes(taskId)) {
-    errors.push('既に達成済みの課題です');
-  }
-
-  const requirementError = getTaskRequirementError(taskId, player, gameState);
-  if (requirementError) {
-    errors.push(requirementError);
-  }
-
-  const rewardChoice = action.payload.rewardChoice as { type?: unknown; nodeId?: unknown } | undefined;
-  if (!rewardChoice || typeof rewardChoice !== 'object') {
-    errors.push('課題報酬を選択してください');
-    return errors;
-  }
-
-  if (rewardChoice.type === 'growth') {
-    if (!player.characterId) {
-      errors.push('キャラクターが設定されていません');
+  export const validateCollect: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
     }
-    if (typeof rewardChoice.nodeId !== 'string' || rewardChoice.nodeId.trim().length === 0) {
-      errors.push('成長させるノードを選択してください');
-    } else if ((player.unlockedCharacterNodes ?? []).includes(rewardChoice.nodeId)) {
-      errors.push('指定されたノードは既に解放済みです');
-    } else if (player.characterId) {
-      const nodeDefinition = getGrowthNode(player.characterId, rewardChoice.nodeId);
-      if (!nodeDefinition) {
-        errors.push('指定されたノードは存在しません');
+
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
+    }
+
+    if (player.actionPoints < 2) {
+      errors.push('行動力が不足しています');
+    }
+
+    const slotTypeRaw =
+      typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+    if (slotTypeRaw !== 'development' && slotTypeRaw !== 'vp' && slotTypeRaw !== 'foundation') {
+      errors.push('カードの取得先が不正です');
+      return errors;
+    }
+
+    if (slotTypeRaw === 'foundation') {
+      const rawCost = action.payload.foundationCost;
+      const parsedCost =
+        typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+      if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+        errors.push('土台カードのコスト指定が不正です');
+        return errors;
+      }
+      const cost = parsedCost as FoundationCost;
+      const available = getAvailableFoundationStock(gameState, cost);
+      if (available <= 0) {
+        errors.push('指定された土台カードは在庫がありません');
+      }
+      return errors;
+    }
+
+    const slotIndex = typeof action.payload.slotIndex === 'number' ? action.payload.slotIndex : NaN;
+    if (Number.isNaN(slotIndex) || slotIndex < 0) {
+      errors.push('カードのスロット番号が不正です');
+      return errors;
+    }
+
+    if (slotTypeRaw === 'development') {
+      const cards = gameState.board.publicDevelopmentCards ?? [];
+      if (slotIndex >= cards.length || !cards[slotIndex]) {
+        errors.push('公開開発カードのスロット番号が不正です');
+      }
+    } else {
+      const cards = gameState.board.publicVpCards ?? [];
+      if (slotIndex >= cards.length || !cards[slotIndex]) {
+        errors.push('公開VPカードのスロット番号が不正です');
+      }
+    }
+
+    return errors;
+  };
+
+  export const applyCollect: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
+
+    player.actionPoints = Math.max(0, player.actionPoints - 2);
+
+    const slotTypeRaw =
+      typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
+
+    if (slotTypeRaw === 'foundation') {
+      const rawCost = action.payload.foundationCost;
+      const parsedCost =
+        typeof rawCost === 'number' && Number.isFinite(rawCost) ? Math.floor(rawCost) : NaN;
+      if (Number.isNaN(parsedCost) || !isFoundationCost(parsedCost)) {
+        throw new Error('指定された土台カードが存在しません');
+      }
+      const cost = parsedCost as FoundationCost;
+      ensureFoundationStockInitialized(gameState.board);
+      const stock = gameState.board.foundationStock!;
+      const available =
+        typeof stock[cost] === 'number' && Number.isFinite(stock[cost]!) ? stock[cost]! : 0;
+      if (available <= 0) {
+        throw new Error('指定された土台カードは在庫がありません');
+      }
+      const remaining = available - 1;
+      if (remaining > 0) {
+        stock[cost] = remaining;
       } else {
-        if (isGrowthNodeAutoUnlocked(player.characterId, rewardChoice.nodeId)) {
-          errors.push('指定されたノードは自動解放ノードです');
+        delete stock[cost];
+      }
+      if (!player.collectedFoundationCards || typeof player.collectedFoundationCards !== 'object') {
+        player.collectedFoundationCards = {};
+      }
+      const currentCount =
+        typeof player.collectedFoundationCards[cost] === 'number'
+          ? player.collectedFoundationCards[cost]!
+          : 0;
+      player.collectedFoundationCards[cost] = currentCount + 1;
+    } else if (slotTypeRaw === 'vp') {
+      const slotIndex =
+        typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+          ? action.payload.slotIndex
+          : -1;
+      const cards = gameState.board.publicVpCards ?? [];
+      const cardId = cards[slotIndex];
+      if (!cardId) {
+        throw new Error('指定されたVPカードが存在しません');
+      }
+      player.collectedVpCards = player.collectedVpCards ?? [];
+      player.collectedVpCards.push(cardId);
+      cards.splice(slotIndex, 1);
+      const newCard = gameState.vpDeck.shift();
+      if (newCard) {
+        cards.splice(slotIndex, 0, newCard);
+      }
+    } else {
+      const slotIndex =
+        typeof action.payload.slotIndex === 'number' && Number.isFinite(action.payload.slotIndex)
+          ? action.payload.slotIndex
+          : -1;
+      const cards = gameState.board.publicDevelopmentCards ?? [];
+      const cardId = cards[slotIndex];
+      if (!cardId) {
+        throw new Error('指定された開発カードが存在しません');
+      }
+      player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
+      player.collectedDevelopmentCards.push(cardId);
+      cards.splice(slotIndex, 1);
+      const newCard = gameState.developmentDeck.shift();
+      if (newCard) {
+        cards.splice(slotIndex, 0, newCard);
+      }
+      triggerEvent(gameState, context.ruleset, 'developmentSlotFreed', {
+        actorId: action.playerId,
+      });
+    }
+
+    triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+      actorId: action.playerId,
+      actionType: 'collect',
+    });
+  };
+
+  export const validateWill: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState, ruleset } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
+    }
+
+    if (!player.characterId) {
+      errors.push('キャラクターが選択されていません');
+      return errors;
+    }
+
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
+    }
+
+    const nodeId = typeof action.payload.nodeId === 'string' ? action.payload.nodeId : undefined;
+    if (!nodeId) {
+      errors.push('意思効果のノードIDが指定されていません');
+      return errors;
+    }
+
+    const profile = ruleset.characters[player.characterId];
+    if (!profile) {
+      errors.push('キャラクターデータが見つかりません');
+      return errors;
+    }
+
+    const node = profile.nodes.find((n) => n.nodeId === nodeId);
+    if (!node) {
+      errors.push('指定された意思効果が存在しません');
+      return errors;
+    }
+
+    if (node.effect.type !== 'active') {
+      errors.push('指定されたノードは意思能力ではありません');
+      return errors;
+    }
+
+    const unlocked = new Set(player.unlockedCharacterNodes ?? []);
+    if (!unlocked.has(nodeId)) {
+      errors.push('未解放の意思効果は使用できません');
+    }
+
+    const payload = node.effect.payload as ActiveEffectPayload;
+    const cost = payload?.cost;
+    if (cost) {
+      validateWillCost(cost, player, errors);
+    }
+
+    validateWillRewards(payload, player, errors);
+
+    return errors;
+  };
+
+  export const applyWill: EffectApplier = async (action, context) => {
+    const { gameState, ruleset } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
+
+    const nodeId = action.payload.nodeId as string;
+    const profile = player.characterId ? ruleset.characters[player.characterId] : undefined;
+    if (!profile) {
+      throw new Error('キャラクターデータが見つかりません');
+    }
+
+    const node = profile.nodes.find((n) => n.nodeId === nodeId);
+    if (!node || node.effect.type !== 'active') {
+      throw new Error('指定された意思効果が存在しません');
+    }
+
+    const payload = node.effect.payload as ActiveEffectPayload;
+    const cost = payload?.cost;
+    if (cost) {
+      applyWillCost(cost, player);
+    }
+
+    if (payload?.setCapacityUnlimited) {
+      ensureUnlimitedMap(player.resources);
+      payload.setCapacityUnlimited.forEach((resource) => {
+        player.resources.unlimited![resource] = true;
+      });
+    }
+
+    payload?.rewards?.forEach((reward) => {
+      applyReward(player, reward);
+    });
+
+    triggerEvent(gameState, ruleset, 'actionPerformed', {
+      actorId: action.playerId,
+      actionType: 'will',
+    });
+  };
+
+  export const validateTask: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
+    }
+
+    const taskId = typeof action.payload.taskId === 'string' ? action.payload.taskId : undefined;
+    if (!taskId) {
+      errors.push('課題IDが指定されていません');
+      return errors;
+    }
+
+    const task = gameState.tasks[taskId];
+    if (!task) {
+      errors.push('指定された課題が存在しません');
+      return errors;
+    }
+
+    if (player.tasksCompleted.includes(taskId)) {
+      errors.push('既に達成済みの課題です');
+    }
+
+    const requirementError = getTaskRequirementError(taskId, player, gameState);
+    if (requirementError) {
+      errors.push(requirementError);
+    }
+
+    const rewardChoice = action.payload.rewardChoice as { type?: unknown; nodeId?: unknown } | undefined;
+    if (!rewardChoice || typeof rewardChoice !== 'object') {
+      errors.push('課題報酬を選択してください');
+      return errors;
+    }
+
+    if (rewardChoice.type === 'growth') {
+      if (!player.characterId) {
+        errors.push('キャラクターが設定されていません');
+      }
+      if (typeof rewardChoice.nodeId !== 'string' || rewardChoice.nodeId.trim().length === 0) {
+        errors.push('成長させるノードを選択してください');
+      } else if ((player.unlockedCharacterNodes ?? []).includes(rewardChoice.nodeId)) {
+        errors.push('指定されたノードは既に解放済みです');
+      } else if (player.characterId) {
+        const nodeDefinition = getGrowthNode(player.characterId, rewardChoice.nodeId);
+        if (!nodeDefinition) {
+          errors.push('指定されたノードは存在しません');
         } else {
-          const unlockedSet = buildUnlockedSetWithAuto(
-            player.characterId,
-            player.unlockedCharacterNodes ?? [],
-          );
-          if (!canUnlockGrowthNode(player.characterId, rewardChoice.nodeId, unlockedSet)) {
-            errors.push('成長条件を満たしていません');
+          if (isGrowthNodeAutoUnlocked(player.characterId, rewardChoice.nodeId)) {
+            errors.push('指定されたノードは自動解放ノードです');
+          } else {
+            const unlockedSet = buildUnlockedSetWithAuto(
+              player.characterId,
+              player.unlockedCharacterNodes ?? [],
+            );
+            if (!canUnlockGrowthNode(player.characterId, rewardChoice.nodeId, unlockedSet)) {
+              errors.push('成長条件を満たしていません');
+            }
           }
         }
       }
+    } else if (rewardChoice.type === 'lobby') {
+      // no additional validation needed
+    } else {
+      errors.push('無効な課題報酬が指定されました');
     }
-  } else if (rewardChoice.type === 'lobby') {
-    // no additional validation needed
-  } else {
-    errors.push('無効な課題報酬が指定されました');
-  }
 
-  // 条件判定は EffectEngine or Task definition に依存
-  return errors;
-};
-
-export const applyTask: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const taskId = action.payload.taskId as string;
-  const task = gameState.tasks[taskId];
-  if (!task) {
-    throw new Error('指定された課題が存在しません');
-  }
-
-  player.tasksCompleted.push(taskId);
-  for (const reward of task.reward) {
-    applyReward(player, reward);
-  }
-
-  const rewardChoice = action.payload.rewardChoice as { type?: string; nodeId?: string } | undefined;
-  if (!rewardChoice || typeof rewardChoice.type !== 'string') {
-    throw new Error('課題報酬が指定されていません');
-  }
-
-  switch (rewardChoice.type) {
-    case 'growth': {
-      if (!player.characterId) {
-        throw new Error('キャラクターが設定されていません');
-      }
-      const nodeId = rewardChoice.nodeId;
-      if (!nodeId || typeof nodeId !== 'string') {
-        throw new Error('成長させるノードが指定されていません');
-      }
-      if (!player.unlockedCharacterNodes) {
-        player.unlockedCharacterNodes = [];
-      }
-      if (player.unlockedCharacterNodes.includes(nodeId)) {
-        throw new Error('指定されたノードは既に解放済みです');
-      }
-      const unlockedSet = buildUnlockedSetWithAuto(
-        player.characterId,
-        player.unlockedCharacterNodes,
-      );
-      if (!canUnlockGrowthNode(player.characterId, nodeId, unlockedSet)) {
-        throw new Error('成長条件を満たしていません');
-      }
-      player.unlockedCharacterNodes.push(nodeId);
-      break;
-    }
-    case 'lobby': {
-      const reserve = getLobbyReserve(player);
-      player.lobbyReserve = reserve + 1;
-      break;
-    }
-    default:
-      throw new Error('無効な課題報酬が指定されました');
-  }
-};
-
-export const validateRooting: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
+    // 条件判定は EffectEngine or Task definition に依存
     return errors;
-  }
-
-  if (gameState.currentPhase !== 'main') {
-    errors.push('根回しはメインフェーズのみ実行できます');
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  const alreadyRooting = Object.values(gameState.players).some((p) => p.isRooting);
-  if (alreadyRooting) {
-    errors.push('根回しはこのラウンドで既に行われています');
-  }
-
-  if (!hasCapacity(player.resources, 'light', 1)) {
-    errors.push('光トークンの上限を超えます');
-  }
-
-  return errors;
-};
-
-export const applyRooting: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  player.isRooting = true;
-  player.resources.light += 1;
-};
-
-export const validatePersuasion: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
-    return errors;
-  }
-
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
-  if (!lensId) {
-    errors.push('レンズIDが指定されていません');
-    return errors;
-  }
-
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    errors.push('指定されたレンズが存在しません');
-    return errors;
-  }
-
-  if (lens.status !== 'available') {
-    errors.push('レンズは使用済みです');
-  }
-
-  const slot = gameState.board.lobbySlots.find(
-    (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
-  );
-  if (!slot) {
-    errors.push('相手のロビーが配置されていません');
-  } else if (slot.occupantId === action.playerId) {
-    errors.push('自分のロビーには説得できません');
-  }
-
-  const requiredActionPoints = 2 + (lens.cost.actionPoints ?? 0);
-  if (player.actionPoints < requiredActionPoints) {
-    errors.push('行動力が不足しています');
-  }
-
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
   };
-  if (!canPayResourceCost(player.resources, mergedCost)) {
-    errors.push('必要な資源が不足しています');
-  }
 
-  if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
-    errors.push('創造力が不足しています');
-  }
-  if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
-    errors.push('戻せるロビーが不足しています');
-  }
-  if (itemCost.growthLoss > 0) {
-    const current = new Set(player.unlockedCharacterNodes ?? []);
-    const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
-    if (removable.length < itemCost.growthLoss) {
-      errors.push('戻せる成長が不足しています');
+  export const applyTask: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
     }
-  }
 
-  lens.rewards
-    .filter((reward) => reward.type === 'resource')
-    .forEach((reward) => {
-      const value = reward.value as ResourceReward;
-      for (const [resource, amount] of resourceRewardEntries(value)) {
-        if (!hasCapacity(player.resources, resource, amount)) {
-          errors.push(`${resource} の上限を超えます`);
+    const taskId = action.payload.taskId as string;
+    const task = gameState.tasks[taskId];
+    if (!task) {
+      throw new Error('指定された課題が存在しません');
+    }
+
+    player.tasksCompleted.push(taskId);
+    for (const reward of task.reward) {
+      applyReward(player, reward);
+    }
+
+    const rewardChoice = action.payload.rewardChoice as { type?: string; nodeId?: string } | undefined;
+    if (!rewardChoice || typeof rewardChoice.type !== 'string') {
+      throw new Error('課題報酬が指定されていません');
+    }
+
+    switch (rewardChoice.type) {
+      case 'growth': {
+        if (!player.characterId) {
+          throw new Error('キャラクターが設定されていません');
         }
+        const nodeId = rewardChoice.nodeId;
+        if (!nodeId || typeof nodeId !== 'string') {
+          throw new Error('成長させるノードが指定されていません');
+        }
+        if (!player.unlockedCharacterNodes) {
+          player.unlockedCharacterNodes = [];
+        }
+        if (player.unlockedCharacterNodes.includes(nodeId)) {
+          throw new Error('指定されたノードは既に解放済みです');
+        }
+        const unlockedSet = buildUnlockedSetWithAuto(
+          player.characterId,
+          player.unlockedCharacterNodes,
+        );
+        if (!canUnlockGrowthNode(player.characterId, nodeId, unlockedSet)) {
+          throw new Error('成長条件を満たしていません');
+        }
+        player.unlockedCharacterNodes.push(nodeId);
+        break;
       }
-    });
-
-  return errors;
-};
-
-export const applyPersuasion: EffectApplier = async (action, context) => {
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  const lensId = action.payload.lensId as string;
-  const lens = gameState.board.lenses[lensId];
-  if (!lens) {
-    throw new Error('指定されたレンズが存在しません');
-  }
-
-  const slot = gameState.board.lobbySlots.find(
-    (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
-  );
-  if (!slot || !slot.occupantId) {
-    throw new Error('相手のロビーが配置されていません');
-  }
-
-  const occupantId = slot.occupantId;
-  const occupantPlayer = gameState.players[occupantId];
-
-  player.actionPoints = Math.max(0, player.actionPoints - 2);
-  const extraAction = lens.cost.actionPoints ?? 0;
-  if (extraAction > 0) {
-    player.actionPoints = Math.max(0, player.actionPoints - extraAction);
-  }
-
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  payResourceCost(player.resources, lens.cost);
-  payResourceCost(player.resources, itemCost.resources);
-  if (lens.cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
-  }
-  if (itemCost.resources.creativity) {
-    player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
-  }
-  if (itemCost.lobbyReturn > 0) {
-    returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
-  }
-  if (itemCost.growthLoss > 0) {
-    for (let i = 0; i < itemCost.growthLoss; i += 1) {
-      applyGrowthDelta(player, -1);
+      case 'lobby': {
+        const reserve = getLobbyReserve(player);
+        player.lobbyReserve = reserve + 1;
+        break;
+      }
+      default:
+        throw new Error('無効な課題報酬が指定されました');
     }
-  }
+  };
 
-  for (const reward of lens.rewards) {
-    applyReward(player, reward);
-  }
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  if (
-    itemReward.resources.light ||
-    itemReward.resources.rainbow ||
-    itemReward.resources.stagnation ||
-    itemReward.resources.actionPoints ||
-    itemReward.resources.creativity
-  ) {
-    applyReward(player, { type: 'resource', value: itemReward.resources });
-  }
-  if (itemReward.lobbyGain > 0) {
-    gainLobbyFromStock(player, itemReward.lobbyGain);
-  }
-  if (itemReward.growthGain > 0) {
-    const growthSelections = Array.isArray(action.payload.growthSelections)
-      ? (action.payload.growthSelections as string[])
-      : undefined;
-    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
-  }
-
-  // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
-  slot.occupantId = action.playerId;
-  slot.isActive = false;
-  if (occupantPlayer) {
-    incrementPlayerLobbyUsed(occupantPlayer, 1);
-  }
-
-  lens.status = 'exhausted';
-  if (lens.ownerId !== action.playerId) {
-    const owner = gameState.players[lens.ownerId];
-    if (owner) {
-      owner.vp += 2;
+  export const validateRooting: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
     }
-    triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
-      actorId: action.playerId,
-      ownerId: lens.ownerId,
-      actionType: 'persuasion',
-    });
-  }
-  triggerEvent(gameState, context.ruleset, 'actionPerformed', {
-    actorId: action.playerId,
-    actionType: 'persuasion',
-  });
-};
 
-export const validatePass: Validator = async (action, context) => {
-  const errors: string[] = [];
-  const { gameState } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    errors.push('プレイヤーが存在しません');
+    if (gameState.currentPhase !== 'main') {
+      errors.push('根回しはメインフェーズのみ実行できます');
+    }
+
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
+    }
+
+    const alreadyRooting = Object.values(gameState.players).some((p) => p.isRooting);
+    if (alreadyRooting) {
+      errors.push('根回しはこのラウンドで既に行われています');
+    }
+
+    if (!hasCapacity(player.resources, 'light', 1)) {
+      errors.push('光トークンの上限を超えます');
+    }
+
     return errors;
-  }
+  };
 
-  if (gameState.currentPlayerId !== action.playerId) {
-    errors.push('現在の手番プレイヤーではありません');
-  }
-
-  if (player.hasPassed) {
-    errors.push('既にパスしています');
-  }
-
-  if (!context.turnOrder) {
-    errors.push('ターン順情報が利用できません');
-  }
-
-  return errors;
-};
-
-export const applyPass: EffectApplier = async (action, context) => {
-  const { gameState, turnOrder } = context;
-  const player = gameState.players[action.playerId];
-  if (!player) {
-    throw new Error('プレイヤーが存在しません');
-  }
-
-  player.hasPassed = true;
-  turnOrder?.markPass(action.playerId);
-  const nextPlayer = turnOrder?.nextPlayer();
-  if (nextPlayer) {
-    gameState.currentPlayerId = nextPlayer;
-  }
-};
-
-export function hasCapacity(
-  wallet: ResourceWallet,
-  resource: 'light' | 'rainbow' | 'stagnation',
-  amount: number,
-): boolean {
-  if (wallet.unlimited?.[resource]) {
-    return true;
-  }
-  const cap = wallet.maxCapacity[resource];
-  const current = wallet[resource];
-  return current + amount <= cap;
-}
-
-function getTaskRequirementError(taskId: string, player: PlayerState, gameState: GameState): string | null {
-  switch (taskId) {
-    case 'rainbow': {
-      const required = 5;
-      return player.resources.rainbow >= required ? null : `虹トークンが${required}個必要です`;
+  export const applyRooting: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
     }
-    case 'light': {
-      const required = 7;
-      return player.resources.light >= required ? null : `光トークンが${required}個必要です`;
-    }
-    case 'lens': {
-      const required = 3;
-      const owned = countPlayerLenses(gameState, player);
-      return owned >= required ? null : `完成済みレンズが${required}枚必要です`;
-    }
-    default:
-      return null;
-  }
-}
 
-function countPlayerLenses(gameState: GameState, player: PlayerState): number {
-  const boardLenses = Object.values(gameState.board?.lenses ?? {});
-  const ownedOnBoard = boardLenses.filter((lens) => lens.ownerId === player.playerId).length;
-  const ownedFromState = Array.isArray(player.ownedLenses) ? player.ownedLenses.length : 0;
-  return Math.max(ownedOnBoard, ownedFromState);
-}
+    player.isRooting = true;
+    player.resources.light += 1;
+  };
 
-function resourceRewardEntries(reward: ResourceReward): Array<[ResourceType, number]> {
-  const entries: Array<[ResourceType, number]> = [];
-  RESOURCE_ORDER.forEach((resource) => {
-    const amount = reward[resource];
-    if (typeof amount === 'number' && amount > 0) {
-      entries.push([resource, amount]);
+  export const validatePersuasion: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
     }
-  });
-  return entries;
-}
 
-function addResourcesWithLimits(wallet: ResourceWallet, reward: ResourceReward): void {
-  let totalResources = getTotalResources(wallet);
-  RESOURCE_ORDER.forEach((resource) => {
-    const increment = reward[resource];
-    if (typeof increment !== 'number' || increment <= 0) {
-      return;
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
     }
-    if (wallet.unlimited?.[resource]) {
-      wallet[resource] += increment;
-      totalResources += increment;
-      return;
-    }
-    const capacityRemaining = wallet.maxCapacity[resource] - wallet[resource];
-    if (capacityRemaining <= 0) {
-      return;
-    }
-    const totalRemaining = TOTAL_RESOURCE_LIMIT - totalResources;
-    if (totalRemaining <= 0) {
-      return;
-    }
-    const allowed = Math.min(increment, capacityRemaining, totalRemaining);
-    if (allowed > 0) {
-      wallet[resource] += allowed;
-      totalResources += allowed;
-    }
-  });
-}
 
-function applyReward(player: { resources: ResourceWallet; vp: number; actionPoints: number; creativity: number }, reward: {
-  type: 'vp' | 'resource' | 'growth' | 'trigger';
-  value: number | ResourceReward | unknown;
-}): void {
-  switch (reward.type) {
-    case 'vp': {
-      const vp = typeof reward.value === 'number' ? reward.value : 0;
-      player.vp += vp;
-      break;
+    const lensId = typeof action.payload.lensId === 'string' ? action.payload.lensId : undefined;
+    if (!lensId) {
+      errors.push('レンズIDが指定されていません');
+      return errors;
     }
-    case 'resource': {
-      const value = reward.value as ResourceReward;
-      addResourcesWithLimits(player.resources, value);
-      if (typeof value.actionPoints === 'number') {
-        player.actionPoints = clampActionPoints(player.actionPoints + value.actionPoints);
+
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+      errors.push('指定されたレンズが存在しません');
+      return errors;
+    }
+
+    if (lens.status !== 'available') {
+      errors.push('レンズは使用済みです');
+    }
+
+    const slot = gameState.board.lobbySlots.find(
+      (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
+    );
+    if (!slot) {
+      errors.push('相手のロビーが配置されていません');
+    } else if (slot.occupantId === action.playerId) {
+      errors.push('自分のロビーには説得できません');
+    }
+
+    const requiredActionPoints = 2 + (lens.cost.actionPoints ?? 0);
+    if (player.actionPoints < requiredActionPoints) {
+      errors.push('行動力が不足しています');
+    }
+
+    const itemCost = accumulateItemEffects(
+      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+      'cost',
+    );
+    const mergedCost: ResourceCost = {
+      light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
+      rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
+      stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
+      creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
+      actionPoints: lens.cost.actionPoints,
+    };
+    if (!canPayResourceCost(player.resources, mergedCost)) {
+      errors.push('必要な資源が不足しています');
+    }
+
+    if (mergedCost.creativity && mergedCost.creativity > player.creativity) {
+      errors.push('創造力が不足しています');
+    }
+    if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+      errors.push('戻せるロビーが不足しています');
+    }
+    if (itemCost.growthLoss > 0) {
+      const current = new Set(player.unlockedCharacterNodes ?? []);
+      const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
+      if (removable.length < itemCost.growthLoss) {
+        errors.push('戻せる成長が不足しています');
       }
-      if (typeof value.creativity === 'number') {
-        player.creativity = clampCreativity(player.creativity + value.creativity);
-      }
-      break;
     }
-    case 'growth':
-      applyGrowthReward(player, reward.value as GrowthReward);
-      break;
-    case 'trigger':
-      // トリガーはイベント処理でハンドリングするためここでは何もしない
-      break;
-    default:
-      break;
-  }
-}
 
-function validateWillCost(cost: CharacterCost, player: { creativity: number; actionPoints: number; resources: ResourceWallet }, errors: string[]): void {
-  if (cost.creativity && player.creativity < cost.creativity) {
-    errors.push('創造力が不足しています');
-  }
-
-  if (cost.actionPoints && player.actionPoints < cost.actionPoints) {
-    errors.push('行動力が不足しています');
-  }
-
-  if (cost.resources && !canPayResourceCost(player.resources, cost.resources)) {
-    errors.push('必要な資源が不足しています');
-  }
-}
-
-function validateWillRewards(payload: ActiveEffectPayload | undefined, player: { resources: ResourceWallet }, errors: string[]): void {
-  if (!payload?.rewards) {
-    return;
-  }
-  const unlimitedTarget = new Set(payload.setCapacityUnlimited ?? []);
-  payload.rewards
-    .filter((reward) => reward.type === 'resource')
-    .forEach((reward) => {
-      const value = reward.value as ResourceReward;
-      (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
-        if (unlimitedTarget.has(resource)) {
-          return;
-        }
-        const amount = value[resource];
-        if (typeof amount === 'number' && amount > 0) {
+    lens.rewards
+      .filter((reward) => reward.type === 'resource')
+      .forEach((reward) => {
+        const value = reward.value as ResourceReward;
+        for (const [resource, amount] of resourceRewardEntries(value)) {
           if (!hasCapacity(player.resources, resource, amount)) {
             errors.push(`${resource} の上限を超えます`);
           }
         }
       });
+
+    return errors;
+  };
+
+  export const applyPersuasion: EffectApplier = async (action, context) => {
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
+
+    const lensId = action.payload.lensId as string;
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) {
+      throw new Error('指定されたレンズが存在しません');
+    }
+
+    const slot = gameState.board.lobbySlots.find(
+      (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
+    );
+    if (!slot || !slot.occupantId) {
+      throw new Error('相手のロビーが配置されていません');
+    }
+
+    const occupantId = slot.occupantId;
+    const occupantPlayer = gameState.players[occupantId];
+
+    player.actionPoints = Math.max(0, player.actionPoints - 2);
+    const extraAction = lens.cost.actionPoints ?? 0;
+    if (extraAction > 0) {
+      player.actionPoints = Math.max(0, player.actionPoints - extraAction);
+    }
+
+    const itemCost = accumulateItemEffects(
+      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
+      'cost',
+    );
+    payResourceCost(player.resources, lens.cost);
+    payResourceCost(player.resources, itemCost.resources);
+    if (lens.cost.creativity) {
+      player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
+    }
+    if (itemCost.resources.creativity) {
+      player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
+    }
+    if (itemCost.lobbyReturn > 0) {
+      returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    }
+    if (itemCost.growthLoss > 0) {
+      for (let i = 0; i < itemCost.growthLoss; i += 1) {
+        applyGrowthDelta(player, -1);
+      }
+    }
+
+    for (const reward of lens.rewards) {
+      applyReward(player, reward);
+    }
+    const itemReward = accumulateItemEffects(
+      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+      'reward',
+    );
+    if (
+      itemReward.resources.light ||
+      itemReward.resources.rainbow ||
+      itemReward.resources.stagnation ||
+      itemReward.resources.actionPoints ||
+      itemReward.resources.creativity
+    ) {
+      applyReward(player, { type: 'resource', value: itemReward.resources });
+    }
+    if (itemReward.lobbyGain > 0) {
+      gainLobbyFromStock(player, itemReward.lobbyGain);
+    }
+    if (itemReward.growthGain > 0) {
+      const growthSelections = Array.isArray(action.payload.growthSelections)
+        ? (action.payload.growthSelections as string[])
+        : undefined;
+      applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+    }
+
+    // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
+    slot.occupantId = action.playerId;
+    slot.isActive = false;
+    if (occupantPlayer) {
+      incrementPlayerLobbyUsed(occupantPlayer, 1);
+    }
+
+    lens.status = 'exhausted';
+    if (lens.ownerId !== action.playerId) {
+      const owner = gameState.players[lens.ownerId];
+      if (owner) {
+        owner.vp += 2;
+      }
+      triggerEvent(gameState, context.ruleset, 'lensActivatedByOther', {
+        actorId: action.playerId,
+        ownerId: lens.ownerId,
+        actionType: 'persuasion',
+      });
+    }
+    triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+      actorId: action.playerId,
+      actionType: 'persuasion',
     });
-}
+  };
 
-function applyWillCost(cost: CharacterCost, player: { creativity: number; actionPoints: number; resources: ResourceWallet }): void {
-  if (cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - cost.creativity);
-  }
-  if (cost.actionPoints) {
-    player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
-  }
-  if (cost.resources) {
-    payResourceCost(player.resources, cost.resources);
-  }
-}
+  export const validatePass: Validator = async (action, context) => {
+    const errors: string[] = [];
+    const { gameState } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      errors.push('プレイヤーが存在しません');
+      return errors;
+    }
 
-function ensureUnlimitedMap(wallet: ResourceWallet): void {
-  if (!wallet.unlimited) {
-    wallet.unlimited = {} as Partial<Record<ResourceType, boolean>>;
-  }
-}
+    if (gameState.currentPlayerId !== action.playerId) {
+      errors.push('現在の手番プレイヤーではありません');
+    }
 
-function toResourceKey(label: string | null | undefined): ResourceKey | null {
-  if (!label) {
+    if (player.hasPassed) {
+      errors.push('既にパスしています');
+    }
+
+    if (!context.turnOrder) {
+      errors.push('ターン順情報が利用できません');
+    }
+
+    return errors;
+  };
+
+  export const applyPass: EffectApplier = async (action, context) => {
+    const { gameState, turnOrder } = context;
+    const player = gameState.players[action.playerId];
+    if (!player) {
+      throw new Error('プレイヤーが存在しません');
+    }
+
+    player.hasPassed = true;
+    turnOrder?.markPass(action.playerId);
+    const nextPlayer = turnOrder?.nextPlayer();
+    if (nextPlayer) {
+      gameState.currentPlayerId = nextPlayer;
+    }
+  };
+
+  export function hasCapacity(
+    wallet: ResourceWallet,
+    resource: 'light' | 'rainbow' | 'stagnation',
+    amount: number,
+  ): boolean {
+    if (wallet.unlimited?.[resource]) {
+      return true;
+    }
+    const cap = wallet.maxCapacity[resource];
+    const current = wallet[resource];
+    return current + amount <= cap;
+  }
+
+  function getTaskRequirementError(taskId: string, player: PlayerState, gameState: GameState): string | null {
+    switch (taskId) {
+      case 'rainbow': {
+        const required = 5;
+        return player.resources.rainbow >= required ? null : `虹トークンが${required}個必要です`;
+      }
+      case 'light': {
+        const required = 7;
+        return player.resources.light >= required ? null : `光トークンが${required}個必要です`;
+      }
+      case 'lens': {
+        const required = 3;
+        const owned = countPlayerLenses(gameState, player);
+        return owned >= required ? null : `完成済みレンズが${required}枚必要です`;
+      }
+      default:
+        return null;
+    }
+  }
+
+  function countPlayerLenses(gameState: GameState, player: PlayerState): number {
+    const boardLenses = Object.values(gameState.board?.lenses ?? {});
+    const ownedOnBoard = boardLenses.filter((lens) => lens.ownerId === player.playerId).length;
+    const ownedFromState = Array.isArray(player.ownedLenses) ? player.ownedLenses.length : 0;
+    return Math.max(ownedOnBoard, ownedFromState);
+  }
+
+  function resourceRewardEntries(reward: ResourceReward): Array<[ResourceType, number]> {
+    const entries: Array<[ResourceType, number]> = [];
+    RESOURCE_ORDER.forEach((resource) => {
+      const amount = reward[resource];
+      if (typeof amount === 'number' && amount > 0) {
+        entries.push([resource, amount]);
+      }
+    });
+    return entries;
+  }
+
+  function addResourcesWithLimits(wallet: ResourceWallet, reward: ResourceReward): void {
+    let totalResources = getTotalResources(wallet);
+    RESOURCE_ORDER.forEach((resource) => {
+      const increment = reward[resource];
+      if (typeof increment !== 'number' || increment <= 0) {
+        return;
+      }
+      if (wallet.unlimited?.[resource]) {
+        wallet[resource] += increment;
+        totalResources += increment;
+        return;
+      }
+      const capacityRemaining = wallet.maxCapacity[resource] - wallet[resource];
+      if (capacityRemaining <= 0) {
+        return;
+      }
+      const totalRemaining = TOTAL_RESOURCE_LIMIT - totalResources;
+      if (totalRemaining <= 0) {
+        return;
+      }
+      const allowed = Math.min(increment, capacityRemaining, totalRemaining);
+      if (allowed > 0) {
+        wallet[resource] += allowed;
+        totalResources += allowed;
+      }
+    });
+  }
+
+  function applyReward(player: { resources: ResourceWallet; vp: number; actionPoints: number; creativity: number }, reward: {
+    type: 'vp' | 'resource' | 'growth' | 'trigger';
+    value: number | ResourceReward | unknown;
+  }): void {
+    switch (reward.type) {
+      case 'vp': {
+        const vp = typeof reward.value === 'number' ? reward.value : 0;
+        player.vp += vp;
+        break;
+      }
+      case 'resource': {
+        const value = reward.value as ResourceReward;
+        addResourcesWithLimits(player.resources, value);
+        if (typeof value.actionPoints === 'number') {
+          player.actionPoints = clampActionPoints(player.actionPoints + value.actionPoints);
+        }
+        if (typeof value.creativity === 'number') {
+          player.creativity = clampCreativity(player.creativity + value.creativity);
+        }
+        break;
+      }
+      case 'growth':
+        applyGrowthReward(player, reward.value as GrowthReward);
+        break;
+      case 'trigger':
+        // トリガーはイベント処理でハンドリングするためここでは何もしない
+        break;
+      default:
+        break;
+    }
+  }
+
+  function validateWillCost(cost: CharacterCost, player: { creativity: number; actionPoints: number; resources: ResourceWallet }, errors: string[]): void {
+    if (cost.creativity && player.creativity < cost.creativity) {
+      errors.push('創造力が不足しています');
+    }
+
+    if (cost.actionPoints && player.actionPoints < cost.actionPoints) {
+      errors.push('行動力が不足しています');
+    }
+
+    if (cost.resources && !canPayResourceCost(player.resources, cost.resources)) {
+      errors.push('必要な資源が不足しています');
+    }
+  }
+
+  function validateWillRewards(payload: ActiveEffectPayload | undefined, player: { resources: ResourceWallet }, errors: string[]): void {
+    if (!payload?.rewards) {
+      return;
+    }
+    const unlimitedTarget = new Set(payload.setCapacityUnlimited ?? []);
+    payload.rewards
+      .filter((reward) => reward.type === 'resource')
+      .forEach((reward) => {
+        const value = reward.value as ResourceReward;
+        (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
+          if (unlimitedTarget.has(resource)) {
+            return;
+          }
+          const amount = value[resource];
+          if (typeof amount === 'number' && amount > 0) {
+            if (!hasCapacity(player.resources, resource, amount)) {
+              errors.push(`${resource} の上限を超えます`);
+            }
+          }
+        });
+      });
+  }
+
+  function applyWillCost(cost: CharacterCost, player: { creativity: number; actionPoints: number; resources: ResourceWallet }): void {
+    if (cost.creativity) {
+      player.creativity = Math.max(0, player.creativity - cost.creativity);
+    }
+    if (cost.actionPoints) {
+      player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
+    }
+    if (cost.resources) {
+      payResourceCost(player.resources, cost.resources);
+    }
+  }
+
+  function ensureUnlimitedMap(wallet: ResourceWallet): void {
+    if (!wallet.unlimited) {
+      wallet.unlimited = {} as Partial<Record<ResourceType, boolean>>;
+    }
+  }
+
+  function toResourceKey(label: string | null | undefined): ResourceKey | null {
+    if (!label) {
+      return null;
+    }
+    const normalized = label.toLowerCase();
+    if (normalized.includes('光') || normalized.includes('light')) {
+      return 'light';
+    }
+    if (normalized.includes('虹') || normalized.includes('rainbow')) {
+      return 'rainbow';
+    }
+    if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) {
+      return 'stagnation';
+    }
     return null;
   }
-  const normalized = label.toLowerCase();
-  if (normalized.includes('光') || normalized.includes('light')) {
-    return 'light';
-  }
-  if (normalized.includes('虹') || normalized.includes('rainbow')) {
-    return 'rainbow';
-  }
-  if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) {
-    return 'stagnation';
-  }
-  return null;
-}
 
-function normalizeItemLabel(value: string | null | undefined): string {
-  return (value ?? '').toString().toLowerCase();
-}
+  function normalizeItemLabel(value: string | null | undefined): string {
+    return (value ?? '').toString().toLowerCase();
+  }
 
-interface ItemEffectSummary {
-  resources: ResourceReward;
-  lobbyGain: number;
-  lobbyReturn: number;
-  growthGain: number;
-  growthLoss: number;
-  creativityCost: number;
-  vpGain: number;
-}
+  interface ItemEffectSummary {
+    resources: ResourceReward;
+    lobbyGain: number;
+    lobbyReturn: number;
+    growthGain: number;
+    growthLoss: number;
+    creativityCost: number;
+    vpGain: number;
+  }
 
-function accumulateItemEffects(
-  items: CraftedLensSideItem[] | undefined,
-  direction: 'cost' | 'reward',
-): ItemEffectSummary {
-  const summary: ItemEffectSummary = {
-    resources: {},
-    lobbyGain: 0,
-    lobbyReturn: 0,
-    growthGain: 0,
-    growthLoss: 0,
-    creativityCost: 0,
-    vpGain: 0,
-  };
-  if (!Array.isArray(items)) {
+  function accumulateItemEffects(
+    items: CraftedLensSideItem[] | undefined,
+    direction: 'cost' | 'reward',
+  ): ItemEffectSummary {
+    const summary: ItemEffectSummary = {
+      resources: {},
+      lobbyGain: 0,
+      lobbyReturn: 0,
+      growthGain: 0,
+      growthLoss: 0,
+      creativityCost: 0,
+      vpGain: 0,
+    };
+    if (!Array.isArray(items)) {
+      return summary;
+    }
+
+    items.forEach((item) => {
+      const label = normalizeItemLabel(item.item ?? item.cardId);
+      const amount =
+        typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
+
+      const resourceKey = toResourceKey(label);
+      if (resourceKey) {
+        summary.resources[resourceKey] = (summary.resources[resourceKey] ?? 0) + amount;
+        return;
+      }
+
+      if (label.includes('img') || label.includes('creativity') || label.includes('想') || label.includes('創')) {
+        summary.resources.creativity = (summary.resources.creativity ?? 0) + amount;
+        return;
+      }
+
+      if (label.includes('grow')) {
+        if (direction === 'reward') {
+          summary.growthGain += amount;
+        } else {
+          summary.growthLoss += amount;
+        }
+        return;
+      }
+
+      if (label.includes('loby') || label.includes('lobby') || label.includes('ロビー')) {
+        if (direction === 'reward') {
+          summary.lobbyGain += amount;
+        } else {
+          summary.lobbyReturn += amount;
+        }
+        return;
+      }
+
+      if (label.includes('vp')) {
+        summary.vpGain += amount;
+      }
+    });
+
     return summary;
   }
 
-  items.forEach((item) => {
-    const label = normalizeItemLabel(item.item ?? item.cardId);
-    const amount =
-      typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
-
-    const resourceKey = toResourceKey(label);
-    if (resourceKey) {
-      summary.resources[resourceKey] = (summary.resources[resourceKey] ?? 0) + amount;
-      return;
+  function canActivateLens(
+    lensId: string,
+    ownerId: string,
+    playerId: string,
+    gameState: GameState,
+    extraLobby: number = 0,
+  ): boolean {
+    const slots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
+    const hasOccupant = slots.some((slot) => Boolean(slot.occupantId));
+    if (hasOccupant) {
+      return false;
     }
+    const hasEmptySlot = slots.some((slot) => !slot.occupantId);
+    const player = gameState.players[playerId];
+    const hasLobbyToken = player ? (getLobbyAvailable(player) + extraLobby) > 0 : false;
+    return hasEmptySlot && hasLobbyToken;
+  }
 
-    if (label.includes('img') || label.includes('creativity') || label.includes('想') || label.includes('創')) {
-      summary.resources.creativity = (summary.resources.creativity ?? 0) + amount;
-      return;
-    }
-
-    if (label.includes('grow')) {
-      if (direction === 'reward') {
-        summary.growthGain += amount;
-      } else {
-        summary.growthLoss += amount;
+  function canPayResourceCost(wallet: ResourceWallet, cost: ResourceCost): boolean {
+    return (['light', 'rainbow', 'stagnation'] as ResourceType[]).every((resource) => {
+      const required = cost[resource];
+      if (!required) {
+        return true;
       }
+      return wallet[resource] >= required;
+    });
+  }
+
+  function payResourceCost(wallet: ResourceWallet, cost: ResourceCost): void {
+    (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
+      const required = cost[resource];
+      if (required) {
+        wallet[resource] = Math.max(0, wallet[resource] - required);
+      }
+    });
+  }
+
+  function applyGrowthDelta(player: PlayerState, delta: number): void {
+    if (!player.characterId || delta === 0) {
       return;
     }
-
-    if (label.includes('loby') || label.includes('lobby') || label.includes('ロビー')) {
-      if (direction === 'reward') {
-        summary.lobbyGain += amount;
-      } else {
-        summary.lobbyReturn += amount;
-      }
-      return;
-    }
-
-    if (label.includes('vp')) {
-      summary.vpGain += amount;
-    }
-  });
-
-  return summary;
-}
-
-function canActivateLens(
-  lensId: string,
-  ownerId: string,
-  playerId: string,
-  gameState: GameState,
-  extraLobby: number = 0,
-): boolean {
-  const slots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
-  const hasOccupant = slots.some((slot) => Boolean(slot.occupantId));
-  if (hasOccupant) {
-    return false;
-  }
-  const hasEmptySlot = slots.some((slot) => !slot.occupantId);
-  const player = gameState.players[playerId];
-  const hasLobbyToken = player ? (getLobbyAvailable(player) + extraLobby) > 0 : false;
-  return hasEmptySlot && hasLobbyToken;
-}
-
-function canPayResourceCost(wallet: ResourceWallet, cost: ResourceCost): boolean {
-  return (['light', 'rainbow', 'stagnation'] as ResourceType[]).every((resource) => {
-    const required = cost[resource];
-    if (!required) {
-      return true;
-    }
-    return wallet[resource] >= required;
-  });
-}
-
-function payResourceCost(wallet: ResourceWallet, cost: ResourceCost): void {
-  (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
-    const required = cost[resource];
-    if (required) {
-      wallet[resource] = Math.max(0, wallet[resource] - required);
-    }
-  });
-}
-
-function applyGrowthDelta(player: PlayerState, delta: number): void {
-  if (!player.characterId || delta === 0) {
-    return;
-  }
-  if (!player.unlockedCharacterNodes) {
-    player.unlockedCharacterNodes = [];
-  }
-  if (delta > 0) {
-    const unlockedSet = buildUnlockedSetWithAuto(player.characterId, player.unlockedCharacterNodes);
-    const candidates = CHARACTER_GROWTH_DEFINITIONS[player.characterId]
-      ? Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId])
-      : [];
-    const unlockable = candidates.find(
-      (nodeId) =>
-        !unlockedSet.has(nodeId) &&
-        !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
-        canUnlockGrowthNode(player.characterId!, nodeId, unlockedSet),
-    );
-    if (unlockable) {
-      player.unlockedCharacterNodes.push(unlockable);
-    }
-  } else {
-    const current = new Set(player.unlockedCharacterNodes);
-    const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
-    const target = removable[0];
-    if (target) {
-      player.unlockedCharacterNodes = player.unlockedCharacterNodes.filter((id) => id !== target);
-    }
-  }
-}
-
-function applyGrowthSelection(
-  player: PlayerState,
-  selections: string[] | undefined,
-  amount: number,
-): void {
-  if (!player.characterId || amount <= 0) {
-    return;
-  }
-  if (!player.unlockedCharacterNodes) {
-    player.unlockedCharacterNodes = [];
-  }
-  const unlocked = new Set(buildUnlockedSetWithAuto(player.characterId, player.unlockedCharacterNodes));
-  const requested = selections && selections.length ? [...selections] : [];
-  for (let i = 0; i < amount; i += 1) {
-    const nextId =
-      requested.length > 0
-        ? requested.shift()
-        : Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId] ?? {}).find((nodeId) => {
-          return (
-            !unlocked.has(nodeId) &&
-            !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
-            canUnlockGrowthNode(player.characterId!, nodeId, unlocked)
-          );
-        });
-    if (!nextId) {
-      break;
-    }
-    if (!canUnlockGrowthNode(player.characterId!, nextId, unlocked)) {
-      continue;
-    }
-    player.unlockedCharacterNodes.push(nextId);
-    unlocked.add(nextId);
-  }
-}
-
-function gainLobbyFromStock(player: PlayerState, amount: number): void {
-  if (amount <= 0) {
-    return;
-  }
-  const stock = getLobbyReserve(player);
-  const transferable = Math.min(stock, amount);
-  if (transferable > 0) {
-    player.lobbyReserve = stock - transferable;
-    incrementPlayerLobbyUsed(player, transferable);
-  }
-}
-
-function returnLobbyToStock(
-  player: PlayerState,
-  gameState: GameState,
-  lensId: string,
-  amount: number,
-): void {
-  if (amount <= 0) {
-    return;
-  }
-  let remaining = amount;
-
-  // 手持ち使用済み (Prioritize returning Used first)
-  if (remaining > 0) {
-    const currentUsed = getPlayerLobbyUsed(player);
-    const takeUsed = Math.min(currentUsed, remaining);
-    if (takeUsed > 0) {
-      player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
-      player.lobbyReserve = getLobbyReserve(player) + takeUsed;
-      remaining -= takeUsed;
-    }
-  }
-
-  // ボード上（今回のレンズ以外）
-  gameState.board.lobbySlots.forEach((slot) => {
-    if (remaining <= 0) {
-      return;
-    }
-    if (slot.occupantId === player.playerId && slot.lensId !== lensId) {
-      delete slot.occupantId;
-      slot.isActive = true;
-      remaining -= 1;
-      player.lobbyReserve = getLobbyReserve(player) + 1;
-    }
-  });
-
-  // ラボ配置
-  if (remaining > 0 && Array.isArray(gameState.labPlacements)) {
-    for (const placement of gameState.labPlacements) {
-      if (remaining <= 0) {
-        break;
-      }
-      if (placement.playerId !== player.playerId || placement.count <= 0) {
-        continue;
-      }
-      const take = Math.min(placement.count, remaining);
-      placement.count -= take;
-      remaining -= take;
-      player.lobbyReserve = getLobbyReserve(player) + take;
-    }
-  }
-
-  // 手持ち未使用 (Last resort)
-  if (remaining > 0) {
-    const available = getLobbyAvailable(player);
-    const takeAvail = Math.min(available, remaining);
-    if (takeAvail > 0) {
-      player.lobbyAvailable = available - takeAvail;
-      player.lobbyReserve = getLobbyReserve(player) + takeAvail;
-      remaining -= takeAvail;
-    }
-  }
-
-  if (remaining > 0) {
-    throw new Error('ロビー返却コストを支払うためのロビーが不足しています');
-  }
-}
-function applyGrowthReward(
-  player: {
-    resources: ResourceWallet;
-    vp: number;
-    actionPoints: number;
-    creativity: number;
-    unlockedCharacterNodes?: string[];
-  },
-  reward: GrowthReward,
-): void {
-  if (!reward) {
-    return;
-  }
-  if (typeof reward.vp === 'number') {
-    player.vp += reward.vp;
-  }
-  if (reward.unlockNodeId) {
     if (!player.unlockedCharacterNodes) {
       player.unlockedCharacterNodes = [];
     }
-    if (!player.unlockedCharacterNodes.includes(reward.unlockNodeId)) {
-      player.unlockedCharacterNodes.push(reward.unlockNodeId);
+    if (delta > 0) {
+      const unlockedSet = buildUnlockedSetWithAuto(player.characterId, player.unlockedCharacterNodes);
+      const candidates = CHARACTER_GROWTH_DEFINITIONS[player.characterId]
+        ? Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId])
+        : [];
+      const unlockable = candidates.find(
+        (nodeId) =>
+          !unlockedSet.has(nodeId) &&
+          !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
+          canUnlockGrowthNode(player.characterId!, nodeId, unlockedSet),
+      );
+      if (unlockable) {
+        player.unlockedCharacterNodes.push(unlockable);
+      }
+    } else {
+      const current = new Set(player.unlockedCharacterNodes);
+      const removable = [...current].filter((nodeId) => !nodeId.endsWith(':s'));
+      const target = removable[0];
+      if (target) {
+        player.unlockedCharacterNodes = player.unlockedCharacterNodes.filter((id) => id !== target);
+      }
     }
   }
-}
+
+  function applyGrowthSelection(
+    player: PlayerState,
+    selections: string[] | undefined,
+    amount: number,
+  ): void {
+    if (!player.characterId || amount <= 0) {
+      return;
+    }
+    if (!player.unlockedCharacterNodes) {
+      player.unlockedCharacterNodes = [];
+    }
+    const unlocked = new Set(buildUnlockedSetWithAuto(player.characterId, player.unlockedCharacterNodes));
+    const requested = selections && selections.length ? [...selections] : [];
+    for (let i = 0; i < amount; i += 1) {
+      const nextId =
+        requested.length > 0
+          ? requested.shift()
+          : Object.keys(CHARACTER_GROWTH_DEFINITIONS[player.characterId] ?? {}).find((nodeId) => {
+            return (
+              !unlocked.has(nodeId) &&
+              !isGrowthNodeAutoUnlocked(player.characterId!, nodeId) &&
+              canUnlockGrowthNode(player.characterId!, nodeId, unlocked)
+            );
+          });
+      if (!nextId) {
+        break;
+      }
+      if (!canUnlockGrowthNode(player.characterId!, nextId, unlocked)) {
+        continue;
+      }
+      player.unlockedCharacterNodes.push(nextId);
+      unlocked.add(nextId);
+    }
+  }
+
+  function gainLobbyFromStock(player: PlayerState, amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+    const stock = getLobbyReserve(player);
+    const transferable = Math.min(stock, amount);
+    if (transferable > 0) {
+      player.lobbyReserve = stock - transferable;
+      incrementPlayerLobbyUsed(player, transferable);
+    }
+  }
+
+  function returnLobbyToStock(
+    player: PlayerState,
+    gameState: GameState,
+    lensId: string,
+    amount: number,
+  ): void {
+    if (amount <= 0) {
+      return;
+    }
+    let remaining = amount;
+
+    // 手持ち使用済み (Prioritize returning Used first)
+    if (remaining > 0) {
+      const currentUsed = getPlayerLobbyUsed(player);
+      const takeUsed = Math.min(currentUsed, remaining);
+      if (takeUsed > 0) {
+        player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
+        player.lobbyReserve = getLobbyReserve(player) + takeUsed;
+        remaining -= takeUsed;
+      }
+    }
+
+    // ボード上（今回のレンズ以外）
+    gameState.board.lobbySlots.forEach((slot) => {
+      if (remaining <= 0) {
+        return;
+      }
+      if (slot.occupantId === player.playerId && slot.lensId !== lensId) {
+        delete slot.occupantId;
+        slot.isActive = true;
+        remaining -= 1;
+        player.lobbyReserve = getLobbyReserve(player) + 1;
+      }
+    });
+
+    // ラボ配置
+    if (remaining > 0 && Array.isArray(gameState.labPlacements)) {
+      for (const placement of gameState.labPlacements) {
+        if (remaining <= 0) {
+          break;
+        }
+        if (placement.playerId !== player.playerId || placement.count <= 0) {
+          continue;
+        }
+        const take = Math.min(placement.count, remaining);
+        placement.count -= take;
+        remaining -= take;
+        player.lobbyReserve = getLobbyReserve(player) + take;
+      }
+    }
+
+    // 手持ち未使用 (Last resort)
+    if (remaining > 0) {
+      const available = getLobbyAvailable(player);
+      const takeAvail = Math.min(available, remaining);
+      if (takeAvail > 0) {
+        player.lobbyAvailable = available - takeAvail;
+        player.lobbyReserve = getLobbyReserve(player) + takeAvail;
+        remaining -= takeAvail;
+      }
+    }
+
+    if (remaining > 0) {
+      throw new Error('ロビー返却コストを支払うためのロビーが不足しています');
+    }
+  }
+  function applyGrowthReward(
+    player: {
+      resources: ResourceWallet;
+      vp: number;
+      actionPoints: number;
+      creativity: number;
+      unlockedCharacterNodes?: string[];
+    },
+    reward: GrowthReward,
+  ): void {
+    if (!reward) {
+      return;
+    }
+    if (typeof reward.vp === 'number') {
+      player.vp += reward.vp;
+    }
+    if (reward.unlockNodeId) {
+      if (!player.unlockedCharacterNodes) {
+        player.unlockedCharacterNodes = [];
+      }
+      if (!player.unlockedCharacterNodes.includes(reward.unlockNodeId)) {
+        player.unlockedCharacterNodes.push(reward.unlockNodeId);
+      }
+    }
+  }
