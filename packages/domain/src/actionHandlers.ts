@@ -1747,6 +1747,21 @@ export const validateRooting: Validator = async (action, context) => {
     return errors;
   }
 
+  // DEBUG LOG
+  gameState.logs.push({
+    id: `debug-rooting-${Date.now()}-${Math.random()}`,
+    timestamp: Date.now(),
+    playerId: action.playerId,
+    actionType: 'pass',
+    payload: {
+      message: '[DEBUG] validateRooting',
+      phase: gameState.currentPhase,
+      isRooting: Object.values(gameState.players).map(p => ({ id: p.playerId, isRooting: p.isRooting })),
+      light: player.resources.light
+    },
+    result: { success: true }
+  });
+
   if (gameState.currentPhase !== 'main') {
     errors.push('根回しはメインフェーズのみ実行できます');
   }

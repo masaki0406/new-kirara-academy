@@ -4924,6 +4924,14 @@ export default function PlayPage(): JSX.Element {
         <div>Selected: {lensActivateLobbyReturnSelectedKeys.length}</div>
         <div style={{ color: 'red' }}>Feedback: {feedback}</div>
         <div>
+          Rooting: {
+            Object.values(gameState?.players ?? {})
+              .filter(p => p.isRooting)
+              .map(p => p.displayName ?? p.playerId)
+              .join(', ') || 'None'
+          }
+        </div>
+        <div>
           Last Debug: {
             ((gameState?.logs ?? []).slice().reverse().find(l =>
               l.payload && typeof l.payload.message === 'string' && l.payload.message.startsWith('[DEBUG]')
