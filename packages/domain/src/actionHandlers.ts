@@ -757,7 +757,9 @@ export const validateLensActivate: Validator = async (action, context) => {
   }
 
   if (itemCost.lobbyReturn > 0) {
-    if (itemCost.lobbyReturn > getPlayerLobbyUsed(player)) {
+    // Check against total active lobby (Used + Available) because we can return Unused too.
+    const totalActive = getPlayerLobbyUsed(player) + getLobbyAvailable(player);
+    if (itemCost.lobbyReturn > totalActive) {
       errors.push('戻せるロビーが不足しています');
     } else {
       const payload = action.payload as unknown as LensActivatePayload;

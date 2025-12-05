@@ -4922,6 +4922,7 @@ export default function PlayPage(): JSX.Element {
         <div>Logs: {gameState?.logs?.length ?? 0}</div>
         <div>Needed: {lensActivateLobbyReturnNeeded}</div>
         <div>Selected: {lensActivateLobbyReturnSelectedKeys.length}</div>
+        <div style={{ color: 'red' }}>Feedback: {feedback}</div>
         <div>
           Last Debug: {
             ((gameState?.logs ?? []).slice().reverse().find(l =>
