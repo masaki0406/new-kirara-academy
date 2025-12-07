@@ -25,7 +25,7 @@ interface PhaseManagerDeps {
 }
 
 export class PhaseManagerImpl implements PhaseManager {
-  constructor(private readonly deps: PhaseManagerDeps) {}
+  constructor(private readonly deps: PhaseManagerDeps) { }
 
   async preparePhase(state: MutableGameState): Promise<void> {
     const gameState = state.state;
@@ -58,8 +58,9 @@ export class PhaseManagerImpl implements PhaseManager {
     );
     replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
     // 共有ボード初期化（各レンズのロビー状態リセット）
+    // レンズ上のロビーはラウンドをまたいで維持されるため、occupantIdは削除しない
     gameState.board.lobbySlots.forEach((slot) => {
-      delete slot.occupantId;
+      // delete slot.occupantId; // FIX: Do not clear occupantId
       slot.isActive = true;
     });
     await state.save();
