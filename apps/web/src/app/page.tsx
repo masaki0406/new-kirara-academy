@@ -561,6 +561,11 @@ export default function HomePage(): JSX.Element {
             >
               キャラクター選択を開始
             </button>
+            {lifecycleStage === "characterSelect" && (
+              <Link href="/character-select" className={`${styles.linkButton} ${styles.buttonPrimary}`}>
+                キャラクター選択へ進む (自動遷移しない場合)
+              </Link>
+            )}
             <Link href="/play" className={styles.linkButton}>
               メインボードを見る
             </Link>

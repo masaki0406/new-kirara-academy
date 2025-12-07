@@ -498,6 +498,11 @@ function TurnOrderContent(): JSX.Element {
             キャラクター選択を開始
           </button>
         )}
+        {isConnected && lifecycleStage === "characterSelect" && (
+          <Link href="/character-select" className={styles.navLink}>
+            キャラクター選択へ進む (自動遷移しない場合)
+          </Link>
+        )}
         {isConnected && (
           <Link href="/play" className={styles.navLink}>
             メインボードへ進む
