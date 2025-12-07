@@ -47,7 +47,7 @@ export class GameSessionImpl implements GameSession {
         await this.deps.phaseManager.endPhase(mutableState);
         break;
       case 'end':
-        if (await this.endRoundIfNeeded()) {
+        if (await this.endRoundIfNeeded(mutableState)) {
           return;
         }
         this.currentPhase = 'main';
@@ -61,14 +61,14 @@ export class GameSessionImpl implements GameSession {
     }
   }
 
-  async endRoundIfNeeded(): Promise<boolean> {
-    const mutableState = await this.deps.stateLoader();
+  async endRoundIfNeeded(mutableState?: MutableGameState): Promise<boolean> {
+    const stateWrapper = mutableState ?? await this.deps.stateLoader();
     if (this.deps.turnOrder.hasAllPassed()) {
-      const state = mutableState.state;
+      const state = stateWrapper.state;
       // 終了フェーズ処理
-      await this.deps.phaseManager.endPhase(mutableState);
+      await this.deps.phaseManager.endPhase(stateWrapper);
       if (this.currentRound >= this.maxRounds) {
-        await this.deps.phaseManager.finalScoring(mutableState);
+        await this.deps.phaseManager.finalScoring(stateWrapper);
         this.currentPhase = 'finalScoring';
         return true;
       }
@@ -76,7 +76,7 @@ export class GameSessionImpl implements GameSession {
       this.currentRound += 1;
       state.currentRound = this.currentRound;
       state.currentPhase = 'setup';
-      await this.deps.phaseManager.preparePhase(mutableState);
+      await this.deps.phaseManager.preparePhase(stateWrapper);
       this.currentPhase = 'setup';
       return true;
     }
@@ -108,7 +108,7 @@ export class GameSessionImpl implements GameSession {
       });
 
       if (action.actionType === 'pass') {
-        await this.endRoundIfNeeded();
+        await this.endRoundIfNeeded(mutableState);
       }
     }
 

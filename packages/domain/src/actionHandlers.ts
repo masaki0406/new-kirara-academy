@@ -297,7 +297,14 @@ function applyPolishResult(
     if (selection.cardType === 'development') {
       removeCardFromList(developmentCards, selection.cardId);
     } else {
-      removeCardFromList(vpCards, selection.cardId);
+      // DEBUG LOG
+      console.log(`[DEBUG] Removing VP card: ${selection.cardId} from ${JSON.stringify(vpCards)}`);
+      try {
+        removeCardFromList(vpCards, selection.cardId);
+      } catch (e) {
+        console.error(`[DEBUG] Failed to remove VP card: ${selection.cardId}`, e);
+        throw e;
+      }
     }
   });
   if (!player.craftedLenses) {
@@ -738,16 +745,10 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
       },
       result: { success: false }
     });
-    // Rethrow to ensure the action is marked as failed, BUT the logs should be preserved if we save state.
-    // However, GameSessionImpl only saves on success.
-    // So we must NOT rethrow if we want logs to be saved.
-    // But if we don't rethrow, the client thinks it succeeded.
-    // We should probably rely on the log being present in the state that IS saved if we return normally?
-    // Wait, if we catch and don't rethrow, the function returns void (Promise<void>).
-    // The caller (ActionResolver) sees success.
-    // This is bad if it actually failed.
-    // But for debugging "Missing Logs", swallowing the error allows the state (with logs) to be saved.
-    // I will swallow the error for now to get the logs.
+    // Rethrow to ensure the action is marked as failed.
+    // Although GameSessionImpl won't save the logs in the state, the client will receive the error
+    // and avoid optimistic updates that cause desync.
+    throw error;
   }
 };
 

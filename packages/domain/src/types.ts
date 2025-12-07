@@ -59,7 +59,7 @@ export interface GameSession {
   currentPhase: GamePhase;
   start(): Promise<void>;
   advancePhase(): Promise<void>;
-  endRoundIfNeeded(): Promise<boolean>;
+  endRoundIfNeeded(mutableState?: MutableGameState): Promise<boolean>;
   processAction(action: PlayerAction, ruleset: Ruleset, timestamp: number): Promise<ActionResult>;
 }
 
