@@ -82,6 +82,9 @@ export interface TurnOrder {
   markPass(playerId: PlayerId): void;
   registerRooting(playerId: PlayerId): void;
   hasAllPassed(): boolean;
+  passedCount(): number;
+  totalCount(): number;
+  resolveNextRoundStarter(): PlayerId | null;
 }
 
 export type ActionType =

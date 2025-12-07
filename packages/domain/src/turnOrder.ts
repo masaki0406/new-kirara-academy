@@ -47,6 +47,14 @@ export class TurnOrderImpl implements TurnOrder {
     return this.passedPlayers.size >= this.order.length;
   }
 
+  passedCount(): number {
+    return this.passedPlayers.size;
+  }
+
+  totalCount(): number {
+    return this.order.length;
+  }
+
   resolveNextRoundStarter(): PlayerId | null {
     if (this.rootingPlayer) {
       return this.rootingPlayer;

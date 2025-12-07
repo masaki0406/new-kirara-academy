@@ -64,6 +64,7 @@ export class GameSessionImpl implements GameSession {
   async endRoundIfNeeded(mutableState?: MutableGameState): Promise<boolean> {
     const stateWrapper = mutableState ?? await this.deps.stateLoader();
     if (this.deps.turnOrder.hasAllPassed()) {
+      console.log('[endRoundIfNeeded] All players passed. Advancing round.');
       const state = stateWrapper.state;
       // 終了フェーズ処理
       await this.deps.phaseManager.endPhase(stateWrapper);
@@ -80,6 +81,7 @@ export class GameSessionImpl implements GameSession {
       this.currentPhase = 'setup';
       return true;
     }
+    console.log('[endRoundIfNeeded] Not all players passed.');
     return false;
   }
 
