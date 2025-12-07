@@ -668,6 +668,14 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     requirement: requireNotPassed(),
     highlight: "warning",
   },
+  {
+    id: "replenishLobby",
+    label: "ロビー補充",
+    category: "general",
+    summary: "ストック 1 / ロビー +1",
+    description: "ストックからロビーを1つ補充します。",
+    requirement: requireLobbyStock(),
+  },
 ];
 
 function classNames(...values: Array<string | false | null | undefined>): string {
@@ -1056,7 +1064,7 @@ type CollectRequestPayload =
 interface CharacterGrowthNodeWithStatus extends CharacterGrowthNode {
   isUnlocked: boolean;
   definition?: GrowthNodeDefinition;
-  unlockable: boolean;
+  isUnlockable: boolean;
 }
 
 interface PendingPolishResult {
@@ -1834,7 +1842,7 @@ export default function PlayPage(): JSX.Element {
       return growthNodes.map((node) => ({
         ...node,
         isUnlocked: false,
-        unlockable: false,
+        isUnlockable: false,
       }));
     }
 
@@ -1846,7 +1854,7 @@ export default function PlayPage(): JSX.Element {
     return growthNodes.map((node) => {
       const definition = getGrowthNode(localGamePlayer.characterId!, node.id);
       const isUnlocked = unlockedSet.has(node.id);
-      const unlockable =
+      const isUnlockable =
         !!definition &&
         !definition.autoUnlock &&
         !isUnlocked &&
@@ -1855,12 +1863,12 @@ export default function PlayPage(): JSX.Element {
         ...node,
         isUnlocked,
         definition,
-        unlockable,
+        isUnlockable,
       };
     });
   }, [growthNodes, localGamePlayer?.characterId, localGamePlayer?.unlockedCharacterNodes]);
   const availableGrowthNodes = useMemo(
-    () => growthNodesWithStatus.filter((node) => node.unlockable),
+    () => growthNodesWithStatus.filter((node) => node.isUnlockable),
     [growthNodesWithStatus],
   );
   const growthNodeMap = useMemo(() => {
@@ -2735,6 +2743,58 @@ export default function PlayPage(): JSX.Element {
     [localPlayer?.id, performAction, refresh, setFeedback],
   );
 
+  const handleReplenishLobby = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    setPendingActionId("replenishLobby");
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "replenishLobby",
+          payload: {},
+        },
+      });
+      setFeedback("ロビーを補充しました。");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      setFeedback(
+        error instanceof Error ? error.message : "ロビー補充に失敗しました。",
+      );
+    } finally {
+      setPendingActionId(null);
+    }
+  }, [localPlayer?.id, performAction, refresh, setFeedback]);
+
+  const handleUnlockNode = useCallback(async (nodeId: string) => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    setPendingActionId(`unlock-${nodeId}`);
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "growth",
+          payload: { selection: [nodeId] },
+        },
+      });
+      setFeedback("能力を解放しました。");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      setFeedback(
+        error instanceof Error ? error.message : "能力解放に失敗しました。",
+      );
+    } finally {
+      setPendingActionId(null);
+    }
+  }, [localPlayer?.id, performAction, refresh, setFeedback]);
+
   const formatPrerequisites = useCallback(
     (definition?: GrowthNodeDefinition) => {
       if (!definition) {
@@ -2948,17 +3008,50 @@ export default function PlayPage(): JSX.Element {
         const slotIndex = vpIndex;
         const cardId = vpCards[slotIndex] ?? null;
         vpIndex += 1;
-        const card = resolveCard(cardId, [vpCardCatalog, developmentCardCatalog]);
+        const card = resolveCard(cardId, [vpCardCatalog]);
         return { ...slot, cardId, card, slotIndex };
       }
 
       if (slot.role === "vpDeck") {
         return { ...slot, cardId: null, count: vpDeckCount };
       }
-
+      if (slot.role === "deck-development") {
+        return { ...slot, remaining: developmentDeckCount, cardId: null };
+      }
+      if (slot.role === "deck-vp") {
+        return { ...slot, remaining: vpDeckCount, cardId: null };
+      }
       return { ...slot, cardId: null };
     });
-  }, [gameState, developmentCardCatalog, vpCardCatalog]);
+  }, [
+    gameState?.board?.publicDevelopmentCards,
+    gameState?.board?.publicVpCards,
+    gameState?.developmentDeck.length,
+    gameState?.vpDeck?.length,
+    developmentCardCatalog,
+    vpCardCatalog,
+  ]);
+
+  const handleSupplySelect = useCallback(async (choice: 'lobby' | 'growth', nodeId?: string) => {
+    if (!localPlayer?.id) return;
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: 'supplySelect',
+          payload: { choice, nodeId },
+        },
+      });
+      setFeedback("供給ボーナスを選択しました。");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      setFeedback(error instanceof Error ? error.message : "選択に失敗しました。");
+    }
+  }, [localPlayer?.id, performAction, refresh, setFeedback]);
+
+  const showSupplySelection = gameState?.currentPhase === 'supply' && localPlayer?.id && !gameState.supplySelections?.[localPlayer.id];
+  const waitingForSupply = gameState?.currentPhase === 'supply' && localPlayer?.id && gameState.supplySelections?.[localPlayer.id];
 
   const playerColorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -3849,9 +3942,24 @@ export default function PlayPage(): JSX.Element {
                                   </div>
                                   <p className={styles.growthDescription}>{node.description}</p>
                                   {!node.isUnlocked ? (
-                                    <p className={styles.growthPrereq}>
-                                      {formatPrerequisites(node.definition) ?? "条件なし"}
-                                    </p>
+                                    <div className={styles.growthActions}>
+                                      <p className={styles.growthPrereq}>
+                                        {formatPrerequisites(node.definition) ?? "条件なし"}
+                                      </p>
+                                      <button
+                                        type="button"
+                                        className={styles.unlockButton}
+                                        disabled={
+                                          !isLocalTurn ||
+                                          (localGamePlayer?.lobbyReserve ?? 0) < 1 ||
+                                          pendingActionId !== null ||
+                                          !node.isUnlockable
+                                        }
+                                        onClick={() => void handleUnlockNode(node.id)}
+                                      >
+                                        解放 (ストック1)
+                                      </button>
+                                    </div>
                                   ) : null}
                                 </li>
                               ))}
@@ -3942,6 +4050,8 @@ export default function PlayPage(): JSX.Element {
                                         openPersuasionDialog();
                                       } else if (action.id === "pass") {
                                         void handleSubmitPass();
+                                      } else if (action.id === "replenishLobby") {
+                                        void handleReplenishLobby();
                                       } else if (LAB_ACTION_LOOKUP.has(action.id)) {
                                         openLabConfirmDialog(action.id);
                                       }

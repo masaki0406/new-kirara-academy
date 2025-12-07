@@ -39,19 +39,21 @@ export class PhaseManagerImpl implements PhaseManager {
     const order = determineTurnOrder(gameState.currentRound, gameState.players, gameState.turnOrder);
     this.deps.turnOrder.setInitialOrder(order);
     gameState.currentPlayerId = order[0];
-    gameState.currentPhase = 'setup';
-    const supplyAp = this.deps.rulesetConfig?.initialActionPoints ?? 7;
-    const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
-    // リソース・行動力初期化
+    gameState.currentPhase = 'supply';
+    gameState.supplySelections = {};
     Object.values(gameState.players).forEach((player) => {
-      player.actionPoints = Math.min(supplyAp, MAX_ACTION_POINTS);
+      const supplyAp = this.deps.rulesetConfig?.initialActionPoints ?? 7;
+      const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
+      player.actionPoints = Math.min(MAX_ACTION_POINTS, player.actionPoints + supplyAp);
       player.creativity = Math.min(MAX_CREATIVITY, player.creativity + supplyCreativity);
+      // Stock Supply: No longer automatic. Handled via Supply Selection.
       player.hasPassed = false;
       delete player.passedAt;
       if (player.isRooting) {
         player.isRooting = false;
       }
     });
+
     // 公開開発カード補充
     replenishDevelopmentRow(
       gameState,

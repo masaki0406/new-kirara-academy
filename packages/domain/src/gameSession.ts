@@ -41,6 +41,20 @@ export class GameSessionImpl implements GameSession {
     this.currentPhase = mutableState.state.currentPhase;
     switch (this.currentPhase) {
       case 'setup':
+        // Setup typically transitions to Supply now
+        this.currentPhase = 'supply';
+        // But if we are calling advancePhase manually, we might mean "Skip Setup/Supply"?
+        // Usually preparePhase sets it to 'supply'.
+        // If we are in 'setup', it means we just started.
+        // Let's assume 'setup' -> 'supply' is automatic or handled by preparePhase.
+        // If we are here, maybe we want to go to main?
+        // Actually, preparePhase sets it to 'supply'.
+        // So if currentPhase is 'supply', we wait for actions.
+        // If we are in 'setup' (legacy?), go to 'main'.
+        this.currentPhase = 'main';
+        await this.deps.phaseManager.mainPhase(mutableState);
+        break;
+      case 'supply':
         this.currentPhase = 'main';
         await this.deps.phaseManager.mainPhase(mutableState);
         break;
@@ -81,9 +95,10 @@ export class GameSessionImpl implements GameSession {
 
       this.currentRound += 1;
       state.currentRound = this.currentRound;
-      state.currentPhase = 'setup';
+      state.currentRound = this.currentRound;
+      state.currentPhase = 'supply';
       await this.deps.phaseManager.preparePhase(stateWrapper);
-      this.currentPhase = 'setup';
+      this.currentPhase = 'supply';
       return true;
     }
     console.log('[endRoundIfNeeded] Not all players passed.');

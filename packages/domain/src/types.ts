@@ -1,4 +1,4 @@
-export type GamePhase = 'setup' | 'main' | 'end' | 'finalScoring';
+export type GamePhase = 'setup' | 'supply' | 'main' | 'end' | 'finalScoring';
 export type LifecycleStage = 'lobby' | 'turnOrder' | 'characterSelect' | 'inGame';
 
 export type PlayerId = string;
@@ -97,7 +97,10 @@ export type ActionType =
   | 'persuasion'
   | 'task'
   | 'rooting'
-  | 'pass';
+  | 'pass'
+  | 'growth'
+  | 'replenishLobby'
+  | 'supplySelect';
 
 export interface LobbyLocation {
   type: 'lens' | 'lab' | 'hand';
@@ -275,6 +278,7 @@ export interface GameState {
   tasks: Record<TaskId, TaskState>;
   logs: ActionLogEntry[];
   labPlacements: LabPlacement[];
+  supplySelections?: Record<PlayerId, boolean>;
   developmentDeckInitialized?: boolean;
   vpDeckInitialized?: boolean;
   snapshotId?: string;

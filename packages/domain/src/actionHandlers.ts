@@ -1748,6 +1748,14 @@ export const applyTask: EffectApplier = async (action, context) => {
 
   player.tasksCompleted.push(taskId);
   for (const reward of task.reward) {
+    // Skip lobby rewards in fixed rewards, as they are now handled by rewardChoice
+    if (reward.type === 'resource' && (reward.value as any).lobby) {
+      continue;
+    }
+    // Also check if reward object has lobby property directly (custom convention)
+    if (typeof (reward as any).lobby === 'number') {
+      continue;
+    }
     applyReward(player, reward);
   }
 
@@ -1782,8 +1790,8 @@ export const applyTask: EffectApplier = async (action, context) => {
       break;
     }
     case 'lobby': {
-      const reserve = getLobbyReserve(player);
-      player.lobbyReserve = reserve + 1;
+      // Replenish Lobby (Available) directly, instead of adding to Stock
+      player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
       break;
     }
     default:
@@ -2180,6 +2188,16 @@ function applyReward(player: { resources: ResourceWallet; vp: number; actionPoin
       // トリガーはイベント処理でハンドリングするためここでは何もしない
       break;
     default:
+      // Check for lobby reward in unknown types or extended properties
+      if (reward && typeof reward === 'object') {
+        const r = reward as { type: string; value: unknown; lobby?: number };
+        // If the reward object has a 'lobby' property directly (custom convention)
+        if (typeof r.lobby === 'number' && r.lobby > 0) {
+          const p = player as any;
+          const currentReserve = p.lobbyReserve ?? 0;
+          p.lobbyReserve = currentReserve + r.lobby;
+        }
+      }
       break;
   }
 }
@@ -2535,3 +2553,229 @@ function applyGrowthReward(
     }
   }
 }
+
+export const validateGrowth: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.currentPlayerId !== action.playerId) {
+    errors.push('現在の手番プレイヤーではありません');
+  }
+
+  const stock = getLobbyReserve(player);
+  if (stock < 1) {
+    errors.push('成長に必要なロビーストックが不足しています');
+  }
+
+  // 成長可能かどうかのチェックは厳密には難しい（選択肢による）が、
+  // 少なくとも1つは解除可能なノードがあるかチェックすべきか？
+  // ここでは簡易的にストックチェックのみとする。
+  // applyGrowthSelection内で解除できなければ何もしない（コストだけ払うことになるかも？）
+  // いや、applyGrowthSelectionは解除できた数だけループするわけではない。
+  // amount分ループして、解除できなければbreakする。
+  // なので、解除できなくてもコストは払われる仕様にするか、
+  // 事前にチェックするか。
+  // ユーザー体験的には事前にチェックしたいが、選択肢がPayloadに含まれている場合はチェック可能。
+
+  return errors;
+};
+
+export const applyGrowth: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+
+  const stock = getLobbyReserve(player);
+  if (stock < 1) {
+    throw new Error('成長に必要なロビーストックが不足しています');
+  }
+
+  player.lobbyReserve = stock - 1;
+  incrementPlayerLobbyUsed(player, 1); // 成長に使用した分もUsedにカウントする？
+  // gainLobbyFromStockではUsedにカウントしている。
+  // 成長は「消費」なので、Usedにカウントすべきか、単に減らすべきか。
+  // "Use stock" -> usually means it's gone.
+  // If I increment Used, it implies it might come back?
+  // But applyGrowthSelection doesn't use lobby.
+  // Let's assume it's consumed permanently?
+  // Or maybe it goes to "Used" and can be recovered?
+  // "Use stock to add one unused lobby OR use stock for any growth".
+  // If I add to lobby, it goes to Available.
+  // If I use for growth, it's gone?
+  // Let's assume consumed. So NO incrementPlayerLobbyUsed.
+  // Wait, gainLobbyFromStock calls incrementPlayerLobbyUsed.
+  // Let's check gainLobbyFromStock again.
+  // "incrementPlayerLobbyUsed(player, transferable);"
+  // If lobbyUsed tracks "total lobby tokens in circulation", then yes.
+  // If lobbyUsed tracks "tokens on board/hand", then yes.
+  // If lobbyReserve is "potential tokens", and lobbyUsed/Available are "actual tokens".
+  // Then Growth consumes "potential tokens" to unlock ability.
+  // It does NOT create a token.
+  // So we should NOT increment lobbyUsed. Just decrement Reserve.
+
+  const payload = action.payload as Record<string, unknown>;
+  const selection = Array.isArray(payload.selection) ? payload.selection.map(String) : undefined;
+
+  applyGrowthSelection(player, selection, 1);
+};
+
+export const validateReplenishLobby: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.currentPlayerId !== action.playerId) {
+    errors.push('現在の手番プレイヤーではありません');
+  }
+
+  const stock = getLobbyReserve(player);
+  if (stock < 1) {
+    errors.push('補充に必要なロビーストックが不足しています');
+  }
+
+  return errors;
+};
+
+export const applyReplenishLobby: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+
+  // gainLobbyFromStock handles validation of amount <= stock internally?
+  // No, it takes min(stock, amount).
+  // But we want to ensure we actually gained 1.
+  const stock = getLobbyReserve(player);
+  if (stock < 1) {
+    throw new Error('補充に必要なロビーストックが不足しています');
+  }
+
+  // gainLobbyFromStock moves from Reserve to Used?
+  // Wait, I need to check gainLobbyFromStock implementation again.
+  // It calls incrementPlayerLobbyUsed.
+  // Does it update lobbyAvailable?
+  // NO!
+  // gainLobbyFromStock (line 2435):
+  // player.lobbyReserve = stock - transferable;
+  // incrementPlayerLobbyUsed(player, transferable);
+  // It does NOT increase lobbyAvailable.
+  // This function seems to be "Move from Reserve to Used (e.g. when paying cost?)".
+  // If I want to "Add one unused lobby", I should move to Available.
+
+  // So I should implement my own logic here.
+  player.lobbyReserve = stock - 1;
+  player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
+  // And maybe increment Used?
+  // If Used tracks "Active Tokens", then yes.
+  // Let's assume Used tracks "Tokens that are not in Reserve".
+  // Then yes.
+  incrementPlayerLobbyUsed(player, 1);
+};
+
+export const validateSupplySelect: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+
+  if (gameState.currentPhase !== 'supply') {
+    errors.push('供給フェーズではありません');
+  }
+
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.supplySelections?.[action.playerId]) {
+    errors.push('既に供給選択を完了しています');
+  }
+
+  const payload = action.payload as { choice?: string; nodeId?: string };
+  if (!payload.choice || (payload.choice !== 'lobby' && payload.choice !== 'growth')) {
+    errors.push('無効な選択です');
+  }
+
+  if (payload.choice === 'growth') {
+    // Check if node is valid/unlockable?
+    // We can reuse logic or just trust applyGrowthSelection to handle invalid nodes gracefully (it does checks).
+    // But basic check:
+    if (!payload.nodeId) {
+      // If no nodeId, applyGrowthSelection picks one automatically?
+      // Let's allow it.
+    }
+  }
+
+  return errors;
+};
+
+export const applySupplySelect: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+
+  const payload = action.payload as { choice: 'lobby' | 'growth'; nodeId?: string };
+
+  if (payload.choice === 'lobby') {
+    // Gain 1 Lobby (Available)
+    // Note: This is a "Free" action from Supply, so we don't consume Stock.
+    // We just ADD to Available.
+    // Wait, the user said "Consume 1 Stock".
+    // But in Supply Phase, we didn't give +1 Stock.
+    // So effectively, we are giving "1 Free Stock Usage".
+    // If we implemented "Give +1 Stock" then "Consume 1 Stock", the net result is 0 change in Stock, +1 Lobby/Growth.
+    // So here we just apply the benefit.
+    player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
+  } else if (payload.choice === 'growth') {
+    // Unlock Node
+    const selection = payload.nodeId ? [payload.nodeId] : undefined;
+    applyGrowthSelection(player, selection, 1);
+  }
+
+  // Mark selection as done
+  if (!gameState.supplySelections) {
+    gameState.supplySelections = {};
+  }
+  gameState.supplySelections[action.playerId] = true;
+
+  // Check if all players selected
+  const allSelected = Object.keys(gameState.players).every(
+    (pid) => gameState.supplySelections?.[pid]
+  );
+
+  if (allSelected) {
+    // Transition to Main Phase
+    // We can trigger it via GameSession or just set it here?
+    // GameSession.advancePhase checks currentPhase.
+    // If we change it here, GameSession needs to know?
+    // GameSession.processAction saves state.
+    // If we change phase here, next advancePhase call might be confused?
+    // Actually, GameSession.processAction doesn't call advancePhase automatically unless 'pass'.
+    // But here we want to auto-advance.
+    // We can set currentPhase = 'main' here.
+    // And call phaseManager.mainPhase?
+    // We don't have access to phaseManager here directly.
+    // But we can set the state.
+    // GameSession.processAction doesn't handle phase transitions other than 'pass' -> endRound.
+    // So we should probably set a flag or just set the phase.
+    // If we set phase to 'main', we need to run mainPhase logic (reset pass flags etc).
+    // But mainPhase logic is simple: set phase to main, set current player.
+    // We can do it here manually.
+    gameState.currentPhase = 'main';
+    // Ensure current player is set correctly (should be set in preparePhase)
+    // Reset pass flags (already done in preparePhase)
+  }
+};

@@ -26,6 +26,12 @@ import {
   validatePass,
   validateTask,
   validateWill,
+  validateGrowth,
+  applyGrowth,
+  validateReplenishLobby,
+  applyReplenishLobby,
+  validateSupplySelect,
+  applySupplySelect,
 } from './actionHandlers';
 
 export type ActionHandler = (
@@ -38,7 +44,7 @@ interface ActionResolverDeps {
 }
 
 export class ActionResolverImpl implements ActionResolver {
-  constructor(private readonly deps: ActionResolverDeps) {}
+  constructor(private readonly deps: ActionResolverDeps) { }
 
   async resolve(action: PlayerAction, context: ActionContext): Promise<ActionResult> {
     const handler = this.deps.handlers[action.actionType];
@@ -73,6 +79,9 @@ export function createDefaultActionResolver(): ActionResolverImpl {
       persuasion: createActionHandler({ validate: validatePersuasion, apply: applyPersuasion }),
       rooting: createActionHandler({ validate: validateRooting, apply: applyRooting }),
       pass: createActionHandler({ validate: validatePass, apply: applyPass }),
+      growth: createActionHandler({ validate: validateGrowth, apply: applyGrowth }),
+      replenishLobby: createActionHandler({ validate: validateReplenishLobby, apply: applyReplenishLobby }),
+      supplySelect: createActionHandler({ validate: validateSupplySelect, apply: applySupplySelect }),
     },
   });
 }
