@@ -41,20 +41,31 @@ export class PhaseManagerImpl implements PhaseManager {
     gameState.currentPlayerId = order[0];
     gameState.currentPhase = 'supply';
     gameState.supplySelections = {};
-    Object.values(gameState.players).forEach((player) => {
+    Object.keys(gameState.players).forEach((playerId) => {
+      const player = gameState.players[playerId];
       const supplyAp = this.deps.rulesetConfig?.initialActionPoints ?? 7;
       const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
       player.actionPoints = Math.min(MAX_ACTION_POINTS, player.actionPoints + supplyAp);
       player.creativity = Math.min(MAX_CREATIVITY, player.creativity + supplyCreativity);
-      // Stock Supply: Granted automatically, then consumed by Supply Selection
-      const currentReserve = player.lobbyReserve ?? 0;
-      player.lobbyReserve = currentReserve + 1;
+
+      // Stock Supply: No automatic grant.
+      // Players with Stock > 0 must make a selection. Others are skipped.
+      const hasStock = (player.lobbyReserve ?? 0) > 0;
+      if (gameState.supplySelections) {
+        gameState.supplySelections[playerId] = !hasStock; // true if no stock (skipped), false if stock (needs selection)
+      }
+
       player.hasPassed = false;
       delete player.passedAt;
       if (player.isRooting) {
         player.isRooting = false;
       }
     });
+
+    // If all players are skipped (no stock), advance to main phase immediately
+    if (Object.values(gameState.supplySelections).every((v) => v)) {
+      gameState.currentPhase = 'main';
+    }
 
     // 公開開発カード補充
     replenishDevelopmentRow(
