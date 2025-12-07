@@ -31,12 +31,14 @@ export class GameSessionImpl implements GameSession {
 
   async start(): Promise<void> {
     const mutableState = await this.deps.stateLoader();
+    this.currentRound = mutableState.state.currentRound;
     this.currentPhase = 'setup';
     await this.deps.phaseManager.preparePhase(mutableState);
   }
 
   async advancePhase(): Promise<void> {
     const mutableState = await this.deps.stateLoader();
+    this.currentPhase = mutableState.state.currentPhase;
     switch (this.currentPhase) {
       case 'setup':
         this.currentPhase = 'main';
@@ -63,6 +65,9 @@ export class GameSessionImpl implements GameSession {
 
   async endRoundIfNeeded(mutableState?: MutableGameState): Promise<boolean> {
     const stateWrapper = mutableState ?? await this.deps.stateLoader();
+    this.currentRound = stateWrapper.state.currentRound;
+    this.currentPhase = stateWrapper.state.currentPhase;
+
     if (this.deps.turnOrder.hasAllPassed()) {
       console.log('[endRoundIfNeeded] All players passed. Advancing round.');
       const state = stateWrapper.state;
