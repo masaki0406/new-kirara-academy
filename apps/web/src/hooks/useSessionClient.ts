@@ -53,6 +53,7 @@ export interface SessionClientHook {
   selectCharacter(options: { playerId: PlayerId; characterId: string }): Promise<void>;
   startGame(options: { requesterId: PlayerId }): Promise<void>;
   beginCharacterSelection(options: { requesterId: PlayerId }): Promise<void>;
+  beginTurnOrderSelection(options: { requesterId: PlayerId }): Promise<void>;
   adjustPlayerForTest(payload: AdjustPlayerForTestPayload): Promise<void>;
 }
 
@@ -429,6 +430,37 @@ export function useSessionClient(): SessionClientHook {
     [ensureConnected],
   );
 
+  const beginTurnOrderSelection = useCallback(
+    async ({ requesterId }: { requesterId: PlayerId }) => {
+      try {
+        ensureConnected();
+        setStatus({ type: "info", message: "手番順設定へ進めています..." });
+        await gatewayRef.current!.beginTurnOrderSelection({
+          roomId: roomIdRef.current!,
+          requesterId,
+        });
+        if (controllerRef.current) {
+          const state = await controllerRef.current.refresh();
+          setGameState(state);
+        }
+        setStatus({ type: "success", message: "手番順設定へ進みました" });
+      } catch (error) {
+        console.error(error);
+        setStatus({
+          type: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "手番順設定への移行に失敗しました",
+        });
+        throw error instanceof Error
+          ? error
+          : new Error("手番順設定への移行に失敗しました");
+      }
+    },
+    [ensureConnected],
+  );
+
   const adjustPlayerForTest = useCallback(
     async (payload: AdjustPlayerForTestPayload) => {
       try {
@@ -468,6 +500,7 @@ export function useSessionClient(): SessionClientHook {
     selectCharacter,
     startGame,
     beginCharacterSelection,
+    beginTurnOrderSelection,
     adjustPlayerForTest,
   };
 }

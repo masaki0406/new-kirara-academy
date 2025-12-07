@@ -57,6 +57,7 @@ interface SessionContextValue {
   selectCharacter(options: { playerId: string; characterId: string }): Promise<void>;
   startGame(options: { requesterId: string }): Promise<void>;
   beginCharacterSelection(options: { requesterId: string }): Promise<void>;
+  beginTurnOrderSelection(options: { requesterId: string }): Promise<void>;
   adjustPlayerForTest(
     options: Omit<AdjustPlayerForTestPayload, "playerId"> & { playerId?: string },
   ): Promise<void>;
@@ -276,6 +277,13 @@ export function SessionProvider({ children }: SessionProviderProps) {
     [client],
   );
 
+  const beginTurnOrderSelection = useCallback(
+    async ({ requesterId }: { requesterId: string }) => {
+      await client.beginTurnOrderSelection({ requesterId });
+    },
+    [client],
+  );
+
   const adjustPlayerForTest = useCallback(
     async (
       options: Omit<AdjustPlayerForTestPayload, "playerId"> & { playerId?: string },
@@ -316,6 +324,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
       selectCharacter,
       startGame,
       beginCharacterSelection,
+      beginTurnOrderSelection,
       adjustPlayerForTest,
     }),
     [
@@ -339,6 +348,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
       selectCharacter,
       startGame,
       beginCharacterSelection,
+      beginTurnOrderSelection,
       adjustPlayerForTest,
     ],
   );

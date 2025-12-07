@@ -44,6 +44,7 @@ export default function HomePage(): JSX.Element {
     createRoom,
     joinRoom,
     beginCharacterSelection,
+    beginTurnOrderSelection,
   } = useSession();
 
   const [localBaseUrlInput, setLocalBaseUrlInput] = useState(
@@ -141,7 +142,9 @@ export default function HomePage(): JSX.Element {
     localIsHost && lifecycleStage === "lobby";
 
   useEffect(() => {
-    if (lifecycleStage === "characterSelect") {
+    if (lifecycleStage === "turnOrder") {
+      router.push("/turn-order");
+    } else if (lifecycleStage === "characterSelect") {
       router.push("/character-select");
     } else if (lifecycleStage === "inGame") {
       router.push("/play");
@@ -297,6 +300,17 @@ export default function HomePage(): JSX.Element {
       console.error(error);
     }
   }, [beginCharacterSelection, localPlayer?.id]);
+
+  const handleBeginTurnOrderSelection = useCallback(async () => {
+    if (!localPlayer?.id) {
+      return;
+    }
+    try {
+      await beginTurnOrderSelection({ requesterId: localPlayer.id });
+    } catch (error) {
+      console.error(error);
+    }
+  }, [beginTurnOrderSelection, localPlayer?.id]);
 
   const connectedRoomId = gameState?.roomId ?? sessionRoomId ?? null;
 
@@ -550,9 +564,19 @@ export default function HomePage(): JSX.Element {
         </div>
         {isConnected && (
           <div className={styles.buttonRow}>
-            <Link href={turnOrderHref} className={styles.linkButton}>
+            <button
+              type="button"
+              className={styles.linkButton}
+              onClick={handleBeginTurnOrderSelection}
+              disabled={!canBeginCharacterSelection}
+            >
               手番順の設定に進む
-            </Link>
+            </button>
+            {lifecycleStage === "turnOrder" && (
+              <Link href={turnOrderHref} className={`${styles.linkButton} ${styles.buttonPrimary}`}>
+                手番順設定へ進む (自動遷移しない場合)
+              </Link>
+            )}
             <button
               type="button"
               className={styles.linkButton}

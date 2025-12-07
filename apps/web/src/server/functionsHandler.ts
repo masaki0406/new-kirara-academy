@@ -143,6 +143,12 @@ export async function handleFunctionsAction(action: string, body: Record<string,
         );
         return ok();
       }
+      case "beginTurnOrderSelection": {
+        await handlers.beginTurnOrderSelection(
+          asPayload<BeginCharacterSelectionRequest>(body),
+        );
+        return ok();
+      }
       case "startGame": {
         await handlers.startGame(asPayload<StartGameRequest>(body));
         return ok();

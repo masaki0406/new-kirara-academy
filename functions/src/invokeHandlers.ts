@@ -79,6 +79,15 @@ export function beginCharacterSelectionFunction(deps: HandlersDeps): HttpsFuncti
   });
 }
 
+export function beginTurnOrderSelectionFunction(deps: HandlersDeps): HttpsFunction {
+  const handlers = buildRoomHandlers(deps);
+  return onRequest(async (request: Request, response: Response) => {
+    const params = request.body as BeginCharacterSelectionRequest;
+    await handlers.beginTurnOrderSelection(params);
+    response.json({ status: 'ok' });
+  });
+}
+
 export function startGameFunction(deps: HandlersDeps): HttpsFunction {
   const handlers = buildRoomHandlers(deps);
   return onRequest(async (request: Request, response: Response) => {

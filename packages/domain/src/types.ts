@@ -1,5 +1,5 @@
 export type GamePhase = 'setup' | 'main' | 'end' | 'finalScoring';
-export type LifecycleStage = 'lobby' | 'characterSelect' | 'inGame';
+export type LifecycleStage = 'lobby' | 'turnOrder' | 'characterSelect' | 'inGame';
 
 export type PlayerId = string;
 export type LensId = string;

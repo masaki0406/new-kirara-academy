@@ -52,6 +52,7 @@ export interface RoomHandlers {
   updateTurnOrder(data: UpdateTurnOrderParams): Promise<PlayerId[]>;
   selectCharacter(data: SelectCharacterParams): Promise<void>;
   beginCharacterSelection(request: BeginCharacterSelectionRequest): Promise<void>;
+  beginTurnOrderSelection(request: BeginCharacterSelectionRequest): Promise<void>;
   startGame(request: StartGameRequest): Promise<void>;
   performAction(request: PerformActionRequest): Promise<ActionResult>;
   getRoomState(roomId: string): Promise<GameState>;
@@ -89,6 +90,10 @@ export function buildRoomHandlers(deps: HandlersDeps): RoomHandlers {
 
     async beginCharacterSelection(request: BeginCharacterSelectionRequest) {
       await deps.roomService.beginCharacterSelection(request);
+    },
+
+    async beginTurnOrderSelection(request: BeginCharacterSelectionRequest) {
+      await deps.roomService.beginTurnOrderSelection(request);
     },
 
     async startGame(request: StartGameRequest) {

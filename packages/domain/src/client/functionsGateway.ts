@@ -122,6 +122,10 @@ export class FunctionsGateway {
     await this.call<StatusResponse>('beginCharacterSelection', params);
   }
 
+  async beginTurnOrderSelection(params: BeginCharacterSelectionRequest): Promise<void> {
+    await this.call<StatusResponse>('beginTurnOrderSelection', params);
+  }
+
   async adjustPlayerForTest(roomId: string, payload: AdjustPlayerForTestPayload): Promise<void> {
     const params: AdjustPlayerForTestRequest = { roomId, ...payload };
     await this.call<StatusResponse>('adjustPlayerForTest', params);

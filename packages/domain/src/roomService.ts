@@ -359,6 +359,25 @@ export class RoomService {
     return state;
   }
 
+  async beginTurnOrderSelection(params: BeginCharacterSelectionParams): Promise<GameState> {
+    const snapshot = await this.adapter.loadGameState(params.roomId);
+    const state = snapshot.state;
+    ensureStateDefaults(state);
+    const requester = state.players[params.requesterId];
+    if (!requester) {
+      throw new Error('Player not found.');
+    }
+    if (!requester.isHost) {
+      throw new Error('Only the host can initiate turn order selection.');
+    }
+    if (state.lifecycleStage === 'inGame' || state.lifecycleStage === 'characterSelect') {
+      throw new Error('Cannot go back to turn order selection.');
+    }
+    state.lifecycleStage = 'turnOrder';
+    await snapshot.save();
+    return state;
+  }
+
   async updateLifecycleStage(params: UpdateLifecycleStageParams): Promise<GameState> {
     const snapshot = await this.adapter.loadGameState(params.roomId);
     const state = snapshot.state;
