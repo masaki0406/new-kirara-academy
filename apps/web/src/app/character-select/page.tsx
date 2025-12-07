@@ -27,6 +27,7 @@ export default function CharacterSelectPage(): JSX.Element {
     refresh,
     selectCharacter,
     startGame,
+    beginCharacterSelection,
   } = useSession();
 
   const [baseUrlInput, setBaseUrlInput] = useState(
@@ -229,9 +230,8 @@ export default function CharacterSelectPage(): JSX.Element {
             <span className={styles.metaLabel}>ローカルプレイヤー</span>
             <span className={styles.metaValue}>
               {localPlayer
-                ? `${localPlayer.name} (${
-                    localPlayer.role === "host" ? "ホスト" : "参加者"
-                  })`
+                ? `${localPlayer.name} (${localPlayer.role === "host" ? "ホスト" : "参加者"
+                })`
                 : "未登録"}
             </span>
           </div>
@@ -297,9 +297,29 @@ export default function CharacterSelectPage(): JSX.Element {
           })}
         </div>
         {isConnected && lifecycleStage !== "characterSelect" && (
-          <p className={styles.hint}>
-            ※ ホストがキャラクター選択を開始するまで待機しています。
-          </p>
+          <div className={styles.hintContainer}>
+            <p className={styles.hint}>
+              ※ ホストがキャラクター選択を開始するまで待機しています。
+            </p>
+            {localIsHost && (
+              <button
+                type="button"
+                className={`${styles.button} ${styles.primary}`}
+                onClick={async () => {
+                  if (localPlayer?.id) {
+                    try {
+                      await beginCharacterSelection({ requesterId: localPlayer.id });
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }
+                }}
+                disabled={isBusy}
+              >
+                キャラクター選択を開始する
+              </button>
+            )}
+          </div>
         )}
       </section>
 
@@ -325,12 +345,12 @@ export default function CharacterSelectPage(): JSX.Element {
             className={`${styles.button} ${styles.primary}`}
             onClick={handleStartGame}
             disabled=
-              {!isConnected ||
-                !localIsHost ||
-                !allSelected ||
-                lifecycleStage !== "characterSelect" ||
-                isBusy ||
-                isSubmitting}
+            {!isConnected ||
+              !localIsHost ||
+              !allSelected ||
+              lifecycleStage !== "characterSelect" ||
+              isBusy ||
+              isSubmitting}
           >
             ゲームを開始する
           </button>

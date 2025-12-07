@@ -173,7 +173,7 @@ function TurnOrderContent(): JSX.Element {
     localPlayerId && gameState?.players?.[localPlayerId]?.isHost,
   );
   const canBeginCharacterSelection =
-    localPlayerIsHost && lifecycleStage === "lobby";
+    localPlayerIsHost && (lifecycleStage === "lobby" || lifecycleStage === "turnOrder");
   const handleBeginCharacterSelection = useCallback(async () => {
     if (!localPlayerId) {
       return;
