@@ -2736,6 +2736,13 @@ export const applySupplySelect: EffectApplier = async (action, context) => {
 
   const payload = action.payload as { choice: 'lobby' | 'growth'; nodeId?: string };
 
+  // Consume Stock
+  const stock = getLobbyReserve(player);
+  if (stock < 1) {
+    throw new Error('供給選択に必要なロビーストックが不足しています');
+  }
+  player.lobbyReserve = stock - 1;
+
   if (payload.choice === 'lobby') {
     // Gain 1 Lobby (Available)
     player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
