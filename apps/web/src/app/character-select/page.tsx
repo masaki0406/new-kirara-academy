@@ -28,6 +28,7 @@ export default function CharacterSelectPage(): JSX.Element {
     selectCharacter,
     startGame,
     beginCharacterSelection,
+    beginTurnOrderSelection,
   } = useSession();
 
   const [baseUrlInput, setBaseUrlInput] = useState(
@@ -302,22 +303,40 @@ export default function CharacterSelectPage(): JSX.Element {
               ※ ホストがキャラクター選択を開始するまで待機しています。
             </p>
             {localIsHost && (
-              <button
-                type="button"
-                className={`${styles.button} ${styles.primary}`}
-                onClick={async () => {
-                  if (localPlayer?.id) {
-                    try {
-                      await beginCharacterSelection({ requesterId: localPlayer.id });
-                    } catch (e) {
-                      console.error(e);
+              <div className={styles.buttonRow}>
+                <button
+                  type="button"
+                  className={styles.button}
+                  onClick={async () => {
+                    if (localPlayer?.id) {
+                      try {
+                        await beginTurnOrderSelection({ requesterId: localPlayer.id });
+                      } catch (e) {
+                        console.error(e);
+                      }
                     }
-                  }
-                }}
-                disabled={isBusy}
-              >
-                キャラクター選択を開始する
-              </button>
+                  }}
+                  disabled={isBusy}
+                >
+                  手番順設定に戻る
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.button} ${styles.primary}`}
+                  onClick={async () => {
+                    if (localPlayer?.id) {
+                      try {
+                        await beginCharacterSelection({ requesterId: localPlayer.id });
+                      } catch (e) {
+                        console.error(e);
+                      }
+                    }
+                  }}
+                  disabled={isBusy}
+                >
+                  キャラクター選択を開始する
+                </button>
+              </div>
             )}
           </div>
         )}

@@ -370,7 +370,7 @@ export class RoomService {
     if (!requester.isHost) {
       throw new Error('Only the host can initiate turn order selection.');
     }
-    if (state.lifecycleStage === 'inGame' || state.lifecycleStage === 'characterSelect') {
+    if (state.lifecycleStage === 'inGame') {
       throw new Error('Cannot go back to turn order selection.');
     }
     state.lifecycleStage = 'turnOrder';
