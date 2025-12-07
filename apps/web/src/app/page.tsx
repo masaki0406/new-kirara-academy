@@ -2,6 +2,7 @@
 
 import type { JSX } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FormEvent,
   useCallback,
@@ -26,6 +27,7 @@ function createLocalId(prefix: string): string {
 }
 
 export default function HomePage(): JSX.Element {
+  const router = useRouter();
   const {
     baseUrl,
     setBaseUrl,
@@ -137,6 +139,14 @@ export default function HomePage(): JSX.Element {
   const lifecycleStage = gameState?.lifecycleStage ?? "lobby";
   const canBeginCharacterSelection =
     localIsHost && lifecycleStage === "lobby";
+
+  useEffect(() => {
+    if (lifecycleStage === "characterSelect") {
+      router.push("/character-select");
+    } else if (lifecycleStage === "inGame") {
+      router.push("/play");
+    }
+  }, [lifecycleStage, router]);
 
   const phaseLabel = useMemo(() => {
     if (!gameState) {

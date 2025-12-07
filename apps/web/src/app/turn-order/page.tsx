@@ -3,7 +3,7 @@
 import type { JSX } from "react";
 import { FormEvent, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import type { GameState, PlayerId } from "@domain/types";
 import styles from "./page.module.css";
 import {
@@ -42,6 +42,7 @@ export default function TurnOrderPage(): JSX.Element {
 }
 
 function TurnOrderContent(): JSX.Element {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const {
     baseUrl,
@@ -159,6 +160,15 @@ function TurnOrderContent(): JSX.Element {
   }, [draftOrder, gameState]);
 
   const lifecycleStage = gameState?.lifecycleStage ?? "lobby";
+
+  useEffect(() => {
+    if (lifecycleStage === "characterSelect") {
+      router.push("/character-select");
+    } else if (lifecycleStage === "inGame") {
+      router.push("/play");
+    }
+  }, [lifecycleStage, router]);
+
   const localPlayerIsHost = Boolean(
     localPlayerId && gameState?.players?.[localPlayerId]?.isHost,
   );
