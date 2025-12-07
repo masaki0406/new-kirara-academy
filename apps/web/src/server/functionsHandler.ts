@@ -1,5 +1,5 @@
 import { firestoreAdmin } from "./firebaseAdmin";
-import { FirestoreAdapterImpl, type FirestoreLike } from "@domain/firestoreAdapter";
+import { FirestoreAdapterImpl, type FirestoreLike, type TransactionLike } from "@domain/firestoreAdapter";
 import { RoomService, type CreateRoomParams, type JoinRoomParams, type LeaveRoomParams, type UpdateTurnOrderParams, type SelectCharacterParams } from "@domain/roomService";
 import { GameSessionImpl } from "@domain/gameSession";
 import { PhaseManagerImpl } from "@domain/phaseManager";
@@ -336,11 +336,13 @@ function syncTurnOrderFromState(turnOrder: TurnOrderImpl, gameState: GameState):
   });
 }
 
-function createFirestoreLike(db: FirebaseFirestore.Firestore): FirestoreLike {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createFirestoreLike(db: FirebaseFirestore.Firestore): FirestoreLike & { doc: (path: string) => any } {
   return {
     doc(path: string) {
       const ref = db.doc(path);
       return {
+        _ref: ref,
         async get() {
           const snapshot = await ref.get();
           return {
@@ -365,5 +367,32 @@ function createFirestoreLike(db: FirebaseFirestore.Firestore): FirestoreLike {
         },
       };
     },
+    async runTransaction<T>(updateFunction: (transaction: TransactionLike) => Promise<T>): Promise<T> {
+      return db.runTransaction(async (t) => {
+        const txWrapper: TransactionLike = {
+          get: async (docLike) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ref = (docLike as any)._ref;
+            if (!ref) throw new Error('Invalid document reference for transaction');
+            const snap = (await t.get(ref)) as unknown as FirebaseFirestore.DocumentSnapshot;
+            return {
+              exists: snap.exists,
+              data: () => snap.data(),
+            };
+          },
+          set: (docLike, data, options) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const ref = (docLike as any)._ref;
+            if (!ref) throw new Error('Invalid document reference for transaction');
+            if (options?.merge) {
+              t.set(ref, data as FirebaseFirestore.DocumentData, { merge: true });
+            } else {
+              t.set(ref, data as FirebaseFirestore.DocumentData);
+            }
+          }
+        };
+        return updateFunction(txWrapper);
+      });
+    }
   };
 }
