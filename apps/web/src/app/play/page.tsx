@@ -2566,10 +2566,21 @@ export default function PlayPage(): JSX.Element {
 
     PLAYER_ACTIONS.forEach((action) => {
       const availability = (action.requirement ?? (() => ({ available: true })))(context);
+
+      // Defensive check: Ensure restart action is disabled if AP is insufficient,
+      // regardless of what availability.available says (to fix reported UI bug).
+      let isAvailable = availability.available;
+      let reason = availability.reason;
+
+      if (action.id === 'restart' && context.player.actionPoints < 3) {
+        isAvailable = false;
+        reason = reason ?? "行動力が不足しています";
+      }
+
       const view: PlayerActionViewModel = {
         ...action,
-        available: availability.available,
-        reason: availability.available ? undefined : availability.reason,
+        available: isAvailable,
+        reason: isAvailable ? undefined : reason,
       };
       const existing = groups.get(action.category);
       if (existing) {
