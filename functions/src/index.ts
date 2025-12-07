@@ -1,8 +1,8 @@
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import type { Firestore as AdminFirestore, DocumentData } from 'firebase-admin/firestore';
+import type { Firestore as AdminFirestore, DocumentData, DocumentSnapshot } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
-import { FirestoreAdapterImpl, FirestoreLike } from '../../packages/domain/src/firestoreAdapter';
+import { FirestoreAdapterImpl, FirestoreLike, TransactionLike } from '../../packages/domain/src/firestoreAdapter';
 import { RoomService } from '../../packages/domain/src/roomService';
 import type { GameSession, GameState, PlayerId, Ruleset } from '../../packages/domain/src/types';
 import { DEFAULT_FOUNDATION_STOCK, FOUNDATION_COSTS } from '../../packages/domain/src/types';
@@ -36,6 +36,66 @@ if (getApps().length === 0) {
 }
 
 const firestore = getFirestore();
+
+function createFirestoreLike(db: AdminFirestore): FirestoreLike & { doc: (path: string) => any } {
+  return {
+    doc(path: string) {
+      const ref = db.doc(path);
+      return {
+        _ref: ref, // Expose real ref
+        async get() {
+          const snapshot = await ref.get();
+          return {
+            exists: snapshot.exists,
+            data: () => snapshot.data() as unknown,
+          };
+        },
+        async set(data: unknown, options?: { merge?: boolean }) {
+          const documentData = data as DocumentData;
+          if (options?.merge) {
+            await ref.set(documentData, { merge: true });
+          } else {
+            await ref.set(documentData);
+          }
+        },
+        collection(collectionPath: string) {
+          const collectionRef = ref.collection(collectionPath);
+          return {
+            async add(data: unknown) {
+              await collectionRef.add(data as DocumentData);
+            },
+          };
+        },
+      };
+    },
+    async runTransaction<T>(updateFunction: (transaction: TransactionLike) => Promise<T>): Promise<T> {
+      return db.runTransaction(async (t) => {
+        const txWrapper: TransactionLike = {
+          get: async (docLike) => {
+            const ref = (docLike as any)._ref;
+            if (!ref) throw new Error('Invalid document reference for transaction');
+            const snap = (await t.get(ref as any)) as unknown as DocumentSnapshot; // Cast to unknown first to avoid overlap error
+            return {
+              exists: snap.exists,
+              data: () => snap.data(),
+            };
+          },
+          set: (docLike, data, options) => {
+            const ref = (docLike as any)._ref;
+            if (!ref) throw new Error('Invalid document reference for transaction');
+            if (options?.merge) {
+              t.set(ref as any, data as DocumentData, { merge: true });
+            } else {
+              t.set(ref as any, data as DocumentData);
+            }
+          }
+        };
+        return updateFunction(txWrapper);
+      });
+    }
+  };
+}
+
 const firestoreLike = createFirestoreLike(firestore);
 
 const firestoreAdapter = new FirestoreAdapterImpl(firestoreLike, {
@@ -101,7 +161,8 @@ const deps: HandlersDeps = {
   roomService,
   ruleset: defaultRuleset,
   timestampProvider: () => Date.now(),
-  createGameSession: (roomId: string) => createGameSession(roomId),
+  createGameSession: (roomId: string, transaction?: TransactionLike) => createGameSession(roomId, transaction),
+  runTransaction: (fn) => firestoreLike.runTransaction(fn),
 };
 
 export const createRoom = createRoomFunction(deps);
@@ -159,7 +220,7 @@ export const listVpCards = onRequest(async (request, response) => {
   }
 });
 
-function createGameSession(roomId: string): GameSession {
+function createGameSession(roomId: string, transaction?: TransactionLike): GameSession {
   const turnOrder = new TurnOrderImpl();
   const phaseManager = new PhaseManagerImpl({
     turnOrder,
@@ -182,6 +243,24 @@ function createGameSession(roomId: string): GameSession {
     turnOrder,
     actionResolver,
     stateLoader: async () => {
+      if (transaction) {
+        const docRef = firestoreLike.doc(`rooms/${roomId}`);
+        const snapshot = await transaction.get(docRef);
+        let state: GameState;
+        if (snapshot.exists) {
+          state = snapshot.data() as GameState;
+        } else {
+          state = createInitialState(roomId);
+          transaction.set(docRef, state);
+        }
+        syncTurnOrderFromState(turnOrder, state);
+        return {
+          state,
+          save: async () => {
+            transaction.set(docRef, state);
+          }
+        };
+      }
       const snapshot = await firestoreAdapter.loadGameState(roomId);
       syncTurnOrderFromState(turnOrder, snapshot.state);
       return snapshot;
@@ -301,37 +380,4 @@ function syncTurnOrderFromState(turnOrder: TurnOrderImpl, gameState: GameState):
       turnOrder.registerRooting(playerId);
     }
   });
-}
-
-function createFirestoreLike(db: AdminFirestore): FirestoreLike {
-  return {
-    doc(path: string) {
-      const ref = db.doc(path);
-      return {
-        async get() {
-          const snapshot = await ref.get();
-          return {
-            exists: snapshot.exists,
-            data: () => snapshot.data() as unknown,
-          };
-        },
-        async set(data: unknown, options?: { merge?: boolean }) {
-          const documentData = data as DocumentData;
-          if (options?.merge) {
-            await ref.set(documentData, { merge: true });
-          } else {
-            await ref.set(documentData);
-          }
-        },
-        collection(collectionPath: string) {
-          const collectionRef = ref.collection(collectionPath);
-          return {
-            async add(data: unknown) {
-              await collectionRef.add(data as DocumentData);
-            },
-          };
-        },
-      };
-    },
-  };
 }

@@ -17,6 +17,68 @@ if ((0, app_1.getApps)().length === 0) {
     (0, app_1.initializeApp)();
 }
 const firestore = (0, firestore_1.getFirestore)();
+function createFirestoreLike(db) {
+    return {
+        doc(path) {
+            const ref = db.doc(path);
+            return {
+                _ref: ref, // Expose real ref
+                async get() {
+                    const snapshot = await ref.get();
+                    return {
+                        exists: snapshot.exists,
+                        data: () => snapshot.data(),
+                    };
+                },
+                async set(data, options) {
+                    const documentData = data;
+                    if (options?.merge) {
+                        await ref.set(documentData, { merge: true });
+                    }
+                    else {
+                        await ref.set(documentData);
+                    }
+                },
+                collection(collectionPath) {
+                    const collectionRef = ref.collection(collectionPath);
+                    return {
+                        async add(data) {
+                            await collectionRef.add(data);
+                        },
+                    };
+                },
+            };
+        },
+        async runTransaction(updateFunction) {
+            return db.runTransaction(async (t) => {
+                const txWrapper = {
+                    get: async (docLike) => {
+                        const ref = docLike._ref;
+                        if (!ref)
+                            throw new Error('Invalid document reference for transaction');
+                        const snap = (await t.get(ref)); // Cast to unknown first to avoid overlap error
+                        return {
+                            exists: snap.exists,
+                            data: () => snap.data(),
+                        };
+                    },
+                    set: (docLike, data, options) => {
+                        const ref = docLike._ref;
+                        if (!ref)
+                            throw new Error('Invalid document reference for transaction');
+                        if (options?.merge) {
+                            t.set(ref, data, { merge: true });
+                        }
+                        else {
+                            t.set(ref, data);
+                        }
+                    }
+                };
+                return updateFunction(txWrapper);
+            });
+        }
+    };
+}
 const firestoreLike = createFirestoreLike(firestore);
 const firestoreAdapter = new firestoreAdapter_1.FirestoreAdapterImpl(firestoreLike, {
     createInitialState,
@@ -77,7 +139,8 @@ const deps = {
     roomService,
     ruleset: defaultRuleset,
     timestampProvider: () => Date.now(),
-    createGameSession: (roomId) => createGameSession(roomId),
+    createGameSession: (roomId, transaction) => createGameSession(roomId, transaction),
+    runTransaction: (fn) => firestoreLike.runTransaction(fn),
 };
 exports.createRoom = (0, invokeHandlers_1.createRoomFunction)(deps);
 exports.joinRoom = (0, invokeHandlers_1.joinRoomFunction)(deps);
@@ -134,7 +197,7 @@ exports.listVpCards = (0, https_1.onRequest)(async (request, response) => {
         });
     }
 });
-function createGameSession(roomId) {
+function createGameSession(roomId, transaction) {
     const turnOrder = new turnOrder_1.TurnOrderImpl();
     const phaseManager = new phaseManager_1.PhaseManagerImpl({
         turnOrder,
@@ -155,6 +218,25 @@ function createGameSession(roomId) {
         turnOrder,
         actionResolver,
         stateLoader: async () => {
+            if (transaction) {
+                const docRef = firestoreLike.doc(`rooms/${roomId}`);
+                const snapshot = await transaction.get(docRef);
+                let state;
+                if (snapshot.exists) {
+                    state = snapshot.data();
+                }
+                else {
+                    state = createInitialState(roomId);
+                    transaction.set(docRef, state);
+                }
+                syncTurnOrderFromState(turnOrder, state);
+                return {
+                    state,
+                    save: async () => {
+                        transaction.set(docRef, state);
+                    }
+                };
+            }
             const snapshot = await firestoreAdapter.loadGameState(roomId);
             syncTurnOrderFromState(turnOrder, snapshot.state);
             return snapshot;
@@ -265,37 +347,4 @@ function syncTurnOrderFromState(turnOrder, gameState) {
             turnOrder.registerRooting(playerId);
         }
     });
-}
-function createFirestoreLike(db) {
-    return {
-        doc(path) {
-            const ref = db.doc(path);
-            return {
-                async get() {
-                    const snapshot = await ref.get();
-                    return {
-                        exists: snapshot.exists,
-                        data: () => snapshot.data(),
-                    };
-                },
-                async set(data, options) {
-                    const documentData = data;
-                    if (options?.merge) {
-                        await ref.set(documentData, { merge: true });
-                    }
-                    else {
-                        await ref.set(documentData);
-                    }
-                },
-                collection(collectionPath) {
-                    const collectionRef = ref.collection(collectionPath);
-                    return {
-                        async add(data) {
-                            await collectionRef.add(data);
-                        },
-                    };
-                },
-            };
-        },
-    };
 }

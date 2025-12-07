@@ -48,8 +48,14 @@ function buildRoomHandlers(deps) {
             await session.start();
         },
         async performAction(request) {
-            const session = deps.createGameSession(request.roomId);
-            return session.processAction(request.action, deps.ruleset, request.timestamp ?? timestampProvider());
+            const runTransaction = deps.runTransaction ?? (async (fn) => fn({
+                get: async (doc) => doc.get(),
+                set: async (doc, data, options) => doc.set(data, options),
+            }));
+            return runTransaction(async (transaction) => {
+                const session = deps.createGameSession(request.roomId, transaction);
+                return session.processAction(request.action, deps.ruleset, request.timestamp ?? timestampProvider());
+            });
         },
         async getRoomState(roomId) {
             return deps.roomService.getRoomState(roomId);

@@ -242,9 +242,9 @@ class RoomService {
             creativity: 0,
             vp: 0,
             resources: existingResources ?? {
-                light: 0,
-                rainbow: 0,
-                stagnation: 0,
+                light: 2,
+                rainbow: 2,
+                stagnation: 2,
                 maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
             },
             collectedDevelopmentCards: [],
@@ -302,9 +302,9 @@ class RoomService {
         }
         if (!state.players[params.playerId]) {
             const resources = state.players[params.playerId]?.resources ?? {
-                light: 0,
-                rainbow: 0,
-                stagnation: 0,
+                light: 2,
+                rainbow: 2,
+                stagnation: 2,
                 maxCapacity: { light: 6, rainbow: 6, stagnation: 6 },
             };
             state.players[params.playerId] = {

@@ -35,8 +35,9 @@ class PhaseManagerImpl {
         replenishDevelopmentRow(gameState, this.deps.rulesetConfig?.publicDevelopmentSlots ?? 8);
         replenishVpRow(gameState, this.deps.rulesetConfig?.publicVpSlots ?? 2);
         // 共有ボード初期化（各レンズのロビー状態リセット）
+        // レンズ上のロビーはラウンドをまたいで維持されるため、occupantIdは削除しない
         gameState.board.lobbySlots.forEach((slot) => {
-            delete slot.occupantId;
+            // delete slot.occupantId; // FIX: Do not clear occupantId
             slot.isActive = true;
         });
         await state.save();

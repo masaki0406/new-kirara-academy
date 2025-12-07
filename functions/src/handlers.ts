@@ -16,6 +16,9 @@ import {
   PlayerId,
   Ruleset,
 } from '../../packages/domain/src/types';
+import {
+  TransactionLike,
+} from '../../packages/domain/src/firestoreAdapter';
 
 export interface PerformActionRequest {
   roomId: string;
@@ -35,9 +38,10 @@ export interface BeginCharacterSelectionRequest {
 
 export interface HandlersDeps {
   roomService: RoomService;
-  createGameSession: (roomId: string) => GameSession;
+  createGameSession: (roomId: string, transaction?: TransactionLike) => GameSession;
   ruleset: Ruleset;
   timestampProvider?: () => number;
+  runTransaction?: <T>(updateFunction: (transaction: TransactionLike) => Promise<T>) => Promise<T>;
 }
 
 export interface RoomHandlers {
@@ -110,12 +114,19 @@ export function buildRoomHandlers(deps: HandlersDeps): RoomHandlers {
     },
 
     async performAction(request: PerformActionRequest): Promise<ActionResult> {
-      const session = deps.createGameSession(request.roomId);
-      return session.processAction(
-        request.action,
-        deps.ruleset,
-        request.timestamp ?? timestampProvider(),
-      );
+      const runTransaction = deps.runTransaction ?? (async (fn) => fn({
+        get: async (doc) => doc.get(),
+        set: async (doc, data, options) => doc.set(data, options),
+      } as TransactionLike));
+
+      return runTransaction(async (transaction) => {
+        const session = deps.createGameSession(request.roomId, transaction);
+        return session.processAction(
+          request.action,
+          deps.ruleset,
+          request.timestamp ?? timestampProvider(),
+        );
+      });
     },
 
     async getRoomState(roomId: string): Promise<GameState> {

@@ -1,0 +1,11 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v1.6.1 /Users/somam/game/new-kirara-academy
+
+ ✓ packages/domain/test/repro_pass_bug.test.ts  (1 test) 1ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  13:29:30
+   Duration  405ms (transform 43ms, setup 0ms, collect 39ms, tests 1ms, environment 0ms, prepare 121ms)
+

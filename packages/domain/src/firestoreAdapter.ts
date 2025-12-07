@@ -17,8 +17,14 @@ export interface FirestoreAdapterOptions {
   timestampProvider?: () => unknown;
 }
 
+export interface TransactionLike {
+  get(doc: DocumentReferenceLike): Promise<DocumentSnapshotLike>;
+  set(doc: DocumentReferenceLike, data: unknown, options?: { merge?: boolean }): void;
+}
+
 export interface FirestoreLike {
   doc(path: string): DocumentReferenceLike;
+  runTransaction<T>(updateFunction: (transaction: TransactionLike) => Promise<T>): Promise<T>;
 }
 
 export interface DocumentReferenceLike {
