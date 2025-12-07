@@ -46,7 +46,9 @@ export class PhaseManagerImpl implements PhaseManager {
       const supplyCreativity = this.deps.rulesetConfig?.supplyCreativity ?? 1;
       player.actionPoints = Math.min(MAX_ACTION_POINTS, player.actionPoints + supplyAp);
       player.creativity = Math.min(MAX_CREATIVITY, player.creativity + supplyCreativity);
-      // Stock Supply: No longer automatic. Handled via Supply Selection.
+      // Stock Supply: Granted automatically, then consumed by Supply Selection
+      const currentReserve = player.lobbyReserve ?? 0;
+      player.lobbyReserve = currentReserve + 1;
       player.hasPassed = false;
       delete player.passedAt;
       if (player.isRooting) {

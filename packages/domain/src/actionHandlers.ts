@@ -1748,14 +1748,6 @@ export const applyTask: EffectApplier = async (action, context) => {
 
   player.tasksCompleted.push(taskId);
   for (const reward of task.reward) {
-    // Skip lobby rewards in fixed rewards, as they are now handled by rewardChoice
-    if (reward.type === 'resource' && (reward.value as any).lobby) {
-      continue;
-    }
-    // Also check if reward object has lobby property directly (custom convention)
-    if (typeof (reward as any).lobby === 'number') {
-      continue;
-    }
     applyReward(player, reward);
   }
 
@@ -1786,11 +1778,26 @@ export const applyTask: EffectApplier = async (action, context) => {
       if (!canUnlockGrowthNode(player.characterId, nodeId, unlockedSet)) {
         throw new Error('成長条件を満たしていません');
       }
+
+      // Consume Stock
+      const stock = getLobbyReserve(player);
+      if (stock < 1) {
+        throw new Error('成長に必要なロビーストックが不足しています');
+      }
+      player.lobbyReserve = stock - 1;
+
       player.unlockedCharacterNodes.push(nodeId);
       break;
     }
     case 'lobby': {
-      // Replenish Lobby (Available) directly, instead of adding to Stock
+      // Consume Stock
+      const stock = getLobbyReserve(player);
+      if (stock < 1) {
+        throw new Error('ロビー補充に必要なロビーストックが不足しています');
+      }
+      player.lobbyReserve = stock - 1;
+
+      // Replenish Lobby (Available) directly
       player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
       break;
     }
@@ -2731,13 +2738,6 @@ export const applySupplySelect: EffectApplier = async (action, context) => {
 
   if (payload.choice === 'lobby') {
     // Gain 1 Lobby (Available)
-    // Note: This is a "Free" action from Supply, so we don't consume Stock.
-    // We just ADD to Available.
-    // Wait, the user said "Consume 1 Stock".
-    // But in Supply Phase, we didn't give +1 Stock.
-    // So effectively, we are giving "1 Free Stock Usage".
-    // If we implemented "Give +1 Stock" then "Consume 1 Stock", the net result is 0 change in Stock, +1 Lobby/Growth.
-    // So here we just apply the benefit.
     player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
   } else if (payload.choice === 'growth') {
     // Unlock Node
