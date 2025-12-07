@@ -3040,6 +3040,19 @@ export default function PlayPage(): JSX.Element {
         </nav>
       </header>
 
+      {
+        gameState && (
+          <div
+            className={`${styles.status} ${isLocalTurn ? styles["status-success"] : styles["status-info"]}`}
+            style={{ textAlign: "center", fontWeight: "bold", fontSize: "1.2em" }}
+          >
+            {isLocalTurn
+              ? "あなたの手番です"
+              : `${currentPlayer?.displayName ?? "他のプレイヤー"} の手番です`}
+          </div>
+        )
+      }
+
       <section className={styles.card}>
         <h2 className={styles.cardTitle}>接続情報</h2>
         <form className={styles.form} onSubmit={handleConnect}>
@@ -3377,6 +3390,7 @@ export default function PlayPage(): JSX.Element {
                               const { met, hint } = getTaskRequirementStatus(task.id);
                               const definitionMissing = !gameState?.tasks?.[task.id];
                               const disabled =
+                                !isLocalTurn ||
                                 isSubmitting ||
                                 pendingTaskId === task.id ||
                                 completedTasks.has(task.id) ||
@@ -3901,6 +3915,7 @@ export default function PlayPage(): JSX.Element {
                                     const hasRefreshSources =
                                       action.id !== "restart" || exhaustedLensTargets.length > 0;
                                     const buttonDisabled =
+                                      !isLocalTurn ||
                                       !action.available ||
                                       action.implemented === false ||
                                       !hasPolishSources ||
@@ -4123,560 +4138,645 @@ export default function PlayPage(): JSX.Element {
         </details>
       </section>
 
-      {labConfirmDialog ? (
-        <div
-          className={styles.actionConfirmOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label={`${labConfirmDialog.name}の実行確認`}
-          onClick={
-            pendingActionId === labConfirmDialog.id ? undefined : () => closeLabConfirmDialog()
-          }
-        >
+      {
+        labConfirmDialog ? (
           <div
-            className={styles.actionConfirmModal}
-            role="document"
-            onClick={(event) => event.stopPropagation()}
+            className={styles.actionConfirmOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${labConfirmDialog.name}の実行確認`}
+            onClick={
+              pendingActionId === labConfirmDialog.id ? undefined : () => closeLabConfirmDialog()
+            }
           >
-            <h4 className={styles.actionConfirmTitle}>
-              {labConfirmDialog.name}を実行しますか？
-            </h4>
-            <p className={styles.actionConfirmDescription}>{labConfirmDialog.material}</p>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>コスト</h5>
-              <ul className={styles.actionConfirmList}>
-                {labConfirmDialog.cost.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>効果</h5>
-              <ul className={styles.actionConfirmList}>
-                {labConfirmDialog.result.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </div>
-            <div className={styles.actionConfirmActions}>
-              <button
-                type="button"
-                className={styles.actionConfirmButtonSecondary}
-                onClick={closeLabConfirmDialog}
-                disabled={pendingActionId === labConfirmDialog.id}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.actionConfirmButtonPrimary}
-                onClick={() => void handleExecuteLab(labConfirmDialog.id)}
-                disabled={pendingActionId === labConfirmDialog.id}
-              >
-                {pendingActionId === labConfirmDialog.id ? "実行中..." : "実行する"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isWillDialogOpen ? (
-        <div
-          className={styles.willOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="意思能力の選択"
-          onClick={isWillSubmitting ? undefined : closeWillDialog}
-        >
-          <div
-            className={styles.willModal}
-            role="document"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className={styles.willHeader}>
-              <h4>意思能力を選択</h4>
-              <button
-                type="button"
-                className={styles.willCloseButton}
-                onClick={closeWillDialog}
-                aria-label="閉じる"
-                disabled={isWillSubmitting}
-              >
-                ×
-              </button>
-            </div>
-            <p className={styles.willHelp}>起動する意思能力を選択してください。</p>
             <div
-              className={styles.willList}
-              role="radiogroup"
-              aria-label="意思能力の選択肢"
+              className={styles.actionConfirmModal}
+              role="document"
+              onClick={(event) => event.stopPropagation()}
             >
-              {availableWillNodes.length > 0 ? (
-                availableWillNodes.map((node) => {
-                  const checked = selectedWillNodeId === node.id;
-                  return (
-                    <label
-                      key={node.id}
-                      className={classNames(
-                        styles.willOption,
-                        checked ? styles.willOptionActive : undefined,
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="willAbility"
-                        value={node.id}
-                        checked={checked}
-                        onChange={() => setSelectedWillNodeId(node.id)}
-                        disabled={isWillSubmitting}
-                      />
-                      <div>
-                        <span className={styles.willAbilityTitle}>
-                          {node.position} {node.name}
-                        </span>
-                        <p className={styles.willAbilityDescription}>{node.description}</p>
-                      </div>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.willEmpty}>使用可能な意思能力がありません。</p>
-              )}
-            </div>
-            <div className={styles.willFooter}>
-              <button
-                type="button"
-                className={styles.willSecondaryButton}
-                onClick={closeWillDialog}
-                disabled={isWillSubmitting}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.willPrimaryButton}
-                onClick={() => void handleSubmitWill()}
-                disabled={
-                  isWillSubmitting || !selectedWillNodeId || availableWillNodes.length === 0
-                }
-              >
-                {isWillSubmitting ? "送信中..." : "意思を実行"}
-              </button>
+              <h4 className={styles.actionConfirmTitle}>
+                {labConfirmDialog.name}を実行しますか？
+              </h4>
+              <p className={styles.actionConfirmDescription}>{labConfirmDialog.material}</p>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>コスト</h5>
+                <ul className={styles.actionConfirmList}>
+                  {labConfirmDialog.cost.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>効果</h5>
+                <ul className={styles.actionConfirmList}>
+                  {labConfirmDialog.result.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className={styles.actionConfirmActions}>
+                <button
+                  type="button"
+                  className={styles.actionConfirmButtonSecondary}
+                  onClick={closeLabConfirmDialog}
+                  disabled={pendingActionId === labConfirmDialog.id}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.actionConfirmButtonPrimary}
+                  onClick={() => void handleExecuteLab(labConfirmDialog.id)}
+                  disabled={pendingActionId === labConfirmDialog.id}
+                >
+                  {pendingActionId === labConfirmDialog.id ? "実行中..." : "実行する"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null
+      }
 
-      {isLensActivateDialogOpen ? (
-        <div
-          className={styles.willOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="レンズ起動"
-          onClick={isLensActivateSubmitting ? undefined : closeLensActivateDialog}
-        >
+      {
+        isWillDialogOpen ? (
           <div
-            className={styles.willModal}
-            role="document"
-            onClick={(event) => event.stopPropagation()}
+            className={styles.willOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label="意思能力の選択"
+            onClick={isWillSubmitting ? undefined : closeWillDialog}
           >
-            <div className={styles.willHeader}>
-              <h4>レンズを起動</h4>
-              <button
-                type="button"
-                className={styles.willCloseButton}
-                onClick={closeLensActivateDialog}
-                aria-label="閉じる"
-                disabled={isLensActivateSubmitting}
-              >
-                ×
-              </button>
-            </div>
-            <p className={styles.willHelp}>自分のレンズから起動するものを選択してください。</p>
             <div
-              className={styles.willList}
-              role="radiogroup"
-              aria-label="起動するレンズ"
+              className={styles.willModal}
+              role="document"
+              onClick={(event) => event.stopPropagation()}
             >
-              {lensActivateTargets.length > 0 ? (
-                lensActivateTargets.map((lens) => {
-                  const checked = selectedLensActivateId === lens.lensId;
-                  return (
-                    <label
-                      key={lens.lensId}
-                      className={classNames(
-                        styles.willOption,
-                        checked ? styles.willOptionActive : undefined,
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="lensActivate"
-                        value={lens.lensId}
-                        checked={checked}
-                        onChange={() => setSelectedLensActivateId(lens.lensId)}
-                        disabled={isLensActivateSubmitting}
-                      />
-                      <div>
-                        <span className={styles.willAbilityTitle}>
-                          レンズ {lens.lensId}
-                        </span>
-                        <p className={styles.willAbilityDescription}>
-                          状態: {lens.status === "available" ? "使用可能" : lens.status}
-                        </p>
-                      </div>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.willAbilityDescription}>起動できるレンズがありません。</p>
-              )}
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
-              <ul className={styles.actionConfirmList}>
-                {lensActivateCostDescriptions.length > 0 ? (
-                  lensActivateCostDescriptions.map((item) => <li key={item}>{item}</li>)
-                ) : (
-                  <li>追加コストなし</li>
-                )}
-              </ul>
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
-              <ul className={styles.actionConfirmList}>
-                {lensActivateRewardDescriptions.length > 0 ? (
-                  lensActivateRewardDescriptions.map((item) => <li key={item}>{item}</li>)
-                ) : (
-                  <li>即時効果なし</li>
-                )}
-              </ul>
-            </div>
-            {renderLobbyReturnSelector()}
-            {renderGrowthSelector(
-              lensActivateGrowthNeeded,
-              lensActivateGrowthSelections,
-              setLensActivateGrowthSelections,
-              "lens-activate",
-            )}
-            <div className={styles.willFooter}>
-              <button
-                type="button"
-                className={styles.willSecondaryButton}
-                onClick={closeLensActivateDialog}
-                disabled={isLensActivateSubmitting}
+              <div className={styles.willHeader}>
+                <h4>意思能力を選択</h4>
+                <button
+                  type="button"
+                  className={styles.willCloseButton}
+                  onClick={closeWillDialog}
+                  aria-label="閉じる"
+                  disabled={isWillSubmitting}
+                >
+                  ×
+                </button>
+              </div>
+              <p className={styles.willHelp}>起動する意思能力を選択してください。</p>
+              <div
+                className={styles.willList}
+                role="radiogroup"
+                aria-label="意思能力の選択肢"
               >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.willPrimaryButton}
-                onClick={() => void handleSubmitLensActivate()}
-                disabled={
-                  isLensActivateSubmitting || lensActivateTargets.length === 0 || !selectedLensActivateTarget
-                }
-              >
-                {isLensActivateSubmitting ? "送信中..." : "起動する"}
-              </button>
+                {availableWillNodes.length > 0 ? (
+                  availableWillNodes.map((node) => {
+                    const checked = selectedWillNodeId === node.id;
+                    return (
+                      <label
+                        key={node.id}
+                        className={classNames(
+                          styles.willOption,
+                          checked ? styles.willOptionActive : undefined,
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="willAbility"
+                          value={node.id}
+                          checked={checked}
+                          onChange={() => setSelectedWillNodeId(node.id)}
+                          disabled={isWillSubmitting}
+                        />
+                        <div>
+                          <span className={styles.willAbilityTitle}>
+                            {node.position} {node.name}
+                          </span>
+                          <p className={styles.willAbilityDescription}>{node.description}</p>
+                        </div>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className={styles.willEmpty}>使用可能な意思能力がありません。</p>
+                )}
+              </div>
+              <div className={styles.willFooter}>
+                <button
+                  type="button"
+                  className={styles.willSecondaryButton}
+                  onClick={closeWillDialog}
+                  disabled={isWillSubmitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.willPrimaryButton}
+                  onClick={() => void handleSubmitWill()}
+                  disabled={
+                    isWillSubmitting || !selectedWillNodeId || availableWillNodes.length === 0
+                  }
+                >
+                  {isWillSubmitting ? "送信中..." : "意思を実行"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null
+      }
 
-      {isRefreshDialogOpen ? (
-        <div
-          className={styles.willOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="レンズ再起動"
-          onClick={isRefreshSubmitting ? undefined : closeRefreshDialog}
-        >
+      {
+        isLensActivateDialogOpen ? (
           <div
-            className={styles.willModal}
-            role="document"
-            onClick={(event) => event.stopPropagation()}
+            className={styles.willOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label="レンズ起動"
+            onClick={isLensActivateSubmitting ? undefined : closeLensActivateDialog}
           >
-            <div className={styles.willHeader}>
-              <h4>レンズを再起動</h4>
-              <button
-                type="button"
-                className={styles.willCloseButton}
-                onClick={closeRefreshDialog}
-                aria-label="閉じる"
-                disabled={isRefreshSubmitting}
-              >
-                ×
-              </button>
-            </div>
-            <p className={styles.willHelp}>使用済みの自分のレンズを選んで再起動します。</p>
             <div
-              className={styles.willList}
-              role="radiogroup"
-              aria-label="再起動するレンズ"
+              className={styles.willModal}
+              role="document"
+              onClick={(event) => event.stopPropagation()}
             >
-              {exhaustedLensTargets.length > 0 ? (
-                exhaustedLensTargets.map((lens) => {
-                  const checked = selectedRefreshLensId === lens.lensId;
-                  return (
-                    <label
-                      key={lens.lensId}
-                      className={classNames(
-                        styles.willOption,
-                        checked ? styles.willOptionActive : undefined,
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="lensRefresh"
-                        value={lens.lensId}
-                        checked={checked}
-                        onChange={() => setSelectedRefreshLensId(lens.lensId)}
-                        disabled={isRefreshSubmitting}
-                      />
-                      <div>
-                        <span className={styles.willAbilityTitle}>レンズ {lens.lensId}</span>
-                        <p className={styles.willAbilityDescription}>
-                          所有者: {lens.ownerName ?? "あなた"} / ロビー:{" "}
-                          {lens.slotActive ? "未使用" : "使用済み"}
-                        </p>
-                      </div>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.willAbilityDescription}>再起動できるレンズがありません。</p>
-              )}
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>必要コスト</h5>
-              <ul className={styles.actionConfirmList}>
-                <li>行動力 3</li>
-              </ul>
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>効果</h5>
-              <ul className={styles.actionConfirmList}>
-                <li>選択したレンズを再び使用可能にします。</li>
-              </ul>
-            </div>
-            {renderGrowthSelector(
-              refreshGrowthNeeded,
-              refreshGrowthSelections,
-              setRefreshGrowthSelections,
-              "refresh",
-            )}
-            <div className={styles.willFooter}>
-              <button
-                type="button"
-                className={styles.willSecondaryButton}
-                onClick={closeRefreshDialog}
-                disabled={isRefreshSubmitting}
+              <div className={styles.willHeader}>
+                <h4>レンズを起動</h4>
+                <button
+                  type="button"
+                  className={styles.willCloseButton}
+                  onClick={closeLensActivateDialog}
+                  aria-label="閉じる"
+                  disabled={isLensActivateSubmitting}
+                >
+                  ×
+                </button>
+              </div>
+              <p className={styles.willHelp}>自分のレンズから起動するものを選択してください。</p>
+              <div
+                className={styles.willList}
+                role="radiogroup"
+                aria-label="起動するレンズ"
               >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.willPrimaryButton}
-                onClick={() => void handleSubmitRefresh()}
-                disabled={
-                  isRefreshSubmitting ||
-                  exhaustedLensTargets.length === 0 ||
-                  !selectedRefreshTarget
-                }
-              >
-                {isRefreshSubmitting ? "送信中..." : "再起動する"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isPersuasionDialogOpen ? (
-        <div
-          className={styles.willOverlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="説得の対象を選択"
-          onClick={isPersuasionSubmitting ? undefined : closePersuasionDialog}
-        >
-          <div
-            className={styles.willModal}
-            role="document"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className={styles.willHeader}>
-              <h4>説得の対象レンズを選択</h4>
-              <button
-                type="button"
-                className={styles.willCloseButton}
-                onClick={closePersuasionDialog}
-                aria-label="閉じる"
-                disabled={isPersuasionSubmitting}
-              >
-                ×
-              </button>
-            </div>
-            <p className={styles.willHelp}>
-              相手のロビーが配置されたレンズを選び、起動コストを支払って効果を得ます。
-            </p>
-            <div
-              className={styles.willList}
-              role="radiogroup"
-              aria-label="説得対象レンズ"
-            >
-              {lensOpponentTargets.length > 0 ? (
-                lensOpponentTargets.map((target) => {
-                  const checked = selectedPersuasionLensId === target.lensId;
-                  return (
-                    <label
-                      key={target.lensId}
-                      className={classNames(
-                        styles.willOption,
-                        checked ? styles.willOptionActive : undefined,
-                      )}
-                    >
-                      <input
-                        type="radio"
-                        name="persuasionLens"
-                        value={target.lensId}
-                        checked={checked}
-                        onChange={() => setSelectedPersuasionLensId(target.lensId)}
-                        disabled={isPersuasionSubmitting}
-                      />
-                      <div>
-                        <span className={styles.willAbilityTitle}>
-                          レンズ {target.lensId}（所有者: {target.ownerName}）
-                        </span>
-                        <p className={styles.willAbilityDescription}>
-                          ロビー配置: {target.occupantName} / 状態:{" "}
-                          {target.slotActive ? "未使用" : "使用済み"}
-                        </p>
-                      </div>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className={styles.willAbilityDescription}>説得できるレンズがありません。</p>
-              )}
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
-              <ul className={styles.actionConfirmList}>
-                {persuasionLensCostDescriptions.length > 0 ? (
-                  persuasionLensCostDescriptions.map((item) => <li key={item}>{item}</li>)
+                {lensActivateTargets.length > 0 ? (
+                  lensActivateTargets.map((lens) => {
+                    const checked = selectedLensActivateId === lens.lensId;
+                    return (
+                      <label
+                        key={lens.lensId}
+                        className={classNames(
+                          styles.willOption,
+                          checked ? styles.willOptionActive : undefined,
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="lensActivate"
+                          value={lens.lensId}
+                          checked={checked}
+                          onChange={() => setSelectedLensActivateId(lens.lensId)}
+                          disabled={isLensActivateSubmitting}
+                        />
+                        <div>
+                          <span className={styles.willAbilityTitle}>
+                            レンズ {lens.lensId}
+                          </span>
+                          <p className={styles.willAbilityDescription}>
+                            状態: {lens.status === "available" ? "使用可能" : lens.status}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })
                 ) : (
-                  <li>追加コストなし</li>
+                  <p className={styles.willAbilityDescription}>起動できるレンズがありません。</p>
                 )}
-              </ul>
-            </div>
-            <div className={styles.actionConfirmSection}>
-              <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
-              <ul className={styles.actionConfirmList}>
-                {persuasionLensRewardDescriptions.length > 0 ? (
-                  persuasionLensRewardDescriptions.map((item) => <li key={item}>{item}</li>)
-                ) : (
-                  <li>即時効果なし</li>
-                )}
-              </ul>
-            </div>
-            {renderGrowthSelector(
-              persuasionGrowthNeeded,
-              persuasionGrowthSelections,
-              setPersuasionGrowthSelections,
-              "persuasion",
-            )}
-            <div className={styles.willFooter}>
-              <button
-                type="button"
-                className={styles.willSecondaryButton}
-                onClick={closePersuasionDialog}
-                disabled={isPersuasionSubmitting}
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.willPrimaryButton}
-                onClick={() => void handleSubmitPersuasion()}
-                disabled={
-                  isPersuasionSubmitting ||
-                  lensOpponentTargets.length === 0 ||
-                  !selectedPersuasionTarget
-                }
-              >
-                {isPersuasionSubmitting ? "送信中..." : "説得を実行"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isPolishDialogOpen && (
-        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="研磨アクション">
-          <div className={styles.polishModal}>
-            <div className={styles.polishModalHeader}>
-              <h4>研磨アクション</h4>
-              <button
-                type="button"
-                className={styles.polishCloseButton}
-                onClick={closePolishDialog}
-                aria-label="閉じる"
-              >
-                ×
-              </button>
-            </div>
-            <div className={styles.polishModalBody}>
-              <p className={styles.polishSummaryHint}>
-                必要土台コスト: {polishSummary.foundationRequirement}
-              </p>
-              {polishSummary.positionConflict ? (
-                <p className={styles.polishWarning}>
-                  左右それぞれで同じPOSを使用しないようにしてください。
-                </p>
-              ) : null}
-              {polishSelectionDetails.length > 0 && !polishSummary.foundationMet ? (
-                <p className={styles.polishWarning}>
-                  土台カードのコストが不足しています（必要 {polishSummary.foundationRequirement}）。
-                </p>
-              ) : null}
-              <div className={styles.polishColumns}>
-                <section className={styles.polishSection}>
-                  <h6>手札の開発カード</h6>
-                  {polishDevelopmentOptions.length === 0 ? (
-                    <p className={styles.polishEmpty}>獲得済みの開発カードがありません。</p>
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
+                <ul className={styles.actionConfirmList}>
+                  {lensActivateCostDescriptions.length > 0 ? (
+                    lensActivateCostDescriptions.map((item) => <li key={item}>{item}</li>)
                   ) : (
-                    <ul className={styles.polishOptionList}>
-                      {polishDevelopmentOptions.map(({ cardId, card }) => {
-                        const entry = polishSelectionMap[cardId];
-                        const selected = Boolean(entry);
-                        const orientationRight = Boolean(entry?.flipped);
-                        const orientationLabel = orientationRight ? "左側で使用" : "右側で使用";
-                        return (
-                          <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
-                            <div className={styles.polishOptionHeader}>
-                              <label className={styles.polishOptionLabel}>
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  onChange={() => handleTogglePolishCard(cardId, "development")}
-                                />
-                                <span>{card?.cardId ?? cardId}</span>
-                              </label>
+                    <li>追加コストなし</li>
+                  )}
+                </ul>
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
+                <ul className={styles.actionConfirmList}>
+                  {lensActivateRewardDescriptions.length > 0 ? (
+                    lensActivateRewardDescriptions.map((item) => <li key={item}>{item}</li>)
+                  ) : (
+                    <li>即時効果なし</li>
+                  )}
+                </ul>
+              </div>
+              {renderLobbyReturnSelector()}
+              {renderGrowthSelector(
+                lensActivateGrowthNeeded,
+                lensActivateGrowthSelections,
+                setLensActivateGrowthSelections,
+                "lens-activate",
+              )}
+              <div className={styles.willFooter}>
+                <button
+                  type="button"
+                  className={styles.willSecondaryButton}
+                  onClick={closeLensActivateDialog}
+                  disabled={isLensActivateSubmitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.willPrimaryButton}
+                  onClick={() => void handleSubmitLensActivate()}
+                  disabled={
+                    isLensActivateSubmitting || lensActivateTargets.length === 0 || !selectedLensActivateTarget
+                  }
+                >
+                  {isLensActivateSubmitting ? "送信中..." : "起動する"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+
+      {
+        isRefreshDialogOpen ? (
+          <div
+            className={styles.willOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label="レンズ再起動"
+            onClick={isRefreshSubmitting ? undefined : closeRefreshDialog}
+          >
+            <div
+              className={styles.willModal}
+              role="document"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className={styles.willHeader}>
+                <h4>レンズを再起動</h4>
+                <button
+                  type="button"
+                  className={styles.willCloseButton}
+                  onClick={closeRefreshDialog}
+                  aria-label="閉じる"
+                  disabled={isRefreshSubmitting}
+                >
+                  ×
+                </button>
+              </div>
+              <p className={styles.willHelp}>使用済みの自分のレンズを選んで再起動します。</p>
+              <div
+                className={styles.willList}
+                role="radiogroup"
+                aria-label="再起動するレンズ"
+              >
+                {exhaustedLensTargets.length > 0 ? (
+                  exhaustedLensTargets.map((lens) => {
+                    const checked = selectedRefreshLensId === lens.lensId;
+                    return (
+                      <label
+                        key={lens.lensId}
+                        className={classNames(
+                          styles.willOption,
+                          checked ? styles.willOptionActive : undefined,
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="lensRefresh"
+                          value={lens.lensId}
+                          checked={checked}
+                          onChange={() => setSelectedRefreshLensId(lens.lensId)}
+                          disabled={isRefreshSubmitting}
+                        />
+                        <div>
+                          <span className={styles.willAbilityTitle}>レンズ {lens.lensId}</span>
+                          <p className={styles.willAbilityDescription}>
+                            所有者: {lens.ownerName ?? "あなた"} / ロビー:{" "}
+                            {lens.slotActive ? "未使用" : "使用済み"}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className={styles.willAbilityDescription}>再起動できるレンズがありません。</p>
+                )}
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>必要コスト</h5>
+                <ul className={styles.actionConfirmList}>
+                  <li>行動力 3</li>
+                </ul>
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>効果</h5>
+                <ul className={styles.actionConfirmList}>
+                  <li>選択したレンズを再び使用可能にします。</li>
+                </ul>
+              </div>
+              {renderGrowthSelector(
+                refreshGrowthNeeded,
+                refreshGrowthSelections,
+                setRefreshGrowthSelections,
+                "refresh",
+              )}
+              <div className={styles.willFooter}>
+                <button
+                  type="button"
+                  className={styles.willSecondaryButton}
+                  onClick={closeRefreshDialog}
+                  disabled={isRefreshSubmitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.willPrimaryButton}
+                  onClick={() => void handleSubmitRefresh()}
+                  disabled={
+                    isRefreshSubmitting ||
+                    exhaustedLensTargets.length === 0 ||
+                    !selectedRefreshTarget
+                  }
+                >
+                  {isRefreshSubmitting ? "送信中..." : "再起動する"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+
+      {
+        isPersuasionDialogOpen ? (
+          <div
+            className={styles.willOverlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label="説得の対象を選択"
+            onClick={isPersuasionSubmitting ? undefined : closePersuasionDialog}
+          >
+            <div
+              className={styles.willModal}
+              role="document"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className={styles.willHeader}>
+                <h4>説得の対象レンズを選択</h4>
+                <button
+                  type="button"
+                  className={styles.willCloseButton}
+                  onClick={closePersuasionDialog}
+                  aria-label="閉じる"
+                  disabled={isPersuasionSubmitting}
+                >
+                  ×
+                </button>
+              </div>
+              <p className={styles.willHelp}>
+                相手のロビーが配置されたレンズを選び、起動コストを支払って効果を得ます。
+              </p>
+              <div
+                className={styles.willList}
+                role="radiogroup"
+                aria-label="説得対象レンズ"
+              >
+                {lensOpponentTargets.length > 0 ? (
+                  lensOpponentTargets.map((target) => {
+                    const checked = selectedPersuasionLensId === target.lensId;
+                    return (
+                      <label
+                        key={target.lensId}
+                        className={classNames(
+                          styles.willOption,
+                          checked ? styles.willOptionActive : undefined,
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="persuasionLens"
+                          value={target.lensId}
+                          checked={checked}
+                          onChange={() => setSelectedPersuasionLensId(target.lensId)}
+                          disabled={isPersuasionSubmitting}
+                        />
+                        <div>
+                          <span className={styles.willAbilityTitle}>
+                            レンズ {target.lensId}（所有者: {target.ownerName}）
+                          </span>
+                          <p className={styles.willAbilityDescription}>
+                            ロビー配置: {target.occupantName} / 状態:{" "}
+                            {target.slotActive ? "未使用" : "使用済み"}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })
+                ) : (
+                  <p className={styles.willAbilityDescription}>説得できるレンズがありません。</p>
+                )}
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>起動コスト</h5>
+                <ul className={styles.actionConfirmList}>
+                  {persuasionLensCostDescriptions.length > 0 ? (
+                    persuasionLensCostDescriptions.map((item) => <li key={item}>{item}</li>)
+                  ) : (
+                    <li>追加コストなし</li>
+                  )}
+                </ul>
+              </div>
+              <div className={styles.actionConfirmSection}>
+                <h5 className={styles.actionConfirmHeading}>獲得効果</h5>
+                <ul className={styles.actionConfirmList}>
+                  {persuasionLensRewardDescriptions.length > 0 ? (
+                    persuasionLensRewardDescriptions.map((item) => <li key={item}>{item}</li>)
+                  ) : (
+                    <li>即時効果なし</li>
+                  )}
+                </ul>
+              </div>
+              {renderGrowthSelector(
+                persuasionGrowthNeeded,
+                persuasionGrowthSelections,
+                setPersuasionGrowthSelections,
+                "persuasion",
+              )}
+              <div className={styles.willFooter}>
+                <button
+                  type="button"
+                  className={styles.willSecondaryButton}
+                  onClick={closePersuasionDialog}
+                  disabled={isPersuasionSubmitting}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.willPrimaryButton}
+                  onClick={() => void handleSubmitPersuasion()}
+                  disabled={
+                    isPersuasionSubmitting ||
+                    lensOpponentTargets.length === 0 ||
+                    !selectedPersuasionTarget
+                  }
+                >
+                  {isPersuasionSubmitting ? "送信中..." : "説得を実行"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null
+      }
+
+      {
+        isPolishDialogOpen && (
+          <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-label="研磨アクション">
+            <div className={styles.polishModal}>
+              <div className={styles.polishModalHeader}>
+                <h4>研磨アクション</h4>
+                <button
+                  type="button"
+                  className={styles.polishCloseButton}
+                  onClick={closePolishDialog}
+                  aria-label="閉じる"
+                >
+                  ×
+                </button>
+              </div>
+              <div className={styles.polishModalBody}>
+                <p className={styles.polishSummaryHint}>
+                  必要土台コスト: {polishSummary.foundationRequirement}
+                </p>
+                {polishSummary.positionConflict ? (
+                  <p className={styles.polishWarning}>
+                    左右それぞれで同じPOSを使用しないようにしてください。
+                  </p>
+                ) : null}
+                {polishSelectionDetails.length > 0 && !polishSummary.foundationMet ? (
+                  <p className={styles.polishWarning}>
+                    土台カードのコストが不足しています（必要 {polishSummary.foundationRequirement}）。
+                  </p>
+                ) : null}
+                <div className={styles.polishColumns}>
+                  <section className={styles.polishSection}>
+                    <h6>手札の開発カード</h6>
+                    {polishDevelopmentOptions.length === 0 ? (
+                      <p className={styles.polishEmpty}>獲得済みの開発カードがありません。</p>
+                    ) : (
+                      <ul className={styles.polishOptionList}>
+                        {polishDevelopmentOptions.map(({ cardId, card }) => {
+                          const entry = polishSelectionMap[cardId];
+                          const selected = Boolean(entry);
+                          const orientationRight = Boolean(entry?.flipped);
+                          const orientationLabel = orientationRight ? "左側で使用" : "右側で使用";
+                          return (
+                            <li key={`dev-${cardId}`} className={styles.polishOptionItem}>
+                              <div className={styles.polishOptionHeader}>
+                                <label className={styles.polishOptionLabel}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => handleTogglePolishCard(cardId, "development")}
+                                  />
+                                  <span>{card?.cardId ?? cardId}</span>
+                                </label>
+                                {selected ? (
+                                  <button
+                                    type="button"
+                                    className={styles.polishToggleButton}
+                                    onClick={() => handleTogglePolishFlip(cardId)}
+                                  >
+                                    {orientationLabel}
+                                  </button>
+                                ) : null}
+                              </div>
+                              {card ? (
+                                <div className={styles.polishOptionPreview}>
+                                  <DevelopmentCardPreview
+                                    card={card}
+                                    orientation={orientationRight ? "right" : "left"}
+                                  />
+                                </div>
+                              ) : (
+                                <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </section>
+                  <section className={styles.polishSection}>
+                    <h6>利用可能な VP カード</h6>
+                    {polishVpOptions.length === 0 ? (
+                      <p className={styles.polishEmpty}>獲得済みの VP カードがありません。</p>
+                    ) : (
+                      <ul className={styles.polishOptionList}>
+                        {polishVpOptions.map(({ cardId, card }) => {
+                          const entry = polishSelectionMap[cardId];
+                          const selected = Boolean(entry);
+                          return (
+                            <li key={`vp-${cardId}`} className={styles.polishOptionItem}>
+                              <div className={styles.polishOptionHeader}>
+                                <label className={styles.polishOptionLabel}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    onChange={() => handleTogglePolishCard(cardId, "vp")}
+                                  />
+                                  <span>{card?.cardId ?? cardId}</span>
+                                </label>
+                              </div>
+                              {card ? (
+                                <div className={styles.polishOptionPreview}>
+                                  <DevelopmentCardPreview card={card} orientation="right" cardType="vp" />
+                                </div>
+                              ) : (
+                                <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                              )}
                               {selected ? (
-                                <button
-                                  type="button"
-                                  className={styles.polishToggleButton}
-                                  onClick={() => handleTogglePolishFlip(cardId)}
-                                >
-                                  {orientationLabel}
-                                </button>
+                                <p className={styles.polishHint}>VPカードは右側で使用します。</p>
                               ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </section>
+                </div>
+                <section className={styles.polishSection}>
+                  <h6>選択したカード</h6>
+                  {polishSelectionDetails.length === 0 ? (
+                    <p className={styles.polishEmpty}>カードを選択してください。</p>
+                  ) : (
+                    <ul className={styles.polishSelectionList}>
+                      {polishSelectionDetails.map((detail) => {
+                        const useRight = detail.type === "vp" || detail.flipped;
+                        return (
+                          <li key={`sel-${detail.cardId}`} className={styles.polishSelectionItem}>
+                            <div className={styles.polishSelectionHeader}>
+                              <div>
+                                <strong>{detail.card?.cardId ?? detail.cardId}</strong>
+                                <span className={styles.polishSelectionMeta}>
+                                  {detail.type === "vp" ? "VPカード" : "開発カード"}
+                                  {useRight ? "（右側配置）" : "（左側配置）"}
+                                </span>
+                              </div>
                             </div>
-                            {card ? (
-                              <div className={styles.polishOptionPreview}>
+                            {detail.card ? (
+                              <div className={styles.polishSelectionPreview}>
                                 <DevelopmentCardPreview
-                                  card={card}
-                                  orientation={orientationRight ? "right" : "left"}
+                                  card={detail.card}
+                                  orientation={useRight ? "right" : "left"}
+                                  cardType={detail.type}
                                 />
                               </div>
                             ) : (
@@ -4688,247 +4788,176 @@ export default function PlayPage(): JSX.Element {
                     </ul>
                   )}
                 </section>
+                {polishSummary.lensResult ? (
+                  <section className={styles.polishSection}>
+                    <h6>完成レンズプレビュー</h6>
+                    <CraftedLensPreview
+                      lens={polishSummary.lensResult}
+                      getCard={getCardDefinition}
+                      ownerName={localGamePlayer?.displayName ?? localGamePlayer?.playerId}
+                    />
+                  </section>
+                ) : null}
                 <section className={styles.polishSection}>
-                  <h6>利用可能な VP カード</h6>
-                  {polishVpOptions.length === 0 ? (
-                    <p className={styles.polishEmpty}>獲得済みの VP カードがありません。</p>
-                  ) : (
-                    <ul className={styles.polishOptionList}>
-                      {polishVpOptions.map(({ cardId, card }) => {
-                        const entry = polishSelectionMap[cardId];
-                        const selected = Boolean(entry);
+                  <h6>土台カードの選択</h6>
+                  {collectedFoundationEntries.some((entry) => entry.count > 0) ? (
+                    <div className={styles.polishFoundationList} role="radiogroup" aria-label="土台カード">
+                      {collectedFoundationEntries.map((entry) => {
+                        const disabled = entry.count <= 0;
+                        const checked = polishFoundationChoice === entry.cost;
                         return (
-                          <li key={`vp-${cardId}`} className={styles.polishOptionItem}>
-                            <div className={styles.polishOptionHeader}>
-                              <label className={styles.polishOptionLabel}>
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  onChange={() => handleTogglePolishCard(cardId, "vp")}
-                                />
-                                <span>{card?.cardId ?? cardId}</span>
-                              </label>
-                            </div>
-                            {card ? (
-                              <div className={styles.polishOptionPreview}>
-                                <DevelopmentCardPreview card={card} orientation="right" cardType="vp" />
-                              </div>
-                            ) : (
-                              <p className={styles.polishWarning}>カード情報が未登録です。</p>
+                          <label
+                            key={entry.cost}
+                            className={classNames(
+                              styles.polishFoundationOption,
+                              checked ? styles.polishFoundationOptionActive : undefined,
+                              disabled ? styles.polishFoundationOptionDisabled : undefined,
                             )}
-                            {selected ? (
-                              <p className={styles.polishHint}>VPカードは右側で使用します。</p>
-                            ) : null}
-                          </li>
+                          >
+                            <input
+                              type="radio"
+                              name="polishFoundation"
+                              value={entry.cost}
+                              disabled={disabled}
+                              checked={checked}
+                              onChange={() => handleSelectPolishFoundation(entry.cost)}
+                            />
+                            <div>
+                              <span className={styles.polishFoundationLabel}>コスト {entry.cost}</span>
+                              <span className={styles.polishFoundationCard}>
+                                {entry.count > 0 ? `所持 ${entry.count} 枚` : "未所持"}
+                              </span>
+                            </div>
+                          </label>
                         );
                       })}
-                    </ul>
+                    </div>
+                  ) : (
+                    <p className={styles.polishEmpty}>利用可能な土台カードがありません。</p>
                   )}
                 </section>
               </div>
-              <section className={styles.polishSection}>
-                <h6>選択したカード</h6>
-                {polishSelectionDetails.length === 0 ? (
-                  <p className={styles.polishEmpty}>カードを選択してください。</p>
-                ) : (
-                  <ul className={styles.polishSelectionList}>
-                    {polishSelectionDetails.map((detail) => {
-                      const useRight = detail.type === "vp" || detail.flipped;
-                      return (
-                        <li key={`sel-${detail.cardId}`} className={styles.polishSelectionItem}>
-                          <div className={styles.polishSelectionHeader}>
-                            <div>
-                              <strong>{detail.card?.cardId ?? detail.cardId}</strong>
-                              <span className={styles.polishSelectionMeta}>
-                                {detail.type === "vp" ? "VPカード" : "開発カード"}
-                                {useRight ? "（右側配置）" : "（左側配置）"}
-                              </span>
-                            </div>
-                          </div>
-                          {detail.card ? (
-                            <div className={styles.polishSelectionPreview}>
-                              <DevelopmentCardPreview
-                                card={detail.card}
-                                orientation={useRight ? "right" : "left"}
-                                cardType={detail.type}
-                              />
-                            </div>
-                          ) : (
-                            <p className={styles.polishWarning}>カード情報が未登録です。</p>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-              {polishSummary.lensResult ? (
-                <section className={styles.polishSection}>
-                  <h6>完成レンズプレビュー</h6>
-                  <CraftedLensPreview
-                    lens={polishSummary.lensResult}
-                    getCard={getCardDefinition}
-                    ownerName={localGamePlayer?.displayName ?? localGamePlayer?.playerId}
-                  />
-                </section>
-              ) : null}
-              <section className={styles.polishSection}>
-                <h6>土台カードの選択</h6>
-                {collectedFoundationEntries.some((entry) => entry.count > 0) ? (
-                  <div className={styles.polishFoundationList} role="radiogroup" aria-label="土台カード">
-                    {collectedFoundationEntries.map((entry) => {
-                      const disabled = entry.count <= 0;
-                      const checked = polishFoundationChoice === entry.cost;
-                      return (
-                        <label
-                          key={entry.cost}
-                          className={classNames(
-                            styles.polishFoundationOption,
-                            checked ? styles.polishFoundationOptionActive : undefined,
-                            disabled ? styles.polishFoundationOptionDisabled : undefined,
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name="polishFoundation"
-                            value={entry.cost}
-                            disabled={disabled}
-                            checked={checked}
-                            onChange={() => handleSelectPolishFoundation(entry.cost)}
-                          />
-                          <div>
-                            <span className={styles.polishFoundationLabel}>コスト {entry.cost}</span>
-                            <span className={styles.polishFoundationCard}>
-                              {entry.count > 0 ? `所持 ${entry.count} 枚` : "未所持"}
-                            </span>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className={styles.polishEmpty}>利用可能な土台カードがありません。</p>
-                )}
-              </section>
-            </div>
-            <div className={styles.polishModalFooter}>
-              <button type="button" className={styles.polishSecondaryButton} onClick={closePolishDialog}>
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className={styles.polishPrimaryButton}
-                onClick={() => void handleSubmitPolish()}
-                disabled={!polishSummary.canSubmit}
-              >
-                {isPolishSubmitting ? "送信中..." : "研磨を実行"}
-              </button>
+              <div className={styles.polishModalFooter}>
+                <button type="button" className={styles.polishSecondaryButton} onClick={closePolishDialog}>
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  className={styles.polishPrimaryButton}
+                  onClick={() => void handleSubmitPolish()}
+                  disabled={!polishSummary.canSubmit}
+                >
+                  {isPolishSubmitting ? "送信中..." : "研磨を実行"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {taskRewardDialog && (
-        <div className={styles.taskRewardOverlay}>
-          <div className={styles.taskRewardModal}>
-            <h4 className={styles.taskRewardTitle}>課題報酬を選択</h4>
-            <p className={styles.taskRewardDescription}>
-              {taskRewardDialogTask?.description ?? `課題ID: ${taskRewardDialog.taskId}`}
-            </p>
-            <div className={styles.rewardOptionList}>
-              <label
-                className={`${styles.rewardOption} ${taskRewardDialog.choice === "growth" ? styles.rewardOptionActive : ""
-                  } ${growthOptionDisabled ? styles.rewardOptionDisabled : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="taskRewardChoice"
-                  value="growth"
-                  checked={taskRewardDialog.choice === "growth"}
-                  disabled={growthOptionDisabled}
-                  onChange={() =>
-                    setTaskRewardDialog((prev) =>
-                      prev
-                        ? {
-                          ...prev,
-                          choice: "growth",
-                          nodeId:
-                            prev.nodeId &&
-                              availableGrowthNodes.some((node) => node.id === prev.nodeId)
-                              ? prev.nodeId
-                              : availableGrowthNodes[0]?.id,
+      {
+        taskRewardDialog && (
+          <div className={styles.taskRewardOverlay}>
+            <div className={styles.taskRewardModal}>
+              <h4 className={styles.taskRewardTitle}>課題報酬を選択</h4>
+              <p className={styles.taskRewardDescription}>
+                {taskRewardDialogTask?.description ?? `課題ID: ${taskRewardDialog.taskId}`}
+              </p>
+              <div className={styles.rewardOptionList}>
+                <label
+                  className={`${styles.rewardOption} ${taskRewardDialog.choice === "growth" ? styles.rewardOptionActive : ""
+                    } ${growthOptionDisabled ? styles.rewardOptionDisabled : ""}`}
+                >
+                  <input
+                    type="radio"
+                    name="taskRewardChoice"
+                    value="growth"
+                    checked={taskRewardDialog.choice === "growth"}
+                    disabled={growthOptionDisabled}
+                    onChange={() =>
+                      setTaskRewardDialog((prev) =>
+                        prev
+                          ? {
+                            ...prev,
+                            choice: "growth",
+                            nodeId:
+                              prev.nodeId &&
+                                availableGrowthNodes.some((node) => node.id === prev.nodeId)
+                                ? prev.nodeId
+                                : availableGrowthNodes[0]?.id,
+                          }
+                          : prev,
+                      )
+                    }
+                  />
+                  <span>成長ツリーに配置</span>
+                </label>
+                {taskRewardDialog.choice === "growth" ? (
+                  growthOptionDisabled ? (
+                    <p className={styles.rewardHelp}>成長可能なノードがありません。</p>
+                  ) : (
+                    <div className={styles.rewardSelect}>
+                      <label htmlFor="growthNodeSelect">ノード選択</label>
+                      <select
+                        id="growthNodeSelect"
+                        value={taskRewardDialog.nodeId ?? ""}
+                        onChange={(event) =>
+                          setTaskRewardDialog((prev) =>
+                            prev ? { ...prev, nodeId: event.target.value } : prev,
+                          )
                         }
-                        : prev,
-                    )
-                  }
-                />
-                <span>成長ツリーに配置</span>
-              </label>
-              {taskRewardDialog.choice === "growth" ? (
-                growthOptionDisabled ? (
-                  <p className={styles.rewardHelp}>成長可能なノードがありません。</p>
-                ) : (
-                  <div className={styles.rewardSelect}>
-                    <label htmlFor="growthNodeSelect">ノード選択</label>
-                    <select
-                      id="growthNodeSelect"
-                      value={taskRewardDialog.nodeId ?? ""}
-                      onChange={(event) =>
-                        setTaskRewardDialog((prev) =>
-                          prev ? { ...prev, nodeId: event.target.value } : prev,
-                        )
-                      }
-                    >
-                      {availableGrowthNodes.map((node) => (
-                        <option key={node.id} value={node.id}>
-                          {node.position} {node.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )
-              ) : null}
-              <label
-                className={`${styles.rewardOption} ${taskRewardDialog.choice === "lobby" ? styles.rewardOptionActive : ""
-                  }`}
-              >
-                <input
-                  type="radio"
-                  name="taskRewardChoice"
-                  value="lobby"
-                  checked={taskRewardDialog.choice === "lobby"}
-                  onChange={() =>
-                    setTaskRewardDialog((prev) =>
-                      prev ? { ...prev, choice: "lobby", nodeId: undefined } : prev,
-                    )
-                  }
-                />
-                <span>ロビーを獲得</span>
-              </label>
-            </div>
-            <div className={styles.rewardActions}>
-              <button
-                type="button"
-                className={`${styles.rewardButton} ${styles.rewardButtonPrimary}`}
-                onClick={() => {
-                  void confirmTaskReward();
-                }}
-                disabled={pendingTaskId === taskRewardDialog.taskId}
-              >
-                決定
-              </button>
-              <button
-                type="button"
-                className={`${styles.rewardButton} ${styles.rewardButtonSecondary}`}
-                onClick={cancelTaskReward}
-                disabled={pendingTaskId === taskRewardDialog.taskId}
-              >
-                キャンセル
-              </button>
+                      >
+                        {availableGrowthNodes.map((node) => (
+                          <option key={node.id} value={node.id}>
+                            {node.position} {node.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                ) : null}
+                <label
+                  className={`${styles.rewardOption} ${taskRewardDialog.choice === "lobby" ? styles.rewardOptionActive : ""
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="taskRewardChoice"
+                    value="lobby"
+                    checked={taskRewardDialog.choice === "lobby"}
+                    onChange={() =>
+                      setTaskRewardDialog((prev) =>
+                        prev ? { ...prev, choice: "lobby", nodeId: undefined } : prev,
+                      )
+                    }
+                  />
+                  <span>ロビーを獲得</span>
+                </label>
+              </div>
+              <div className={styles.rewardActions}>
+                <button
+                  type="button"
+                  className={`${styles.rewardButton} ${styles.rewardButtonPrimary}`}
+                  onClick={() => {
+                    void confirmTaskReward();
+                  }}
+                  disabled={pendingTaskId === taskRewardDialog.taskId}
+                >
+                  決定
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.rewardButton} ${styles.rewardButtonSecondary}`}
+                  onClick={cancelTaskReward}
+                  disabled={pendingTaskId === taskRewardDialog.taskId}
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
       {/* DEBUG OVERLAY */}
       <div style={{
         position: 'fixed',
@@ -4973,6 +5002,6 @@ export default function PlayPage(): JSX.Element {
           )}
         </pre>
       </div>
-    </div>
+    </div >
   );
 }

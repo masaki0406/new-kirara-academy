@@ -163,6 +163,7 @@ export interface PlayerState {
   ownedLenses: LensId[];
   tasksCompleted: TaskId[];
   hasPassed: boolean;
+  passedAt?: number;
   isRooting?: boolean;
   unlockedCharacterNodes?: string[];
   lobbyReserve?: number;

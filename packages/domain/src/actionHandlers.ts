@@ -2065,6 +2065,7 @@ export const applyPass: EffectApplier = async (action, context) => {
   }
 
   player.hasPassed = true;
+  player.passedAt = context.timestamp;
   turnOrder?.markPass(action.playerId);
   const nextPlayer = turnOrder?.nextPlayer();
   if (nextPlayer) {

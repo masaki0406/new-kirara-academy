@@ -47,6 +47,7 @@ export class PhaseManagerImpl implements PhaseManager {
       player.actionPoints = Math.min(supplyAp, MAX_ACTION_POINTS);
       player.creativity = Math.min(MAX_CREATIVITY, player.creativity + supplyCreativity);
       player.hasPassed = false;
+      delete player.passedAt;
       if (player.isRooting) {
         player.isRooting = false;
       }
@@ -129,7 +130,7 @@ export class PhaseManagerImpl implements PhaseManager {
 
 function determineTurnOrder(
   currentRound: number,
-  players: Record<PlayerId, { hasPassed: boolean; isRooting?: boolean }>,
+  players: Record<PlayerId, { hasPassed: boolean; passedAt?: number; isRooting?: boolean }>,
   currentOrder: PlayerId[],
 ): PlayerId[] {
   if (currentRound === 1) {
@@ -145,7 +146,25 @@ function determineTurnOrder(
     const idx = ids.indexOf(rootingPlayer);
     return [...ids.slice(idx), ...ids.slice(0, idx)];
   }
-  const firstPassed = ids.find((id) => players[id].hasPassed) ?? ids[0];
+
+  // Find the player who passed earliest
+  const passedPlayers = ids.filter((id) => players[id].hasPassed);
+  if (passedPlayers.length === 0) {
+    return ids; // Should not happen if round ended normally
+  }
+
+  // Sort by passedAt timestamp. If passedAt is missing, treat as late pass (Infinity)
+  // If timestamps are equal (unlikely) or missing, preserve relative order in `ids`
+  const firstPassed = passedPlayers.reduce((earliest, current) => {
+    const t1 = players[earliest]?.passedAt ?? Infinity;
+    const t2 = players[current]?.passedAt ?? Infinity;
+    if (t1 < t2) return earliest;
+    if (t2 < t1) return current;
+    // If timestamps are equal or both missing, prefer the one appearing earlier in the current order
+    // (This maintains stability if data is missing)
+    return ids.indexOf(earliest) < ids.indexOf(current) ? earliest : current;
+  });
+
   const idx = ids.indexOf(firstPassed);
   return [...ids.slice(idx), ...ids.slice(0, idx)];
 }
