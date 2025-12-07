@@ -36,7 +36,7 @@ export class PhaseManagerImpl implements PhaseManager {
       await this.deps.initializeVpDeck(gameState);
     }
     ensureDeckState(gameState);
-    const order = determineTurnOrder(gameState.currentRound, gameState.players);
+    const order = determineTurnOrder(gameState.currentRound, gameState.players, gameState.turnOrder);
     this.deps.turnOrder.setInitialOrder(order);
     gameState.currentPlayerId = order[0];
     gameState.currentPhase = 'setup';
@@ -130,11 +130,16 @@ export class PhaseManagerImpl implements PhaseManager {
 function determineTurnOrder(
   currentRound: number,
   players: Record<PlayerId, { hasPassed: boolean; isRooting?: boolean }>,
+  currentOrder: PlayerId[],
 ): PlayerId[] {
-  const ids = Object.keys(players) as PlayerId[];
   if (currentRound === 1) {
-    return ids;
+    return currentOrder.length > 0 ? [...currentOrder] : (Object.keys(players) as PlayerId[]);
   }
+
+  // Use currentOrder as the base for rotation instead of Object.keys
+  // This ensures we maintain the relative order from the previous round
+  const ids = currentOrder.length > 0 ? [...currentOrder] : (Object.keys(players) as PlayerId[]);
+
   const rootingPlayer = ids.find((id) => players[id].isRooting);
   if (rootingPlayer) {
     const idx = ids.indexOf(rootingPlayer);
