@@ -577,7 +577,6 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
         "集光ボードにロビーを配置し、創造力を消費して光トークンを 1 つ得ます。",
       requirement: combineRequirements(
         requireActionPoints(1),
-        requireCreativity(1),
         requireLobbyStock(),
         requireResourceCapacity("light", 1),
       ),
@@ -2333,6 +2332,11 @@ export default function PlayPage(): JSX.Element {
     refresh,
     closeLensActivateDialog,
     setFeedback,
+    lensActivateGrowthNeeded,
+    lensActivateGrowthSelections,
+    lensActivateLobbyReturnNeeded,
+    lensActivateLobbyReturnSelectedKeys,
+    lobbyReturnOptions,
   ]);
 
   const handleSubmitRefresh = useCallback(async () => {
@@ -2383,6 +2387,8 @@ export default function PlayPage(): JSX.Element {
     refresh,
     closeRefreshDialog,
     setFeedback,
+    refreshGrowthNeeded,
+    refreshGrowthSelections,
   ]);
 
   const handleSubmitPass = useCallback(async () => {
@@ -2565,7 +2571,7 @@ export default function PlayPage(): JSX.Element {
     const groups = new Map<PlayerActionCategory, PlayerActionGroupViewModel>();
 
     PLAYER_ACTIONS.forEach((action) => {
-      const availability = (action.requirement ?? (() => ({ available: true })))(context);
+      const availability = (action.requirement ?? (() => ({ available: true, reason: undefined })))(context);
 
       // Defensive check: Ensure restart action is disabled if AP is insufficient,
       // regardless of what availability.available says (to fix reported UI bug).
@@ -2686,6 +2692,8 @@ export default function PlayPage(): JSX.Element {
     refresh,
     closePersuasionDialog,
     setFeedback,
+    persuasionGrowthNeeded,
+    persuasionGrowthSelections,
   ]);
 
   const handleCollect = useCallback(
@@ -2874,7 +2882,14 @@ export default function PlayPage(): JSX.Element {
     } finally {
       setPendingTaskId(null);
     }
-  }, [taskRewardDialog, localPlayer?.id, pendingTaskId, performAction]);
+  }, [
+    taskRewardDialog,
+    localPlayer?.id,
+    pendingTaskId,
+    performAction,
+    localGamePlayer?.characterId,
+    localGamePlayer?.unlockedCharacterNodes,
+  ]);
 
   const cancelTaskReward = useCallback(() => {
     if (pendingTaskId) {
