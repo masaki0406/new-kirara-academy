@@ -3112,6 +3112,55 @@ export default function PlayPage(): JSX.Element {
 
   return (
     <div className={styles.page}>
+      {showSupplySelection && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div style={{
+            backgroundColor: '#222', padding: '2rem', borderRadius: '8px',
+            maxWidth: '600px', width: '90%', color: 'white'
+          }}>
+            <h3>供給ボーナス選択</h3>
+            <p>ストックを消費して（実質無料）、以下のいずれかを選択してください。</p>
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem', flexDirection: 'column' }}>
+              <button
+                className={styles.button}
+                onClick={() => handleSupplySelect('lobby')}
+              >
+                ロビー補充 (+1 使用可能)
+              </button>
+              <div style={{ borderTop: '1px solid #444', paddingTop: '1rem' }}>
+                <h4>成長 (能力解放)</h4>
+                {availableGrowthNodes.length === 0 ? (
+                  <p>解放可能な能力がありません</p>
+                ) : (
+                  availableGrowthNodes.map(node => (
+                    <button
+                      key={node.id}
+                      className={styles.button}
+                      style={{ display: 'block', width: '100%', marginBottom: '0.5rem' }}
+                      onClick={() => handleSupplySelect('growth', node.id)}
+                    >
+                      {node.name} (コスト: {formatPrerequisites(node.definition)})
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {waitingForSupply && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white'
+        }}>
+          <h3>他のプレイヤーの選択を待っています...</h3>
+        </div>
+      )}
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Kirara Academy メインボード</h1>
