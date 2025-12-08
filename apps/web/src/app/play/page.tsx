@@ -3161,6 +3161,30 @@ export default function PlayPage(): JSX.Element {
           <h3>他のプレイヤーの選択を待っています...</h3>
         </div>
       )}
+      {gameState?.currentPhase === 'finalScoring' && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000,
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: 'white',
+          overflowY: 'auto', padding: '2rem'
+        }}>
+          <h1>ゲーム終了</h1>
+          <p>お疲れ様でした！最終スコア計算が完了しました。</p>
+          {/* TODO: Display detailed scores */}
+          <div style={{ marginTop: '2rem', textAlign: 'left', width: '100%', maxWidth: '600px' }}>
+            {Object.entries(gameState.players).map(([pid, p]) => (
+              <div key={pid} style={{ marginBottom: '1rem', padding: '1rem', border: '1px solid #444', borderRadius: '8px' }}>
+                <h3>{p.displayName}</h3>
+                <p>VP: {p.vp}</p>
+                {/* Add more details if available in gameState */}
+              </div>
+            ))}
+          </div>
+          <Link href="/" className={styles.button} style={{ marginTop: '2rem' }}>
+            ロビーに戻る
+          </Link>
+        </div>
+      )}
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Kirara Academy メインボード</h1>
@@ -4006,7 +4030,7 @@ export default function PlayPage(): JSX.Element {
                                         }
                                         onClick={() => void handleUnlockNode(node.id)}
                                       >
-                                        解放 (ストック1)
+                                        解放
                                       </button>
                                     </div>
                                   ) : null}
