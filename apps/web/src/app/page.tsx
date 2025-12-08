@@ -147,9 +147,11 @@ export default function HomePage(): JSX.Element {
     } else if (lifecycleStage === "characterSelect") {
       router.push("/character-select");
     } else if (lifecycleStage === "inGame") {
-      router.push("/play");
+      if (gameState?.currentPhase !== 'finalScoring') {
+        router.push("/play");
+      }
     }
-  }, [lifecycleStage, router]);
+  }, [lifecycleStage, router, gameState?.currentPhase]);
 
   const phaseLabel = useMemo(() => {
     if (!gameState) {
