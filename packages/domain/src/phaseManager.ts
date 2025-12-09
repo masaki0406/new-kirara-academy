@@ -298,43 +298,45 @@ function collectCharacterEndgameEffects(
       if (!unlocked.has(node.nodeId)) {
         return;
       }
-      if (node.effect.type !== 'endGame') {
-        return;
-      }
-      const payloadKind = typeof node.effect.payload.kind === 'string' ? node.effect.payload.kind : undefined;
-      switch (payloadKind) {
-        case 'vpFlat': {
-          const s = ensureSummary();
-          s.bonusVp += Number(node.effect.payload.amount ?? 0);
-          break;
+      node.effects.forEach((effect) => {
+        if (effect.type !== 'endGame') {
+          return;
         }
-        case 'conditionalVp': {
-          const condition = node.effect.payload.condition;
-          if (condition === 'noLightNoRainbow') {
-            if (player.resources.light === 0 && player.resources.rainbow === 0) {
-              const s = ensureSummary();
-              s.bonusVp += Number(node.effect.payload.amount ?? 0);
-            }
-          }
-          break;
-        }
-        case 'vpMultiplier': {
-          const factor = Number(node.effect.payload.multiplier ?? 1);
-          if (!Number.isNaN(factor) && factor > 0) {
+        const payloadKind = typeof effect.payload.kind === 'string' ? effect.payload.kind : undefined;
+        switch (payloadKind) {
+          case 'vpFlat': {
             const s = ensureSummary();
-            s.multiplier *= factor;
+            s.bonusVp += Number(effect.payload.amount ?? 0);
+            break;
           }
-          break;
+          case 'conditionalVp': {
+            const condition = effect.payload.condition;
+            if (condition === 'noLightNoRainbow') {
+              if (player.resources.light === 0 && player.resources.rainbow === 0) {
+                const s = ensureSummary();
+                s.bonusVp += Number(effect.payload.amount ?? 0);
+              }
+            }
+            break;
+          }
+          case 'vpMultiplier': {
+            const factor = Number(effect.payload.multiplier ?? 1);
+            if (!Number.isNaN(factor) && factor > 0) {
+              const s = ensureSummary();
+              s.multiplier *= factor;
+            }
+            break;
+          }
+          case 'convertNegativeVp': {
+            ensureSummary().convertPenalty = true;
+            break;
+          }
+          case 'vpPerLobby':
+          default:
+            // 今後の拡張用
+            break;
         }
-        case 'convertNegativeVp': {
-          ensureSummary().convertPenalty = true;
-          break;
-        }
-        case 'vpPerLobby':
-        default:
-          // 今後の拡張用
-          break;
-      }
+      });
     });
   });
 

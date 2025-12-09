@@ -89,11 +89,15 @@ const defaultLabs: Ruleset['labs'] = {
   },
 };
 
+import { characters } from "@domain/rules/characters";
+
+// ...
+
 const defaultRuleset: Ruleset = {
   version: "prototype",
   resourceCaps: { light: 6, rainbow: 6, stagnation: 6 },
   endgameConversions: { light: 1, rainbow: 2, stagnation: 0 },
-  characters: {},
+  characters: characters,
   labs: defaultLabs,
   lenses: {},
   developmentCards: {},

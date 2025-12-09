@@ -3,6 +3,7 @@
 import type { JSX, SetStateAction } from "react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 import {
   DEFAULT_FUNCTIONS_BASE_URL,
@@ -1074,6 +1075,7 @@ interface PendingPolishResult {
 }
 
 export default function PlayPage(): JSX.Element {
+  const router = useRouter();
   const {
     baseUrl,
     setBaseUrl,
@@ -3180,9 +3182,16 @@ export default function PlayPage(): JSX.Element {
               </div>
             ))}
           </div>
-          <Link href="/" className={styles.button} style={{ marginTop: '2rem' }}>
+          <button
+            className={styles.button}
+            style={{ marginTop: '2rem' }}
+            onClick={() => {
+              disconnect();
+              router.push("/");
+            }}
+          >
             ロビーに戻る
-          </Link>
+          </button>
         </div>
       )}
       <header className={styles.header}>

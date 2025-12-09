@@ -96,14 +96,16 @@ function collectAllTriggers(gameState: GameState, ruleset: Ruleset): PlayerTrigg
       if (!unlocked.has(node.nodeId)) {
         return;
       }
-      if (node.effect.type !== 'trigger') {
-        return;
-      }
-      const payload = node.effect.payload as unknown as CharacterTriggerEffectPayload;
-      if (!payload?.event) {
-        return;
-      }
-      result.push({ playerId: player.playerId, payload });
+      node.effects.forEach((effect) => {
+        if (effect.type !== 'trigger') {
+          return;
+        }
+        const payload = effect.payload as unknown as CharacterTriggerEffectPayload;
+        if (!payload?.event) {
+          return;
+        }
+        result.push({ playerId: player.playerId, payload });
+      });
     });
   });
   return result;

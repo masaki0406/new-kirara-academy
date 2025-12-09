@@ -314,7 +314,7 @@ export interface CharacterNode {
   nodeId: string;
   position: string;
   cost?: ResourceCost;
-  effect: CharacterEffect;
+  effects: CharacterEffect[];
   prerequisites?: string[];
 }
 

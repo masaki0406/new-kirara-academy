@@ -1599,7 +1599,8 @@ export const validateWill: Validator = async (action, context) => {
     return errors;
   }
 
-  if (node.effect.type !== 'active') {
+  const effect = node.effects.find((e) => e.type === 'active');
+  if (!effect) {
     errors.push('指定されたノードは意思能力ではありません');
     return errors;
   }
@@ -1609,7 +1610,7 @@ export const validateWill: Validator = async (action, context) => {
     errors.push('未解放の意思効果は使用できません');
   }
 
-  const payload = node.effect.payload as ActiveEffectPayload;
+  const payload = effect.payload as ActiveEffectPayload;
   const cost = payload?.cost;
   if (cost) {
     validateWillCost(cost, player, errors);
@@ -1634,11 +1635,16 @@ export const applyWill: EffectApplier = async (action, context) => {
   }
 
   const node = profile.nodes.find((n) => n.nodeId === nodeId);
-  if (!node || node.effect.type !== 'active') {
+  if (!node) {
     throw new Error('指定された意思効果が存在しません');
   }
 
-  const payload = node.effect.payload as ActiveEffectPayload;
+  const effect = node.effects.find((e) => e.type === 'active');
+  if (!effect) {
+    throw new Error('指定された意思効果が存在しません');
+  }
+
+  const payload = effect.payload as ActiveEffectPayload;
   const cost = payload?.cost;
   if (cost) {
     applyWillCost(cost, player);
