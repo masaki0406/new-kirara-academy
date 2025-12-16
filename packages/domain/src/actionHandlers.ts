@@ -25,6 +25,9 @@ import {
   LobbySlot,
   LensActivatePayload,
   LobbyLocation,
+  PassiveEffectPayload,
+  ActionType,
+  Ruleset,
 } from './types';
 import { triggerEvent } from './triggerEngine';
 import {
@@ -40,6 +43,41 @@ const MAX_ACTION_POINTS = 10;
 const MAX_CREATIVITY = 5;
 const TOTAL_RESOURCE_LIMIT = 12;
 const RESOURCE_ORDER: ResourceType[] = ['light', 'rainbow', 'stagnation'];
+
+function getPassiveCostReduction(
+  player: PlayerState,
+  ruleset: Ruleset,
+  actionType: ActionType
+): number {
+  if (!player.characterId || !player.unlockedCharacterNodes) {
+    return 0;
+  }
+  const profile = ruleset.characters[player.characterId];
+  if (!profile) {
+    return 0;
+  }
+  const unlocked = new Set(player.unlockedCharacterNodes);
+  let reduction = 0;
+
+  profile.nodes.forEach((node) => {
+    if (!unlocked.has(node.nodeId)) {
+      return;
+    }
+    node.effects.forEach((effect) => {
+      if (effect.type !== 'passive') {
+        return;
+      }
+      const payload = effect.payload as unknown as PassiveEffectPayload;
+      if (payload.costZero?.actionType === actionType) {
+        reduction = 999; // Effectively zero cost (handled by caller)
+      }
+      if (payload.costReduction?.actionType === actionType) {
+        reduction += payload.costReduction.amount;
+      }
+    });
+  });
+  return reduction;
+}
 
 function getTotalResources(wallet: ResourceWallet): number {
   return RESOURCE_ORDER.reduce((sum, resource) => sum + wallet[resource], 0);
@@ -700,9 +738,65 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
       }
     }
 
+    const pendingResources: Partial<Record<ResourceType, number>> = {};
+    let apGain = 0;
+    let creativityGain = 0;
+
     for (const reward of lab.rewards) {
-      applyReward(player, reward);
+      if (reward.type === 'resource') {
+        const val = reward.value as ResourceReward;
+        RESOURCE_ORDER.forEach((res) => {
+          if (val[res]) pendingResources[res] = (pendingResources[res] || 0) + val[res];
+        });
+        if (val.actionPoints) apGain += val.actionPoints;
+        if (val.creativity) creativityGain += val.creativity;
+      } else {
+        applyReward(player, reward);
+      }
     }
+
+    // Overflow Check & Application
+    const currentTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (player.resources[res] || 0), 0);
+    const gainTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (pendingResources[res] || 0), 0);
+
+    if (currentTotal + gainTotal > TOTAL_RESOURCE_LIMIT) {
+      const choice = action.payload.resourceChoice as ResourceWallet | undefined;
+      if (!choice) {
+        throw new Error('所持上限を超えるため、獲得するリソースを選択してください');
+      }
+      // Validate Choice
+      let choiceTotal = 0;
+      RESOURCE_ORDER.forEach((res) => {
+        const amount = choice[res] || 0;
+        if (amount > (pendingResources[res] || 0)) {
+          throw new Error(`選択された ${res} が獲得可能量を超えています`);
+        }
+        choiceTotal += amount;
+      });
+      if (currentTotal + choiceTotal > TOTAL_RESOURCE_LIMIT) {
+        throw new Error('選択されたリソースの合計が所持上限を超えています');
+      }
+      // Apply Choice
+      RESOURCE_ORDER.forEach((res) => {
+        if (choice[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + choice[res]);
+        }
+      });
+    } else {
+      // Apply All
+      RESOURCE_ORDER.forEach((res) => {
+        if (pendingResources[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + pendingResources[res]);
+        }
+      });
+    }
+
+    if (apGain > 0) player.actionPoints = (player.actionPoints ?? 0) + apGain;
+    if (creativityGain > 0) player.creativity = (player.creativity ?? 0) + creativityGain;
 
     if (labId === 'polish') {
       const rawPayload =
@@ -873,15 +967,7 @@ export const validateLensActivate: Validator = async (action, context) => {
 export const applyLensActivate: EffectApplier = async (action, context) => {
   const { gameState } = context;
   try {
-    // DEBUG LOG
-    gameState.logs.push({
-      id: `debug-${Date.now()}-${Math.random()}`,
-      timestamp: Date.now(),
-      playerId: action.playerId,
-      actionType: 'pass',
-      payload: { message: '[DEBUG] applyLensActivate called', lensId: action.payload.lensId, payload: action.payload },
-      result: { success: true }
-    });
+    // ...
     const player = gameState.players[action.playerId];
     if (!player) {
       throw new Error('プレイヤーが存在しません');
@@ -892,6 +978,15 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     if (!lens) {
       throw new Error('指定されたレンズが存在しません');
     }
+
+    // Aono Haruyo Node 5 Restriction
+    if (player.unlockedCharacterNodes?.includes('aono-haruyo:5')) {
+      if (lens.ownerId !== action.playerId) {
+        throw new Error('青野春陽のNode 5の効果により、他人のレンズは起動できません');
+      }
+    }
+
+    const startStagnation = player.resources.stagnation ?? 0;
 
     const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
     player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
@@ -991,23 +1086,95 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       }
     }
 
-    // 報酬の適用 (lens.rewards と itemCost.rewards)
-    for (const reward of lens.rewards) {
-      applyReward(player, reward);
-    }
-
-
-    // 成長報酬の選択適用
+    // 報酬の計算と適用
+    // アイテム効果の計算（先に計算してリソースを合算する）
     const itemReward = accumulateItemEffects(
       (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
       'reward',
     );
     console.log('[DEBUG] Item Reward calculated', itemReward);
+
+    const pendingResources: Partial<Record<ResourceType, number>> = {};
+    let apGain = 0;
+    let creativityGain = 0;
+
+    // Lens Rewards
+    for (const reward of lens.rewards) {
+      if (reward.type === 'resource') {
+        const val = reward.value as ResourceReward;
+        RESOURCE_ORDER.forEach((res) => {
+          if (val[res]) pendingResources[res] = (pendingResources[res] || 0) + val[res];
+        });
+        if (val.actionPoints) apGain += val.actionPoints;
+        if (val.creativity) creativityGain += val.creativity;
+      } else {
+        // Apply non-resource rewards immediately
+        applyReward(player, reward);
+      }
+    }
+
+    // Item Rewards (Resources)
+    if (itemReward.resources) {
+      RESOURCE_ORDER.forEach((res) => {
+        if (itemReward.resources![res]) pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
+      });
+      if (itemReward.resources.actionPoints) apGain += itemReward.resources.actionPoints;
+      if (itemReward.resources.creativity) creativityGain += itemReward.resources.creativity;
+    }
+
+    // Overflow Check & Application
+    const currentTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (player.resources[res] || 0), 0);
+    const gainTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (pendingResources[res] || 0), 0);
+
+    // Check if player has unlimited capacity (e.g. Kazari Node 8)
+    if (currentTotal + gainTotal > TOTAL_RESOURCE_LIMIT) {
+      const choice = action.payload.resourceChoice as ResourceWallet | undefined;
+      if (!choice) {
+        throw new Error('所持上限を超えるため、獲得するリソースを選択してください');
+      }
+
+      // Validate Choice
+      let choiceTotal = 0;
+      RESOURCE_ORDER.forEach((res) => {
+        const amount = choice[res] || 0;
+        if (amount > (pendingResources[res] || 0)) {
+          throw new Error(`選択された ${res} が獲得可能量を超えています`);
+        }
+        choiceTotal += amount;
+      });
+
+      if (currentTotal + choiceTotal > TOTAL_RESOURCE_LIMIT) {
+        throw new Error('選択されたリソースの合計が所持上限を超えています');
+      }
+
+      // Apply Choice
+      RESOURCE_ORDER.forEach((res) => {
+        if (choice[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + choice[res]);
+        }
+      });
+    } else {
+      // Apply All
+      RESOURCE_ORDER.forEach((res) => {
+        if (pendingResources[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + pendingResources[res]);
+        }
+      });
+    }
+
+    // Apply AP/Creativity
+    if (apGain > 0) player.actionPoints = (player.actionPoints ?? 0) + apGain;
+    if (creativityGain > 0) player.creativity = (player.creativity ?? 0) + creativityGain;
+
     if (itemReward.growthGain > 0) {
       const growthSelections = Array.isArray(action.payload.growthSelections)
         ? (action.payload.growthSelections as string[])
         : undefined;
-      applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+      applyGrowthSelection(gameState, context.ruleset, player, growthSelections, itemReward.growthGain);
     }
 
     if (itemReward.lobbyGain > 0) {
@@ -1021,26 +1188,6 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       player.lobbyUsed = currentUsed + itemReward.lobbyGain;
 
       // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
-    }
-
-    if (itemReward.resources) {
-      // Handle standard resources
-      (['light', 'rainbow', 'stagnation'] as ResourceType[]).forEach((resource) => {
-        const amount = itemReward.resources[resource];
-        if (amount && amount > 0) {
-          const current = player.resources[resource] ?? 0;
-          const cap = player.resources.maxCapacity?.[resource] ?? 99;
-          player.resources[resource] = Math.min(cap, current + amount);
-        }
-      });
-
-      // Handle special resources
-      if (itemReward.resources.actionPoints && itemReward.resources.actionPoints > 0) {
-        player.actionPoints += itemReward.resources.actionPoints;
-      }
-      if (itemReward.resources.creativity && itemReward.resources.creativity > 0) {
-        player.creativity += itemReward.resources.creativity;
-      }
     }
 
     if (itemReward.vpGain > 0) {
@@ -1093,12 +1240,54 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
         actorId: action.playerId,
         ownerId: lens.ownerId,
         actionType: 'lensActivate',
+        lensId: lens.lensId,
       });
+    }
+
+    // Calculate Stagnation Total Move (Consumed + Gained) for Node 5
+    const stagnationConsumed = (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0);
+
+    let stagnationGained = 0;
+    let lightGained = 0;
+    let rainbowGained = 0;
+
+    for (const reward of lens.rewards) {
+      if (reward.type === 'resource') {
+        const val = reward.value as ResourceReward;
+        if (val.stagnation) stagnationGained += val.stagnation;
+        if (val.light) lightGained += val.light;
+        if (val.rainbow) rainbowGained += val.rainbow;
+      }
+    }
+    if (itemReward.resources) {
+      if (itemReward.resources.stagnation) stagnationGained += itemReward.resources.stagnation;
+      if (itemReward.resources.light) lightGained += itemReward.resources.light;
+      if (itemReward.resources.rainbow) rainbowGained += itemReward.resources.rainbow;
+    }
+
+    const stagnationTotalMove = stagnationConsumed + stagnationGained;
+
+    // Aono Haruyo Node 6: Extra Light
+    if (player.unlockedCharacterNodes?.includes('aono-haruyo:6') && lightGained > 0) {
+      lightGained += 1;
+      const cap = player.resources.maxCapacity?.light ?? 99;
+      player.resources.light = Math.min(cap, (player.resources.light ?? 0) + 1);
+    }
+
+    // Aono Haruyo Node 7: Extra Rainbow
+    if (player.unlockedCharacterNodes?.includes('aono-haruyo:7') && rainbowGained > 0) {
+      rainbowGained += 1;
+      const cap = player.resources.maxCapacity?.rainbow ?? 99;
+      player.resources.rainbow = Math.min(cap, (player.resources.rainbow ?? 0) + 1);
     }
 
     triggerEvent(gameState, context.ruleset, 'actionPerformed', {
       actorId: action.playerId,
       actionType: 'lensActivate',
+      lensId: lens.lensId,
+      stagnationDelta: stagnationTotalMove, // Using total move as delta for Node 5
+      lightGained,
+      rainbowGained,
     });
   } catch (error) {
     // CRITICAL: Catch error and log it, but DO NOT rethrow to ensure state is saved.
@@ -1263,7 +1452,8 @@ export const validateRefresh: Validator = async (action, context) => {
     errors.push('未使用のロビーが不足しています');
   }
 
-  const totalActionCost = 3 + (lens.cost.actionPoints ?? 0);
+  const reduction = getPassiveCostReduction(player, context.ruleset, 'refresh');
+  const totalActionCost = Math.max(0, 3 + (lens.cost.actionPoints ?? 0) - reduction);
   if (player.actionPoints < totalActionCost) {
     errors.push('行動力が不足しています');
   }
@@ -1324,12 +1514,10 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     throw new Error('使用済みの自分のロビーが配置されていません');
   }
 
-  player.actionPoints = Math.max(0, player.actionPoints - 3);
-
+  const reduction = getPassiveCostReduction(player, context.ruleset, 'refresh');
   const cost = lens.cost;
-  if (cost.actionPoints) {
-    player.actionPoints = Math.max(0, player.actionPoints - cost.actionPoints);
-  }
+  const totalApCost = Math.max(0, 3 + (cost.actionPoints ?? 0) - reduction);
+  player.actionPoints = Math.max(0, player.actionPoints - totalApCost);
   const itemCost = accumulateItemEffects(
     (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
     'cost',
@@ -1384,13 +1572,7 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     const growthSelections = Array.isArray(action.payload.growthSelections)
       ? (action.payload.growthSelections as string[])
       : undefined;
-    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
-  }
-  if (itemReward.vpGain > 0) {
-    player.vp += itemReward.vpGain;
-  }
-  if (itemReward.vpGain > 0) {
-    player.vp += itemReward.vpGain;
+    applyGrowthSelection(gameState, context.ruleset, player, growthSelections, itemReward.growthGain);
   }
   if (itemReward.vpGain > 0) {
     player.vp += itemReward.vpGain;
@@ -1413,6 +1595,7 @@ export const applyRefresh: EffectApplier = async (action, context) => {
   triggerEvent(gameState, context.ruleset, 'actionPerformed', {
     actorId: action.playerId,
     actionType: 'refresh',
+    lensId: lens.lensId,
   });
 };
 
@@ -1657,9 +1840,348 @@ export const applyWill: EffectApplier = async (action, context) => {
     });
   }
 
+  const pendingResources: Partial<Record<ResourceType, number>> = {};
+  let apGain = 0;
+  let creativityGain = 0;
+
   payload?.rewards?.forEach((reward) => {
-    applyReward(player, reward);
+    if (reward.type === 'resource') {
+      const val = reward.value as ResourceReward;
+      RESOURCE_ORDER.forEach((res) => {
+        if (val[res]) pendingResources[res] = (pendingResources[res] || 0) + val[res];
+      });
+      if (val.actionPoints) apGain += val.actionPoints;
+      if (val.creativity) creativityGain += val.creativity;
+    } else {
+      applyReward(player, reward);
+    }
   });
+
+  // Overflow Check & Application
+  const currentTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (player.resources[res] || 0), 0);
+  const gainTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (pendingResources[res] || 0), 0);
+
+  if (currentTotal + gainTotal > TOTAL_RESOURCE_LIMIT) {
+    const choice = action.payload.resourceChoice as ResourceWallet | undefined;
+    if (!choice) {
+      throw new Error('所持上限を超えるため、獲得するリソースを選択してください');
+    }
+    // Validate Choice
+    let choiceTotal = 0;
+    RESOURCE_ORDER.forEach((res) => {
+      const amount = choice[res] || 0;
+      if (amount > (pendingResources[res] || 0)) {
+        throw new Error(`選択された ${res} が獲得可能量を超えています`);
+      }
+      choiceTotal += amount;
+    });
+    if (currentTotal + choiceTotal > TOTAL_RESOURCE_LIMIT) {
+      throw new Error('選択されたリソースの合計が所持上限を超えています');
+    }
+    // Apply Choice
+    RESOURCE_ORDER.forEach((res) => {
+      if (choice[res]) {
+        const current = player.resources[res] ?? 0;
+        const cap = player.resources.maxCapacity?.[res] ?? 99;
+        player.resources[res] = Math.min(cap, current + choice[res]);
+      }
+    });
+  } else {
+    // Apply All
+    RESOURCE_ORDER.forEach((res) => {
+      if (pendingResources[res]) {
+        const current = player.resources[res] ?? 0;
+        const cap = player.resources.maxCapacity?.[res] ?? 99;
+        player.resources[res] = Math.min(cap, current + pendingResources[res]);
+      }
+    });
+  }
+
+  if (apGain > 0) player.actionPoints = (player.actionPoints ?? 0) + apGain;
+  if (creativityGain > 0) player.creativity = (player.creativity ?? 0) + creativityGain;
+
+  console.log(`[DEBUG] applyWill: customAction=${payload?.customAction}`);
+
+  if (payload?.customAction === 'forcedCollection') {
+    const opponents = Object.values(gameState.players).filter((p) => p.playerId !== action.playerId);
+    opponents.forEach((opponent) => {
+      // Steal Light
+      if (opponent.resources.light > 0) {
+        opponent.resources.light -= 1;
+        player.resources.light += 1;
+      }
+      // Steal Rainbow
+      if (opponent.resources.rainbow > 0) {
+        opponent.resources.rainbow -= 1;
+        player.resources.rainbow += 1;
+      }
+      // Return 1 Lobby to stock
+      if ((opponent.lobbyAvailable ?? 0) > 0) {
+        opponent.lobbyAvailable = (opponent.lobbyAvailable ?? 0) - 1;
+      }
+    });
+  } else if (payload.customAction === 'akaneNode9') {
+    // Akane Hiyori Node 9: Creativity 1 -> Rainbow 1 OR Lobby 1
+    const choice = action.payload.choice as 'rainbow' | 'lobby';
+    if (!choice) {
+      throw new Error('選択肢（rainbow または lobby）を指定してください');
+    }
+    if (choice === 'rainbow') {
+      applyReward(player, { type: 'resource', value: { rainbow: 1 } });
+    } else if (choice === 'lobby') {
+      gainLobbyFromStock(player, 1);
+    } else {
+      throw new Error('無効な選択肢です');
+    }
+  } else if (payload.customAction === 'resonanceIntervention') {
+    // Akito Daidou Node 7: Creativity 1 -> Persuade or Reactivate other's lens (paying cost)
+    // Payload should contain target lensId and actionType ('persuasion' or 'reactivate')
+    // But applyWill payload comes from character definition (fixed).
+    // The user selection comes from `action.payload`.
+    // We need to merge or look at action.payload.
+    const userPayload = action.payload as { targetLensId?: string; interventionType?: 'persuasion' | 'reactivate' };
+
+    if (!userPayload.targetLensId || !userPayload.interventionType) {
+      throw new Error('対象のレンズとアクションタイプを指定してください');
+    }
+
+    const lens = gameState.board.lenses[userPayload.targetLensId];
+    if (!lens) {
+      throw new Error('レンズが見つかりません');
+    }
+
+    // Pay Lens Cost
+    if (!canPayResourceCost(player.resources, lens.cost)) {
+      throw new Error('レンズのコストが支払えません');
+    }
+    payResourceCost(player.resources, lens.cost);
+
+    if (userPayload.interventionType === 'persuasion') {
+      if (lens.ownerId === player.playerId) {
+        throw new Error('自分のレンズは説得できません');
+      }
+      // Persuasion Logic
+      // Must be occupied
+      const slot = gameState.board.lobbySlots.find(s => s.lensId === lens.lensId);
+      if (!slot || !slot.occupantId) {
+        throw new Error('説得対象のレンズに誰も配置されていません');
+      }
+
+      // Return occupant to owner (maintaining state? User said "return to owner maintaining acted/unacted state")
+      // If it's on a lens, it's usually "Used" (acted).
+      // But if the lens is active, maybe it's "Unacted"?
+      // Let's assume we return it to `lobbyAvailable` if slot.isActive is true, and `lobbyUsed` if false?
+      // Or just return to `lobbyAvailable` as a bonus?
+      // User said: "置かれているロビーを持ち主に行動済未行動を維持したままで戻します。"
+      // If the slot is Active, the token is effectively "Unacted" (ready to trigger?).
+      // If the slot is Inactive, the token is "Acted".
+      const occupant = gameState.players[slot.occupantId];
+      if (occupant) {
+        if (slot.isActive) {
+          occupant.lobbyAvailable = (occupant.lobbyAvailable ?? 0) + 1;
+          occupant.lobbyUsed = Math.max(0, (occupant.lobbyUsed ?? 0) - 1);
+        } else {
+          // Inactive (Acted) -> Return to Used (Hand)
+          // No change in counts (Used on board -> Used in hand)
+        }
+      }
+
+      // Place own token
+      // "その後は通常の起動と同じで自分のロビーをレンズにのせてコストを支払報酬を獲得します"
+      // Normal activation requires placing a token from Available.
+      const myAvailable = getLobbyAvailable(player);
+      if (myAvailable < 1) {
+        throw new Error('配置できるロビーがありません');
+      }
+      player.lobbyAvailable = myAvailable - 1;
+
+      slot.occupantId = player.playerId;
+      slot.isActive = false; // Exhausted after use
+
+      // Trigger 'persuasionTargeted' for the occupant
+      triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+        actorId: player.playerId,
+        actionType: 'persuasion',
+        targetPlayerId: occupant?.playerId,
+        lensId: lens.lensId
+      });
+
+    } else if (userPayload.interventionType === 'reactivate') {
+      if (lens.ownerId !== player.playerId) {
+        throw new Error('他人のレンズは再起動できません');
+      }
+      // Reactivation Logic
+      // "レンズに乗っている行動済のロビーを戻して"
+      // Must be occupied by SELF and Inactive (Acted).
+      const slot = gameState.board.lobbySlots.find(s => s.lensId === lens.lensId);
+      if (!slot) {
+        throw new Error('レンズスロットが見つかりません');
+      }
+      if (slot.occupantId !== player.playerId) {
+        throw new Error('自分のロビーが乗っていません');
+      }
+      // "手元の未行動ロビーをレンズにのせて"
+      const myAvailable = getLobbyAvailable(player);
+      if (myAvailable < 1) {
+        throw new Error('配置できるロビーがありません');
+      }
+
+      // Return acted lobby
+      // Used (Board) -> Used (Hand). No change in counts.
+
+      // Place unacted lobby
+      player.lobbyAvailable = myAvailable - 1;
+      player.lobbyUsed = (player.lobbyUsed ?? 0) + 1;
+
+      slot.isActive = false; // Used immediately
+    }
+
+    // Apply Rewards (Lens + Items)
+    // Calculate rewards
+    const itemReward = accumulateItemEffects(
+      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+      'reward',
+    );
+
+    const pendingResources: Partial<Record<ResourceType, number>> = {};
+    let apGain = 0;
+    let creativityGain = 0;
+
+    // Lens Rewards
+    for (const reward of lens.rewards) {
+      if (reward.type === 'resource') {
+        const val = reward.value as ResourceReward;
+        RESOURCE_ORDER.forEach((res) => {
+          if (val[res]) pendingResources[res] = (pendingResources[res] || 0) + val[res];
+        });
+        if (val.actionPoints) apGain += val.actionPoints;
+        if (val.creativity) creativityGain += val.creativity;
+      } else {
+        applyReward(player, reward);
+      }
+    }
+
+    // Item Rewards (Resources)
+    if (itemReward.resources) {
+      RESOURCE_ORDER.forEach((res) => {
+        if (itemReward.resources![res]) pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
+      });
+      if (itemReward.resources.actionPoints) apGain += itemReward.resources.actionPoints;
+      if (itemReward.resources.creativity) creativityGain += itemReward.resources.creativity;
+    }
+
+    // Overflow Check & Application
+    const currentTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (player.resources[res] || 0), 0);
+    const gainTotal = RESOURCE_ORDER.reduce((sum, res) => sum + (pendingResources[res] || 0), 0);
+
+    if (currentTotal + gainTotal > TOTAL_RESOURCE_LIMIT) {
+      const choice = action.payload.resourceChoice as ResourceWallet | undefined;
+      if (!choice) {
+        throw new Error('所持上限を超えるため、獲得するリソースを選択してください');
+      }
+      // Validate Choice
+      let choiceTotal = 0;
+      RESOURCE_ORDER.forEach((res) => {
+        const amount = choice[res] || 0;
+        if (amount > (pendingResources[res] || 0)) {
+          throw new Error(`選択された ${res} が獲得可能量を超えています`);
+        }
+        choiceTotal += amount;
+      });
+      if (currentTotal + choiceTotal > TOTAL_RESOURCE_LIMIT) {
+        throw new Error('選択されたリソースの合計が所持上限を超えています');
+      }
+      // Apply Choice
+      RESOURCE_ORDER.forEach((res) => {
+        if (choice[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + choice[res]);
+        }
+      });
+    } else {
+      // Apply All
+      RESOURCE_ORDER.forEach((res) => {
+        if (pendingResources[res]) {
+          const current = player.resources[res] ?? 0;
+          const cap = player.resources.maxCapacity?.[res] ?? 99;
+          player.resources[res] = Math.min(cap, current + pendingResources[res]);
+        }
+      });
+    }
+
+    if (apGain > 0) player.actionPoints = (player.actionPoints ?? 0) + apGain;
+    if (creativityGain > 0) player.creativity = (player.creativity ?? 0) + creativityGain;
+  } else if (payload.customAction === 'gainLobby') {
+    // Kazari Hizumi Node 8: Creativity 2 -> Gain Lobby (Inactive)
+    // Add a new lobby slot to the player's board (or just increment available count?)
+    // The game board has `lobbySlots`.
+    // But players also have `lobbyAvailable` and `lobbyReserve`.
+    // Usually "Gain Lobby" means moving from Reserve to Available?
+    // Or creating a NEW slot on the board?
+    // User said "ストックからロビーを未行動で獲得".
+    // "Stock" usually means `lobbyReserve`.
+    // "Unacted" (未行動) means Inactive? Or just available but not used yet?
+    // If it means adding to `lobbyAvailable`, that's usually for placing lenses.
+    // If it means adding a physical slot to the board...
+    // Let's assume it means increasing `lobbyAvailable` count, which allows placing more lenses.
+    // BUT, `lobbySlots` on board are created when placing lenses.
+    // Wait, `lobbyAvailable` is the number of "Actions" (Lobby tokens) a player has.
+    // `lobbyReserve` is the stock.
+    // So this action should move 1 from `lobbyReserve` to `lobbyAvailable`.
+    // And "Unacted" might mean it's ready to be used (Active).
+    // BUT the user said "未行動で獲得" (obtain as unacted/inactive?).
+    // If it's a token, "inactive" might mean it's exhausted for this turn?
+    // If so, `lobbyAvailable` doesn't track active/inactive state of tokens, only count.
+    // The `lobbySlots` track active/inactive state of PLACED tokens.
+    // If this ability gives a token to be used LATER, it just adds to `lobbyAvailable`.
+    // If "Unacted" means "Ready to use", then it's just +1 `lobbyAvailable`.
+    // If "Unacted" means "Already used/Exhausted", we can't represent that with just `lobbyAvailable` count easily unless we have a separate "exhaustedLobby" count.
+    // However, usually "Gain Lobby" implies gaining the capacity to do more actions.
+    // Let's assume it simply increments `lobbyAvailable` (taking from `lobbyReserve`).
+
+    if ((player.lobbyReserve ?? 0) > 0) {
+      player.lobbyReserve = (player.lobbyReserve ?? 0) - 1;
+      player.lobbyAvailable = (player.lobbyAvailable ?? 0) + 1;
+    } else {
+      // If no reserve, maybe create new?
+      // User said "from stock". So if stock is empty, maybe fail or do nothing.
+      // Let's assume fail if no reserve.
+      throw new Error('ストックにロビーがありません');
+    }
+  } else if (payload.customAction === 'convertStagnation') {
+    // Midori Rina: Gain 1-3 Stagnation. +2 VP per Stagnation gained.
+    // Cannot discard existing stagnation.
+    // Cannot select amount that exceeds capacity.
+    const amount = Number(action.payload.amount ?? 0);
+
+    if (amount < 1 || amount > 3) {
+      throw new Error('獲得する淀みは1〜3個である必要があります');
+    }
+
+    const currentStagnation = player.resources.stagnation ?? 0;
+    const maxStagnation = player.resources.maxCapacity.stagnation ?? 10;
+
+    if (currentStagnation + amount > maxStagnation) {
+      throw new Error('所持上限を超える個数は選択できません');
+    }
+
+    // Check total resource limit as well?
+    // addResourcesWithLimits checks TOTAL_RESOURCE_LIMIT (12).
+    // But here we are validating selection.
+    // If total limit is exceeded, we should also error?
+    // User said "所持上限を超える個数は選択できなかった".
+    // Usually refers to per-resource capacity, but total limit is also a capacity.
+    // Let's check total limit too.
+    const totalResources = getTotalResources(player.resources);
+    if (totalResources + amount > TOTAL_RESOURCE_LIMIT) {
+      throw new Error('リソース合計上限を超える個数は選択できません');
+    }
+
+    player.resources.stagnation = currentStagnation + amount;
+    player.vp += amount * 2;
+  }
+
 
   triggerEvent(gameState, ruleset, 'actionPerformed', {
     actorId: action.playerId,
@@ -1773,9 +2295,6 @@ export const applyTask: EffectApplier = async (action, context) => {
       }
       if (!player.unlockedCharacterNodes) {
         player.unlockedCharacterNodes = [];
-      }
-      if (player.unlockedCharacterNodes.includes(nodeId)) {
-        throw new Error('指定されたノードは既に解放済みです');
       }
       const unlockedSet = buildUnlockedSetWithAuto(
         player.characterId,
@@ -1905,7 +2424,8 @@ export const validatePersuasion: Validator = async (action, context) => {
     errors.push('自分のロビーには説得できません');
   }
 
-  const requiredActionPoints = 2 + (lens.cost.actionPoints ?? 0);
+  const reduction = getPassiveCostReduction(player, context.ruleset, 'persuasion');
+  const requiredActionPoints = Math.max(0, 2 + (lens.cost.actionPoints ?? 0) - reduction);
   if (player.actionPoints < requiredActionPoints) {
     errors.push('行動力が不足しています');
   }
@@ -1976,11 +2496,9 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
   const occupantId = slot.occupantId;
   const occupantPlayer = gameState.players[occupantId];
 
-  player.actionPoints = Math.max(0, player.actionPoints - 2);
-  const extraAction = lens.cost.actionPoints ?? 0;
-  if (extraAction > 0) {
-    player.actionPoints = Math.max(0, player.actionPoints - extraAction);
-  }
+  const reduction = getPassiveCostReduction(player, context.ruleset, 'persuasion');
+  const totalApCost = Math.max(0, 2 + (lens.cost.actionPoints ?? 0) - reduction);
+  player.actionPoints = Math.max(0, player.actionPoints - totalApCost);
 
   const itemCost = accumulateItemEffects(
     (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
@@ -2026,7 +2544,7 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
     const growthSelections = Array.isArray(action.payload.growthSelections)
       ? (action.payload.growthSelections as string[])
       : undefined;
-    applyGrowthSelection(player, growthSelections, itemReward.growthGain);
+    applyGrowthSelection(gameState, context.ruleset, player, growthSelections, itemReward.growthGain);
   }
 
   // 既存ロビーを返却し、自分のロビーを配置（配置したロビーはこの手番で使用済み）
@@ -2046,11 +2564,14 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
       actorId: action.playerId,
       ownerId: lens.ownerId,
       actionType: 'persuasion',
+      lensId: lens.lensId,
     });
   }
   triggerEvent(gameState, context.ruleset, 'actionPerformed', {
     actorId: action.playerId,
     actionType: 'persuasion',
+    lensId: lens.lensId,
+    targetPlayerId: occupantId,
   });
 };
 
@@ -2429,6 +2950,8 @@ function applyGrowthDelta(player: PlayerState, delta: number): void {
 }
 
 function applyGrowthSelection(
+  gameState: GameState,
+  ruleset: Ruleset,
   player: PlayerState,
   selections: string[] | undefined,
   amount: number,
@@ -2460,6 +2983,66 @@ function applyGrowthSelection(
     }
     player.unlockedCharacterNodes.push(nextId);
     unlocked.add(nextId);
+
+    // Handle Immediate Effects
+    const nodeDef = CHARACTER_GROWTH_DEFINITIONS[player.characterId]?.[nextId];
+    if (nodeDef) {
+      // We need to look up the node definition in ruleset to get effects
+      // But CHARACTER_GROWTH_DEFINITIONS only has structure, not effects.
+      // We need to look up in ruleset.characters
+      const profile = ruleset.characters[player.characterId];
+      const node = profile?.nodes.find((n) => n.nodeId === nextId);
+      if (node) {
+        node.effects.forEach((effect) => {
+          if (effect.type === 'immediate') {
+            const payload = effect.payload as unknown as { customAction?: string; rewards?: unknown[] };
+            if (payload.customAction === 'forcedCollection') {
+              // Shirogami Yuu Node 5: Steal 1 Light/Rainbow from all opponents, reduce their Lobby Available by 1.
+              const opponents = Object.values(gameState.players).filter((p) => p.playerId !== player.playerId);
+              opponents.forEach((opponent) => {
+                // Steal Light
+                if (opponent.resources.light > 0) {
+                  opponent.resources.light -= 1;
+                  player.resources.light = Math.min((player.resources.maxCapacity?.light ?? 10), player.resources.light + 1);
+                }
+                // Steal Rainbow
+                if (opponent.resources.rainbow > 0) {
+                  opponent.resources.rainbow -= 1;
+                  player.resources.rainbow = Math.min((player.resources.maxCapacity?.rainbow ?? 10), player.resources.rainbow + 1);
+                }
+
+                // Return 1 Lobby to stock (from unused lobbies)
+                // "Return" here implies losing the ability to use it this round (decrement lobbyAvailable).
+                // It does not destroy the lobby permanently (lobbyReserve is untouched), just removes it from current availability.
+                // Actually, user said "任意のロビーをストックに戻させます".
+                // "Stock" usually means Reserve. So Available -> Reserve.
+                // And "Opponent chooses". But for simplicity in MVP/Auto-resolution, we can just take from Available.
+                // If Available is 0, we can't take.
+                // Wait, "Lobby to Stock" means they lose the ability to use it.
+                // If I move Available -> Reserve, they can use it next round (via Supply).
+                // If I move Available -> Used, they can't use it this round.
+                // "Stock" usually refers to `lobbyReserve`.
+                // So Available -> Reserve seems correct interpretation of "Return to Stock".
+                // This effectively reduces their actions for this round (if they haven't used it yet).
+                if ((opponent.lobbyAvailable ?? 0) > 0) {
+                  opponent.lobbyAvailable = (opponent.lobbyAvailable ?? 0) - 1;
+                  opponent.lobbyReserve = (opponent.lobbyReserve ?? 0) + 1;
+                }
+              });
+            }
+            // Handle other immediate rewards if any
+            if (Array.isArray(payload.rewards)) {
+              payload.rewards.forEach(r => applyReward(player, r as any));
+            }
+          }
+        });
+      }
+    }
+
+    // Trigger growth event
+    triggerEvent(gameState, ruleset, 'growth', {
+      actorId: player.playerId,
+    });
   }
 }
 
@@ -2636,7 +3219,7 @@ export const applyGrowth: EffectApplier = async (action, context) => {
   const payload = action.payload as Record<string, unknown>;
   const selection = Array.isArray(payload.selection) ? payload.selection.map(String) : undefined;
 
-  applyGrowthSelection(player, selection, 1);
+  applyGrowthSelection(gameState, context.ruleset, player, selection, 1);
 };
 
 export const validateReplenishLobby: Validator = async (action, context) => {
@@ -2755,7 +3338,7 @@ export const applySupplySelect: EffectApplier = async (action, context) => {
   } else if (payload.choice === 'growth') {
     // Unlock Node
     const selection = payload.nodeId ? [payload.nodeId] : undefined;
-    applyGrowthSelection(player, selection, 1);
+    applyGrowthSelection(gameState, context.ruleset, player, selection, 1);
   }
 
   // Mark selection as done
