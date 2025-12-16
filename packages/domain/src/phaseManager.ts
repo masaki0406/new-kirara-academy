@@ -5,7 +5,11 @@ import {
   ResourceReward,
   Ruleset,
   TurnOrder,
+  ResourceType,
+  CraftedLensSideItem,
 } from './types';
+import { triggerEvent } from './triggerEngine';
+
 
 const MAX_ACTION_POINTS = 10;
 const MAX_CREATIVITY = 5;
@@ -99,6 +103,11 @@ export class PhaseManagerImpl implements PhaseManager {
     // レンズ上のロビーは残したまま未使用状態に戻す
     gameState.board.lobbySlots.forEach((slot) => {
       slot.isActive = true;
+    });
+
+    // Trigger Round End Effects
+    triggerEvent(gameState, this.deps.ruleset, 'roundEnd', {
+      actorId: gameState.currentPlayerId ?? Object.keys(gameState.players)[0] ?? 'system',
     });
 
     // ラボに配置したロビーを各プレイヤーのボードに戻す
@@ -243,8 +252,10 @@ function applyResourceConversions(gameState: MutableGameState['state'], conversi
 
 interface CharacterEndgameSummary {
   bonusVp: number;
+  negativeVp: number; // Track negative VP separately for conversion
   multiplier: number;
   convertPenalty: boolean;
+  finalChain?: boolean;
 }
 
 function applyStagnationPenalty(
@@ -288,7 +299,7 @@ function collectCharacterEndgameEffects(
 
     const ensureSummary = () => {
       if (!summary) {
-        summary = { bonusVp: 0, multiplier: 1, convertPenalty: false };
+        summary = { bonusVp: 0, negativeVp: 0, multiplier: 1, convertPenalty: false };
         result.set(player.playerId, summary);
       }
       return summary;
@@ -302,16 +313,25 @@ function collectCharacterEndgameEffects(
         if (effect.type !== 'endGame') {
           return;
         }
+        console.error('[DEBUG] Found endGame effect:', effect.payload);
         const payloadKind = typeof effect.payload.kind === 'string' ? effect.payload.kind : undefined;
         switch (payloadKind) {
           case 'vpFlat': {
+            const amount = Number(effect.payload.amount ?? 0);
             const s = ensureSummary();
-            s.bonusVp += Number(effect.payload.amount ?? 0);
+            if (amount < 0) {
+              s.negativeVp += amount; // Accumulate negative VP
+            } else {
+              s.bonusVp += amount;
+            }
             break;
           }
           case 'conditionalVp': {
-            const condition = effect.payload.condition;
-            if (condition === 'noLightNoRainbow') {
+            console.error('[DEBUG] Conditional VP:', effect.payload.condition);
+            if (effect.payload.condition === 'finalChain') {
+              ensureSummary().finalChain = true;
+              console.error('[DEBUG] Set finalChain = true');
+            } else if (effect.payload.condition === 'noLightNoRainbow') {
               if (player.resources.light === 0 && player.resources.rainbow === 0) {
                 const s = ensureSummary();
                 s.bonusVp += Number(effect.payload.amount ?? 0);
@@ -327,11 +347,20 @@ function collectCharacterEndgameEffects(
             }
             break;
           }
+          case 'vpPerLobby': {
+            const amount = Number(effect.payload.amount ?? 0);
+            if (amount > 0) {
+              // Count lobby slots owned by player
+              const lobbyCount = gameState.board.lobbySlots.filter(slot => slot.ownerId === player.playerId).length;
+              const s = ensureSummary();
+              s.bonusVp += lobbyCount * amount;
+            }
+            break;
+          }
           case 'convertNegativeVp': {
             ensureSummary().convertPenalty = true;
             break;
           }
-          case 'vpPerLobby':
           default:
             // 今後の拡張用
             break;
@@ -352,9 +381,177 @@ function applyCharacterBonuses(
     if (!player) {
       return;
     }
+
+    if (summary.convertPenalty) {
+      // If converting, add absolute value of negative VP (effectively flipping sign from - to +)
+      // Since negativeVp is negative (e.g. -25), we subtract it to make it positive (+25).
+      // Wait, if we normally subtract it (add negative), we get -25.
+      // If we convert, we want +25.
+      // So we should ADD -negativeVp.
+      // But we haven't applied negativeVp yet.
+      // So we just add -negativeVp.
+      player.vp += Math.abs(summary.negativeVp);
+    } else {
+      // Apply negative VP normally
+      player.vp += summary.negativeVp;
+    }
+
     player.vp += summary.bonusVp;
     if (summary.multiplier !== 1) {
       player.vp = Math.ceil(player.vp * summary.multiplier);
     }
+    if (summary.finalChain) {
+      applyFinalChain(gameState, playerId);
+    }
   });
+}
+
+function applyFinalChain(gameState: MutableGameState['state'], playerId: PlayerId): void {
+  const player = gameState.players[playerId];
+  if (!player) return;
+
+  const slots = gameState.board.lobbySlots || [];
+  const playerSlots = slots.filter(slot => slot.ownerId === playerId);
+
+  playerSlots.forEach(slot => {
+    const lensId = slot.lensId;
+    const lens = gameState.board.lenses[lensId];
+    if (!lens) return;
+
+    // Check Costs (Waive AP, but require Resources/Creativity)
+    const cost = lens.cost;
+    if (cost) {
+      if ((player.resources.light ?? 0) < (cost.light ?? 0)) {
+        return;
+      }
+      if ((player.resources.rainbow ?? 0) < (cost.rainbow ?? 0)) {
+        return;
+      }
+      if ((player.resources.stagnation ?? 0) < (cost.stagnation ?? 0)) {
+        return;
+      }
+      if ((player.creativity ?? 0) < (cost.creativity ?? 0)) {
+        return;
+      }
+
+      // Deduct Costs
+      player.resources.light = (player.resources.light ?? 0) - (cost.light ?? 0);
+      player.resources.rainbow = (player.resources.rainbow ?? 0) - (cost.rainbow ?? 0);
+      player.resources.stagnation = (player.resources.stagnation ?? 0) - (cost.stagnation ?? 0);
+      player.creativity = (player.creativity ?? 0) - (cost.creativity ?? 0);
+    }
+
+    // Apply Lens Rewards
+    lens.rewards.forEach(reward => {
+      if (reward.type === 'vp') {
+        player.vp += (reward.value as number);
+      } else if (reward.type === 'resource') {
+        const val = reward.value as ResourceReward;
+        if (val.light) player.resources.light = Math.min((player.resources.maxCapacity?.light ?? 10), player.resources.light + val.light);
+        if (val.rainbow) player.resources.rainbow = Math.min((player.resources.maxCapacity?.rainbow ?? 10), player.resources.rainbow + val.rainbow);
+        if (val.stagnation) player.resources.stagnation = Math.min((player.resources.maxCapacity?.stagnation ?? 10), player.resources.stagnation + val.stagnation);
+        if (val.actionPoints) player.actionPoints += val.actionPoints;
+        if (val.creativity) player.creativity += val.creativity;
+      }
+    });
+
+    // Apply Item Rewards
+    const itemReward = accumulateItemEffects(
+      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
+      'reward',
+    );
+
+    if (itemReward.vpGain) player.vp += itemReward.vpGain;
+    if (itemReward.resources) {
+      const res = itemReward.resources;
+      if (res.light) player.resources.light = Math.min((player.resources.maxCapacity?.light ?? 10), player.resources.light + res.light);
+      if (res.rainbow) player.resources.rainbow = Math.min((player.resources.maxCapacity?.rainbow ?? 10), player.resources.rainbow + res.rainbow);
+      if (res.stagnation) player.resources.stagnation = Math.min((player.resources.maxCapacity?.stagnation ?? 10), player.resources.stagnation + res.stagnation);
+    }
+  });
+}
+
+// Helpers copied from actionHandlers.ts
+type ResourceKey = 'light' | 'rainbow' | 'stagnation';
+
+function toResourceKey(label: string | null | undefined): ResourceKey | null {
+  if (!label) return null;
+  const normalized = label.toLowerCase();
+  if (normalized.includes('光') || normalized.includes('light')) return 'light';
+  if (normalized.includes('虹') || normalized.includes('rainbow')) return 'rainbow';
+  if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) return 'stagnation';
+  return null;
+}
+
+function normalizeItemLabel(value: string | null | undefined): string {
+  return (value ?? '').toString().toLowerCase();
+}
+
+interface ItemEffectSummary {
+  resources: ResourceReward;
+  lobbyGain: number;
+  lobbyReturn: number;
+  growthGain: number;
+  growthLoss: number;
+  creativityCost: number;
+  vpGain: number;
+}
+
+function accumulateItemEffects(
+  items: CraftedLensSideItem[] | undefined,
+  direction: 'cost' | 'reward',
+): ItemEffectSummary {
+  const summary: ItemEffectSummary = {
+    resources: {},
+    lobbyGain: 0,
+    lobbyReturn: 0,
+    growthGain: 0,
+    growthLoss: 0,
+    creativityCost: 0,
+    vpGain: 0,
+  };
+  if (!Array.isArray(items)) {
+    return summary;
+  }
+
+  items.forEach((item) => {
+    const label = normalizeItemLabel(item.item ?? item.cardId);
+    const amount =
+      typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
+
+    const resourceKey = toResourceKey(label);
+    if (resourceKey) {
+      summary.resources[resourceKey] = (summary.resources[resourceKey] ?? 0) + amount;
+      return;
+    }
+
+    if (label.includes('img') || label.includes('creativity') || label.includes('想') || label.includes('創')) {
+      summary.resources.creativity = (summary.resources.creativity ?? 0) + amount;
+      return;
+    }
+
+    if (label.includes('grow')) {
+      if (direction === 'reward') {
+        summary.growthGain += amount;
+      } else {
+        summary.growthLoss += amount;
+      }
+      return;
+    }
+
+    if (label.includes('loby') || label.includes('lobby') || label.includes('ロビー')) {
+      if (direction === 'reward') {
+        summary.lobbyGain += amount;
+      } else {
+        summary.lobbyReturn += amount;
+      }
+      return;
+    }
+
+    if (label.includes('vp')) {
+      summary.vpGain += amount;
+    }
+  });
+
+  return summary;
 }

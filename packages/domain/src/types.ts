@@ -94,6 +94,8 @@ export type ActionType =
   | 'refresh'
   | 'collect'
   | 'will'
+  | 'returnLobby'
+  | 'createLobby'
   | 'persuasion'
   | 'task'
   | 'rooting'
@@ -111,6 +113,14 @@ export interface LensActivatePayload {
   lensId: string;
   growthSelections?: string[];
   returnLobbyLocations?: LobbyLocation[];
+}
+
+export interface TriggerEventParams {
+  actorId: string;
+  lensId?: string;
+  actionType?: ActionType;
+  targetPlayerId?: string;
+  [key: string]: unknown;
 }
 
 export interface PlayerAction {
@@ -318,17 +328,25 @@ export interface CharacterNode {
   prerequisites?: string[];
 }
 
-export type CharacterEffectType = 'passive' | 'active' | 'endGame' | 'trigger';
+export type CharacterEffectType = 'passive' | 'active' | 'endGame' | 'trigger' | 'immediate';
 
 export type TriggerEvent =
   | 'lensActivatedByOther'
   | 'developmentSlotFreed'
-  | 'actionPerformed';
+  | 'actionPerformed'
+  | 'roundEnd'
+  | 'growth'
+  | 'lensCompleted'
+  | 'lobbyCreated'
+  | 'lobbyReturned';
 
 export interface CharacterTriggerEffectPayload {
   event: TriggerEvent;
+  condition?: string;
   amount?: number;
+  resourceType?: ResourceType | 'actionPoints';
   actionType?: ActionType;
+  rewards?: RewardDefinition[];
 }
 
 export type EndGameEffectKind =
@@ -355,6 +373,23 @@ export interface ActiveEffectPayload {
   cost?: CharacterCost;
   rewards?: RewardDefinition[];
   setCapacityUnlimited?: ResourceType[];
+  customAction?: string;
+}
+
+export interface ImmediateEffectPayload {
+  customAction?: string;
+  rewards?: RewardDefinition[];
+}
+
+export interface PassiveEffectPayload {
+  costReduction?: {
+    actionType: ActionType;
+    amount: number; // e.g. -1 AP
+    resource?: ResourceType; // For specific resource cost reduction (if needed)
+  };
+  costZero?: {
+    actionType: ActionType; // e.g. "persuasion" or "reboot"
+  };
 }
 
 export interface GrowthReward {
@@ -364,7 +399,7 @@ export interface GrowthReward {
 
 export interface CharacterEffect {
   type: CharacterEffectType;
-  payload: Record<string, unknown>;
+  payload: Record<string, unknown>; // We keep this generic but cast it in handlers
 }
 
 export interface LensDefinition extends LensState { }

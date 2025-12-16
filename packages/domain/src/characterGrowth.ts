@@ -117,7 +117,7 @@ export const CHARACTER_GROWTH_DEFINITIONS: CharacterGrowthMap = {
     },
     'kazari-hizumi:8': {
       nodeId: 'kazari-hizumi:8',
-      prerequisitesAny: ['kazari-hizumi:6'],
+      prerequisitesAny: ['kazari-hizumi:7'],
     },
     'kazari-hizumi:9': {
       nodeId: 'kazari-hizumi:9',
@@ -144,15 +144,15 @@ export const CHARACTER_GROWTH_DEFINITIONS: CharacterGrowthMap = {
     },
     'midori-rina:5': {
       nodeId: 'midori-rina:5',
-      prerequisitesAny: ['midori-rina:1'],
+      prerequisitesAny: ['midori-rina:1', 'midori-rina:3'],
     },
     'midori-rina:6': {
       nodeId: 'midori-rina:6',
-      prerequisitesAny: ['midori-rina:3', 'midori-rina:4', 'midori-rina:5'],
+      prerequisitesAny: ['midori-rina:1', 'midori-rina:3'],
     },
     'midori-rina:7': {
       nodeId: 'midori-rina:7',
-      prerequisitesAny: ['midori-rina:6', 'midori-rina:8'],
+      prerequisitesAny: ['midori-rina:4'],
     },
     'midori-rina:8': {
       nodeId: 'midori-rina:8',
@@ -160,7 +160,7 @@ export const CHARACTER_GROWTH_DEFINITIONS: CharacterGrowthMap = {
     },
     'midori-rina:9': {
       nodeId: 'midori-rina:9',
-      prerequisitesAny: ['midori-rina:7'],
+      prerequisitesAny: ['midori-rina:7', 'midori-rina:8'],
     },
   },
   'aono-haruyo': {
@@ -247,7 +247,7 @@ export const CHARACTER_GROWTH_DEFINITIONS: CharacterGrowthMap = {
   },
 };
 
-export function getGrowthNode(characterId: string, nodeId: string): GrowthNodeDefinition |undefined {
+export function getGrowthNode(characterId: string, nodeId: string): GrowthNodeDefinition | undefined {
   return CHARACTER_GROWTH_DEFINITIONS[characterId]?.[nodeId];
 }
 
@@ -260,6 +260,29 @@ export function canUnlockGrowthNode(
   nodeId: string,
   unlockedNodes: Set<string>,
 ): boolean {
+  // Check for Growth Lock (Akito Daidou Node 2)
+  // If Node 2 is unlocked, no further growth is allowed.
+  // This logic assumes 'akito-daidou:2' is the specific node ID for Growth Lock.
+  // Ideally, we should check for a 'growthLock' effect in the unlocked nodes,
+  // but we don't have access to the full ruleset here, only IDs.
+  // So we hardcode the ID check or assume the caller handles it?
+  // The caller (applyGrowth) has access to ruleset.
+  // But canUnlockGrowthNode is also used for UI to show unlockable nodes.
+  // So we should handle it here if possible.
+  // Since we don't have ruleset, we can check for specific IDs known to have this effect.
+  if (unlockedNodes.has('akito-daidou:2')) {
+    return false;
+  }
+  if (unlockedNodes.has('kazari-hizumi:2')) {
+    return false;
+  }
+  if (unlockedNodes.has('aono-haruyo:2')) {
+    return false;
+  }
+  if (unlockedNodes.has('akane-hiyori:2')) {
+    return false;
+  }
+
   const definition = getGrowthNode(characterId, nodeId);
   if (!definition) {
     return false;
