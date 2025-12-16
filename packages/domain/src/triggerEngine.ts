@@ -48,9 +48,9 @@ export function triggerEvent(
         if (params.actorId !== playerId) return;
         const player = gameState.players[playerId];
         if (player && payload.amount) {
-          if (payload.rewardType === 'actionPoints') {
+          if (payload.resourceType === 'actionPoints') {
             player.actionPoints += payload.amount;
-          } else if (payload.rewardType === 'rainbow') {
+          } else if (payload.resourceType === 'rainbow') {
             player.resources.rainbow = Math.min((player.resources.maxCapacity?.rainbow ?? 10), player.resources.rainbow + payload.amount);
           } else {
             player.vp += payload.amount;
@@ -425,6 +425,8 @@ export function triggerEvent(
         if (params.actorId !== playerId) {
           return;
         }
+        const player = gameState.players[playerId];
+        if (!player) return;
         const amount = Number(payload.amount ?? 0);
         if (amount) {
           player.vp += amount;
