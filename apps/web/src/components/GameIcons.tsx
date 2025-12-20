@@ -200,15 +200,15 @@ interface ItemWithIconProps {
 export function ItemWithIcon({ label, quantity, size = "small", className }: ItemWithIconProps): JSX.Element {
     const kind = resolveIconKind(label);
     const displayLabel = kind ? ICON_LABELS[kind] : label;
-    const hasQuantity = quantity !== undefined && quantity !== null && quantity !== 0;
+    // 数量は常に表示（nullやundefinedの場合は1として表示）
+    const displayQuantity = quantity ?? 1;
 
     return (
         <span className={`${styles.itemWithIcon} ${className ?? ""}`}>
             {kind && <GameIcon kind={kind} size={size} />}
-            <span className={styles.itemLabel}>{displayLabel}</span>
-            {hasQuantity && (
-                <span className={styles.itemQuantity}>×{quantity}</span>
-            )}
+            {/* アイコンがない場合のみラベルを表示 */}
+            {!kind && <span className={styles.itemLabel}>{displayLabel}</span>}
+            <span className={styles.itemQuantity}>{displayQuantity}</span>
         </span>
     );
 }

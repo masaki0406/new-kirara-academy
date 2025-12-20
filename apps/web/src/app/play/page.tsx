@@ -4035,26 +4035,6 @@ export default function PlayPage(): JSX.Element {
                                     </span>
                                   </div>
                                   <p className={styles.growthDescription}>{node.description}</p>
-                                  {!node.isUnlocked ? (
-                                    <div className={styles.growthActions}>
-                                      <p className={styles.growthPrereq}>
-                                        {formatPrerequisites(node.definition) ?? "条件なし"}
-                                      </p>
-                                      <button
-                                        type="button"
-                                        className={styles.unlockButton}
-                                        disabled={
-                                          !isLocalTurn ||
-                                          (localGamePlayer?.lobbyReserve ?? 0) < 1 ||
-                                          pendingActionId !== null ||
-                                          !node.isUnlockable
-                                        }
-                                        onClick={() => void handleUnlockNode(node.id)}
-                                      >
-                                        解放
-                                      </button>
-                                    </div>
-                                  ) : null}
                                 </li>
                               ))}
                             </ul>
