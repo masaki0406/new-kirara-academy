@@ -4035,6 +4035,11 @@ export default function PlayPage(): JSX.Element {
                                     </span>
                                   </div>
                                   <p className={styles.growthDescription}>{node.description}</p>
+                                  {!node.isUnlocked && node.definition && (
+                                    <p className={styles.growthPrereq}>
+                                      {formatPrerequisites(node.definition) ?? "条件なし"}
+                                    </p>
+                                  )}
                                 </li>
                               ))}
                             </ul>

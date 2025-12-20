@@ -1,17 +1,9 @@
 import type { JSX } from "react";
 import type { CatalogDevelopmentCard } from "@domain/types";
 import styles from "./DevelopmentCardPreview.module.css";
+import { ICON_PATHS, type GameIconKind } from "./GameIcons";
 
-type CardSymbolKind =
-  | "light"
-  | "rainbow"
-  | "stagnation"
-  | "vp"
-  | "action"
-  | "creativity"
-  | "lobby"
-  | "growth"
-  | "neutral";
+type CardSymbolKind = GameIconKind;
 
 interface SymbolDefinition {
   kind: CardSymbolKind;
@@ -44,195 +36,29 @@ const COST_RIGHT_UP_EXTRA_KEYS = [
 ];
 const COST_RIGHT_DOWN_EXTRA_KEYS = ["cost_right_down", "costRightDown", "costBottomRight", "cost_rightdown"];
 
+// GameIconsのアイコンを使用してシンボル定義を構築
+function buildSymbolIcon(kind: CardSymbolKind): JSX.Element {
+  return (
+    <svg
+      className={styles.symbolSvg}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {ICON_PATHS[kind]}
+    </svg>
+  );
+}
+
 const SYMBOL_DEFINITIONS: SymbolDefinition[] = [
-  {
-    kind: "light",
-    label: "光",
-    keywords: ["light", "光", "hikari"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <circle cx="12" cy="12" r="5.5" fill="currentColor" opacity="0.88" />
-        <path
-          d="M12 2.5v2.5M12 19v2.5M4.5 12H2M22 12h-2.5M6 6l-1.8-1.8M19.8 19.8 18 18M6 18l-1.8 1.8M19.8 4.2 18 6"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          fill="none"
-          opacity="0.7"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "rainbow",
-    label: "虹",
-    keywords: ["rainbow", "虹", "niji", "虹彩"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M4 17a8 8 0 0 1 16 0"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          fill="none"
-        />
-        <path
-          d="M7 17a5 5 0 0 1 10 0"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          fill="none"
-          opacity="0.75"
-        />
-        <path
-          d="M10 17a2 2 0 0 1 4 0"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          fill="none"
-          opacity="0.5"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "stagnation",
-    label: "淀み",
-    keywords: ["stagnation", "淀み", "yodomi"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M12 2c-2.1 3.2-6.25 6.9-6.25 11.16A6.25 6.25 0 0 0 12 19.5a6.25 6.25 0 0 0 6.25-6.34C18.25 8.9 14.1 5.2 12 2Z"
-          fill="currentColor"
-        />
-        <path
-          d="M8.75 15.5c.75.58 1.92 1.17 3.25 1.17s2.5-.6 3.25-1.17"
-          stroke="#ffffff"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-          opacity="0.85"
-          fill="none"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "vp",
-    label: "VP",
-    keywords: ["vp", "victory", "point", "points", "vp点"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="m12 3.2 2.3 5.16 5.6.5-4.25 3.74 1.3 5.43L12 15.7l-4.95 2.33 1.3-5.43L4.1 8.86l5.6-.5Z"
-          fill="currentColor"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "action",
-    label: "行動",
-    keywords: ["action", "ap", "行動", "行動力"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M13.5 2 4 13.2h6.1L9.8 22 20 10.4h-6.2L13.5 2Z"
-          fill="currentColor"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "creativity",
-    label: "創造",
-    keywords: ["creativity", "cp", "創造", "創造力"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M12 3a6.5 6.5 0 0 0-3 12.3V19a1.5 1.5 0 0 0 1.5 1.5h3A1.5 1.5 0 0 0 15 19v-3.7A6.5 6.5 0 0 0 12 3Z"
-          fill="currentColor"
-        />
-        <path
-          d="M10 20.5h4"
-          stroke="#ffffff"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "lobby",
-    label: "ロビー",
-    keywords: ["lobby", "ロビー"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M4.5 10.5 12 4l7.5 6.5V20a.5.5 0 0 1-.5.5H5a.5.5 0 0 1-.5-.5v-9.5Z"
-          fill="currentColor"
-        />
-        <path
-          d="M10 20v-4.5h4V20"
-          stroke="#ffffff"
-          strokeWidth="1.4"
-          strokeLinecap="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    kind: "growth",
-    label: "成長",
-    keywords: ["growth", "成長"],
-    icon: (
-      <svg
-        className={styles.symbolSvg}
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M12 21c0-4-1.5-7-5-9.5 3.5-.5 5-2.5 5-5.5 0 3 1.5 5 5 5.5C13.5 13.5 12 17 12 21Z"
-          fill="currentColor"
-        />
-      </svg>
-    ),
-  },
+  { kind: "light", label: "光", keywords: ["light", "光", "hikari"], icon: buildSymbolIcon("light") },
+  { kind: "rainbow", label: "虹", keywords: ["rainbow", "虹", "niji", "虹彩"], icon: buildSymbolIcon("rainbow") },
+  { kind: "stagnation", label: "淀み", keywords: ["stagnation", "淀み", "yodomi"], icon: buildSymbolIcon("stagnation") },
+  { kind: "vp", label: "VP", keywords: ["vp", "victory", "point", "points", "vp点"], icon: buildSymbolIcon("vp") },
+  { kind: "action", label: "行動", keywords: ["action", "ap", "行動", "行動力"], icon: buildSymbolIcon("action") },
+  { kind: "creativity", label: "創造", keywords: ["creativity", "cp", "創造", "創造力"], icon: buildSymbolIcon("creativity") },
+  { kind: "lobby", label: "ロビー", keywords: ["lobby", "ロビー", "loby"], icon: buildSymbolIcon("lobby") },
+  { kind: "growth", label: "成長", keywords: ["growth", "成長"], icon: buildSymbolIcon("growth") },
 ];
 
 const NORMALIZED_SYMBOLS = SYMBOL_DEFINITIONS.map((definition) => ({
@@ -555,7 +381,7 @@ function renderTokenRowContent(tokens: TokenDefinition[]): JSX.Element | null {
         const iconClass = classNames(
           styles.centerTokenIcon,
           styles[
-            `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
+          `symbol${token.kind.charAt(0).toUpperCase()}${token.kind.slice(1)}`
           ] ?? undefined,
         );
         return (

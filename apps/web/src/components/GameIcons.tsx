@@ -18,7 +18,7 @@ interface GameIconProps {
     className?: string;
 }
 
-const ICON_PATHS: Record<GameIconKind, JSX.Element> = {
+export const ICON_PATHS: Record<GameIconKind, JSX.Element> = {
     light: (
         <>
             <circle cx="12" cy="12" r="5.5" fill="currentColor" opacity="0.88" />
