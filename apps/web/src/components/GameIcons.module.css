@@ -1,0 +1,93 @@
+.iconWrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.iconSvg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Sizes */
+.sizeSmall {
+    width: 16px;
+    height: 16px;
+}
+
+.sizeMedium {
+    width: 20px;
+    height: 20px;
+}
+
+.sizeLarge {
+    width: 28px;
+    height: 28px;
+}
+
+/* Colors */
+.colorLight {
+    color: #f59e0b;
+}
+
+.colorRainbow {
+    color: #8b5cf6;
+}
+
+.colorStagnation {
+    color: #4338ca;
+}
+
+.colorVp {
+    color: #facc15;
+}
+
+.colorAction {
+    color: #ef4444;
+}
+
+.colorCreativity {
+    color: #2563eb;
+}
+
+.colorLobby {
+    color: #16a34a;
+}
+
+.colorGrowth {
+    color: #22c55e;
+}
+
+.colorNeutral {
+    color: #64748b;
+}
+
+/* Item with icon */
+.itemWithIcon {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.itemLabel {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.itemQuantity {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+}
+
+@media (prefers-color-scheme: dark) {
+    .itemLabel {
+        color: #e2e8f0;
+    }
+
+    .itemQuantity {
+        color: #94a3b8;
+    }
+}

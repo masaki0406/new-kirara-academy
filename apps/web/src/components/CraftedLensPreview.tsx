@@ -7,6 +7,7 @@ import type {
 } from "@domain/types";
 import styles from "./CraftedLensPreview.module.css";
 import cardStyles from "./DevelopmentCardPreview.module.css";
+import { ItemWithIcon, resolveIconKind } from "./GameIcons";
 
 interface Props {
   lens: CraftedLens;
@@ -341,7 +342,7 @@ function renderItemBox(
       ? cardStyles.centerItemBoxTop
       : slot === "bottom"
         ? cardStyles.centerItemBoxBottom
-      : cardStyles.centerItemBoxMiddle,
+        : cardStyles.centerItemBoxMiddle,
     side === "left" ? cardStyles.centerItemBoxLeft : cardStyles.centerItemBoxRight,
   );
   return (
@@ -349,9 +350,20 @@ function renderItemBox(
       {items.length > 0 ? (
         <ul className={styles.itemList}>
           {items.map((item, index) => {
+            const label = item.item ?? item.cardId;
+            const hasIcon = resolveIconKind(label) !== null;
             return (
               <li key={`${side}-${slot}-${index}`} className={styles.itemEntry}>
-                {formatItem(item)}
+                {hasIcon ? (
+                  <ItemWithIcon
+                    label={label}
+                    quantity={item.quantity}
+                    size="small"
+                    className={styles.itemIcon}
+                  />
+                ) : (
+                  formatItem(item)
+                )}
               </li>
             );
           })}

@@ -539,10 +539,10 @@
 
 .labPlacementSection {
   border-top: 1px dashed rgba(148, 163, 184, 0.4);
-  padding-top: 8px;
+  padding-top: 10px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .labPlacementList {
@@ -550,49 +550,136 @@
   padding: 0;
   list-style: none;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .labPlacementItem {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   font-size: 12px;
-  background: rgba(148, 163, 184, 0.15);
-  border-radius: 6px;
-  padding: 4px 8px;
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(248, 250, 252, 0.9) 100%);
+  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.labPlacementItem:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .labPlacementIdentity {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
+/* Board game pawn/meeple style */
 .labPlacementDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  display: inline-block;
+  position: relative;
+  width: 24px;
+  height: 28px;
   flex-shrink: 0;
-  border: 1px solid rgba(15, 23, 42, 0.15);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.2),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.labPlacementDot::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  width: 8px;
+  height: 6px;
+  background: linear-gradient(135deg,
+      rgba(255, 255, 255, 0.6) 0%,
+      transparent 60%);
+  border-radius: 50%;
+}
+
+.labPlacementDot::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 50%;
+  filter: blur(1px);
 }
 
 .labPlacementName {
   font-weight: 600;
   color: #0f172a;
+  font-size: 13px;
 }
 
 .labPlacementCount {
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 14px;
   color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.12);
+  padding: 2px 8px;
+  border-radius: 8px;
 }
 
 .labPlacementEmpty {
   margin: 0;
   font-size: 12px;
   color: #94a3b8;
+  font-style: italic;
+}
+
+@media (prefers-color-scheme: dark) {
+  .labPlacementItem {
+    background: linear-gradient(135deg,
+        rgba(51, 65, 85, 0.9) 0%,
+        rgba(30, 41, 59, 0.85) 100%);
+    border-color: rgba(100, 116, 139, 0.4);
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .labPlacementItem:hover {
+    box-shadow:
+      0 4px 12px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .labPlacementDot {
+    box-shadow:
+      0 3px 6px rgba(0, 0, 0, 0.4),
+      inset 0 2px 4px rgba(255, 255, 255, 0.25),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .labPlacementName {
+    color: #e2e8f0;
+  }
+
+  .labPlacementCount {
+    color: #93c5fd;
+    background: rgba(96, 165, 250, 0.2);
+  }
 }
 
 .labTasks {
