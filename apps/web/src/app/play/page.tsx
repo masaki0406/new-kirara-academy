@@ -1580,8 +1580,20 @@ export default function PlayPage(): JSX.Element {
         merged.push(entry);
       }
     });
+    // pendingPolishResult がある場合、自分の完成レンズとして追加（まだ同期されていない場合）
+    if (pendingPolishResult && localPlayer?.id) {
+      const pendingLensId = pendingPolishResult.lens.lensId;
+      const alreadyInMerged = merged.some((item) => item.lens.lensId === pendingLensId);
+      if (!alreadyInMerged) {
+        merged.push({
+          lens: pendingPolishResult.lens,
+          ownerId: localPlayer.id,
+          ownerName: localGamePlayer?.displayName ?? localPlayer.id,
+        });
+      }
+    }
     return merged;
-  }, [gameState?.players, gameState?.board?.lenses]);
+  }, [gameState?.players, gameState?.board?.lenses, pendingPolishResult, localPlayer?.id, localGamePlayer?.displayName]);
 
   const openPolishDialog = useCallback(() => {
     setPolishSelectionMap({});
