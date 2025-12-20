@@ -408,15 +408,12 @@ export function CraftedLensPreview({ lens, className, getCard, ownerName }: Prop
     ...(ownerName ? [{ label: "作成者", value: ownerName }] : []),
     { label: "土台", value: lens.foundationCost },
     { label: "VP", value: lens.vpTotal ?? 0 },
-    { label: "左計", value: lens.leftTotal },
-    { label: "右計", value: lens.rightTotal },
   ];
 
   return (
     <article className={classNames(cardStyles.card, styles.lensCard, className)}>
       <div className={cardStyles.inner}>
         <header className={classNames(cardStyles.header, styles.lensHeader)}>
-          <span className={cardStyles.name}>{lens.lensId}</span>
           <div className={styles.lensMeta}>
             {metaEntries.map(({ label, value }) => (
               <span key={label} className={styles.lensBadge}>
