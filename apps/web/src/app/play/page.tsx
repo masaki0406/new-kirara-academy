@@ -894,7 +894,7 @@ function buildDraftCraftedLens(
   const sourceCards = details.map((detail) => ({
     cardId: detail.cardId,
     cardType: detail.type,
-    flipped: detail.type === "vp" ? false : detail.flipped,
+    flipped: detail.flipped,
   }));
   details.forEach((detail) => {
     const sumLeftTop = sumSlots(detail.values.left.top);
