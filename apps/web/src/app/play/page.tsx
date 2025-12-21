@@ -29,6 +29,7 @@ import type {
   CraftedLensSideItem,
   PolishActionPayload,
   LobbyLocation,
+  LensState,
 } from "@domain/types";
 import { CraftedLensPreview } from "../../components/CraftedLensPreview";
 
@@ -1898,7 +1899,7 @@ export default function PlayPage(): JSX.Element {
     if (!gameState || !localPlayer?.id || !localGamePlayer) {
       return [];
     }
-    const lenses = gameState.board?.lenses ?? {};
+    const boardLenses = gameState.board?.lenses ?? {};
     const slots = gameState.board?.lobbySlots ?? [];
     const players = gameState.players ?? {};
     const availableLobbyTokens = lobbySummary.handUnused;
@@ -1916,13 +1917,44 @@ export default function PlayPage(): JSX.Element {
       return sum;
     }, 0);
 
+    // board.lensesとplayer.craftedLensesをマージしてすべてのレンズを取得
+    const allLensesMap = new Map<string, LensState>();
+
+    // まずboard.lensesを追加
+    Object.values(boardLenses).forEach(lens => {
+      allLensesMap.set(lens.lensId, lens);
+    });
+
+    // player.craftedLensesからも追加（board.lensesに存在しない場合）
+    Object.values(players).forEach(player => {
+      (player.craftedLenses ?? []).forEach(craftedLens => {
+        if (!allLensesMap.has(craftedLens.lensId)) {
+          // CraftedLens から LensState を構築
+          const lensState: LensState = {
+            lensId: craftedLens.lensId,
+            ownerId: player.playerId,
+            cost: { actionPoints: craftedLens.foundationCost ?? 0 },
+            rewards: [],
+            slots: 1,
+            tags: ['crafted'],
+            status: 'available',
+            leftItems: craftedLens.leftItems,
+            rightItems: craftedLens.rightItems,
+          };
+          allLensesMap.set(craftedLens.lensId, lensState);
+        }
+      });
+    });
+
+    const lenses = allLensesMap;
+
     // DEBUG: すべてのレンズをログ出力
-    console.log('[DEBUG] All lenses in board:', Object.keys(lenses));
-    Object.values(lenses).forEach(lens => {
+    console.log('[DEBUG] All lenses (merged):', Array.from(lenses.keys()));
+    lenses.forEach(lens => {
       console.log(`[DEBUG] Lens ${lens.lensId}: status=${lens.status}, ownerId=${lens.ownerId}`);
     });
 
-    return Object.values(lenses)
+    return Array.from(lenses.values())
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
         const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
