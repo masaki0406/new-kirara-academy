@@ -412,7 +412,7 @@ export function CraftedLensPreview({ lens, className, getCard, ownerName }: Prop
 
   return (
     <article className={classNames(cardStyles.card, styles.lensCard, className)}>
-      <div className={cardStyles.inner}>
+      <div className={classNames(cardStyles.inner, styles.lensInner)}>
         <header className={classNames(cardStyles.header, styles.lensHeader)}>
           <div className={styles.lensMeta}>
             {metaEntries.map(({ label, value }) => (
@@ -423,8 +423,8 @@ export function CraftedLensPreview({ lens, className, getCard, ownerName }: Prop
             ))}
           </div>
         </header>
-        <div className={cardStyles.main}>
-          <div className={cardStyles.costLayout}>
+        <div className={classNames(cardStyles.main, styles.lensMain)}>
+          <div className={classNames(cardStyles.costLayout, styles.lensCostLayout)}>
             {renderCostColumn("left", aggregatedCosts, aggregatedItems.left)}
             {renderCostColumn("right", aggregatedCosts, aggregatedItems.right)}
           </div>
