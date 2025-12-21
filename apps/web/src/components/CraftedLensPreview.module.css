@@ -5,8 +5,10 @@
 /* 1. Main Card Container - The "Lens Body" */
 .lensCard {
   position: relative;
-  width: 420px;
-  height: 420px;
+  /* サイズを少し大きくしてコンテンツが収まるように */
+  width: 380px;
+  min-height: 380px;
+  aspect-ratio: 1;
 
   /* Shape: Circle */
   border-radius: 50%;
@@ -20,13 +22,13 @@
   backdrop-filter: blur(10px);
 
   /* Metallic Rim */
-  border: 10px solid #5a6578;
+  border: 8px solid #5a6578;
   box-shadow:
     inset 0 0 30px rgba(0, 60, 90, 0.4),
     inset 5px 5px 10px rgba(255, 255, 255, 0.8),
     0 0 0 2px #2d3748,
-    0 0 0 5px #718096,
-    0 25px 50px rgba(0, 0, 0, 0.7);
+    0 0 0 4px #718096,
+    0 20px 40px rgba(0, 0, 0, 0.5);
 
   overflow: hidden;
   box-sizing: border-box;
@@ -35,6 +37,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  gap: 0;
 }
 
 /* The Glare/Reflection Overlay */
@@ -54,25 +58,14 @@
   transform: rotate(25deg);
   pointer-events: none;
   mix-blend-mode: overlay;
+  z-index: 2;
 }
 
-/* 内部ラッパーを上書き */
-.lensInner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  transform: scale(0.85);
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-/* 2. Header Area */
+/* 2. Header Area - within lens */
 .lensHeader {
-  width: 80%;
-  margin-bottom: 25px;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 0;
   display: flex;
   justify-content: center;
   position: relative;
@@ -82,66 +75,50 @@
 .lensMeta {
   display: flex;
   width: 100%;
-  justify-content: space-around;
+  justify-content: center;
   align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .lensBadge {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: rgba(255, 255, 255, 0.4);
-  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 3px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  min-width: 50px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  min-width: 45px;
 }
 
 .lensBadgeLabel {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   color: #2d3748;
   font-weight: 700;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .lensBadgeValue {
   font-weight: bold;
   color: #1a202c;
-  font-family: "Roboto Mono", monospace;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
-/* 3. Main Layout Wrapper */
-.lensMain {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-}
-
-/* costLayoutを横並びに */
-.lensCostLayout {
-  display: flex;
-  flex-direction: row;
-  justify-content: center;
-  gap: 20px;
-  width: 100%;
-  max-width: 320px;
-}
-
-/* 4. アイテムリスト */
+/* 3. アイテムリスト */
 .itemList {
   list-style: none;
   padding: 0;
   margin: 0;
   width: 100%;
-  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .itemEntry {
-  width: 100%;
   display: flex;
   justify-content: center;
 }
@@ -149,11 +126,12 @@
 .itemIcon {
   display: flex;
   align-items: center;
-  gap: 5px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 4px 10px;
-  border-radius: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 3px 8px;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  font-size: 0.8rem;
 }
 
 /* ============================================
@@ -171,12 +149,12 @@
       inset 0 0 30px rgba(0, 30, 50, 0.6),
       inset 5px 5px 10px rgba(100, 120, 140, 0.3),
       0 0 0 2px #1a202c,
-      0 0 0 5px #4a5568,
-      0 25px 50px rgba(0, 0, 0, 0.8);
+      0 0 0 4px #4a5568,
+      0 20px 40px rgba(0, 0, 0, 0.7);
   }
 
   .lensBadge {
-    background: rgba(45, 55, 72, 0.6);
+    background: rgba(45, 55, 72, 0.7);
     border-color: rgba(100, 120, 140, 0.5);
   }
 
@@ -190,5 +168,6 @@
 
   .itemIcon {
     background: rgba(45, 55, 72, 0.9);
+    color: #e2e8f0;
   }
 }
