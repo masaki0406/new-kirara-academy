@@ -1915,6 +1915,13 @@ export default function PlayPage(): JSX.Element {
       }
       return sum;
     }, 0);
+
+    // DEBUG: すべてのレンズをログ出力
+    console.log('[DEBUG] All lenses in board:', Object.keys(lenses));
+    Object.values(lenses).forEach(lens => {
+      console.log(`[DEBUG] Lens ${lens.lensId}: status=${lens.status}, ownerId=${lens.ownerId}`);
+    });
+
     return Object.values(lenses)
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
