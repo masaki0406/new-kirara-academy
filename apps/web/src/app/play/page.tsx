@@ -805,14 +805,16 @@ function extractCardVp(card: CatalogDevelopmentCard | null): number {
   if (!card || !card.extras) {
     return 0;
   }
-  return Object.entries(card.extras).reduce<number>((total, [key, value]) => {
-    const normalizedKey = key.toLowerCase();
-    if (!normalizedKey.includes("vp")) {
-      return total;
-    }
+  // getvp または get_vp のみを参照（vppos などの位置情報は除外）
+  const vpKeys = ["getvp", "get_vp"];
+  for (const key of vpKeys) {
+    const value = card.extras[key];
     const parsed = toOptionalNumeric(value);
-    return parsed !== null ? total + parsed : total;
-  }, 0);
+    if (parsed !== null) {
+      return parsed;
+    }
+  }
+  return 0;
 }
 
 function extractCardVpReward(card: CatalogDevelopmentCard | null): {
