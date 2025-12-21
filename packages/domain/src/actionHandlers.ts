@@ -807,7 +807,23 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
       if (!normalized) {
         throw new Error('研磨の設定が不正です');
       }
+
+      // DEBUG LOG for Polish
+      console.log('[DEBUG] Polish action executing:', {
+        playerId: action.playerId,
+        selection: normalized.selection,
+        foundationCost: normalized.foundationCost,
+        lensId: normalized.result.lensId,
+      });
+
       applyPolishResult(action, context, player, normalized);
+
+      // DEBUG LOG for Polish Result
+      console.log('[DEBUG] Polish result applied:', {
+        playerCraftedLenses: player.craftedLenses?.length,
+        boardLensesCount: Object.keys(gameState.board.lenses).length,
+        boardLobbySlotsCount: gameState.board.lobbySlots.length,
+      });
     }
 
     if (labId === 'negotiation') {
