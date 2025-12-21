@@ -4007,9 +4007,6 @@ export default function PlayPage(): JSX.Element {
                     </div>
                     {localCharacterProfile ? (
                       <>
-                        <p className={styles.characterOverview}>
-                          {localCharacterProfile.overview}
-                        </p>
                         {growthNodesWithStatus.length > 0 ? (
                           <div className={styles.growthSection}>
                             <h5 className={styles.growthTitle}>成長能力一覧</h5>

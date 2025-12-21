@@ -249,8 +249,12 @@ function aggregateItems(
       if ((normalized.position === null || normalized.position === undefined) && vpReward.position !== null) {
         normalized.position = vpReward.position;
       }
-      if (!normalized.item && vpReward.amount !== null) {
-        normalized.item = `VP × ${formatNumber(vpReward.amount)}`;
+      if (vpReward.amount !== null) {
+        // VPカードの実際のVP値をquantityに設定
+        normalized.quantity = vpReward.amount;
+        if (!normalized.item) {
+          normalized.item = "VP";
+        }
       }
     }
     return normalized;
