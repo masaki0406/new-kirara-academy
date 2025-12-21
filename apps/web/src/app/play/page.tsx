@@ -669,14 +669,6 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     requirement: requireNotPassed(),
     highlight: "warning",
   },
-  {
-    id: "replenishLobby",
-    label: "ロビー補充",
-    category: "general",
-    summary: "ストック 1 / ロビー +1",
-    description: "ストックからロビーを1つ補充します。",
-    requirement: requireLobbyStock(),
-  },
 ];
 
 function classNames(...values: Array<string | false | null | undefined>): string {
@@ -1931,7 +1923,9 @@ export default function PlayPage(): JSX.Element {
         if (hasAnyLobby) {
           return false;
         }
-        const hasEmptySlot = lensSlots.some((slot) => !slot.occupantId);
+        // lobbySlotがない場合でも、レンズは起動可能（スロットは起動時に作成される）
+        // ロビートークンがあれば起動できる
+        const hasEmptySlot = lensSlots.length === 0 || lensSlots.some((slot) => !slot.occupantId);
         const canUseOwnLobby = hasEmptySlot && availableLobbyTokens > 0;
         if (!canUseOwnLobby) {
           return false;
