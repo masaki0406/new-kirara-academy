@@ -938,7 +938,7 @@ function buildDraftCraftedLens(
     };
     const quantity =
       detail.type === "vp"
-        ? null
+        ? (vpReward.amount ?? detailVpValue ?? null)
         : detail.costNumber;
     if (quantity !== null && quantity !== undefined && !Number.isNaN(quantity)) {
       item.quantity = quantity;

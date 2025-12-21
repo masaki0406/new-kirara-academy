@@ -2890,7 +2890,20 @@ function accumulateItemEffects(
     }
 
     if (label.includes('vp')) {
-      summary.vpGain += amount;
+      let vpAmount = amount;
+      if (
+        !(typeof item.quantity === 'number' && Number.isFinite(item.quantity)) &&
+        typeof item.item === 'string'
+      ) {
+        const match = item.item.match(/-?\d+(?:\.\d+)?/);
+        if (match) {
+          const parsed = Number(match[0]);
+          if (Number.isFinite(parsed)) {
+            vpAmount = parsed;
+          }
+        }
+      }
+      summary.vpGain += vpAmount;
     }
   });
 
