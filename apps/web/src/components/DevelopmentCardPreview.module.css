@@ -224,11 +224,12 @@
 
 
 .costLayout {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
   gap: 20px;
-  align-items: stretch;
   width: 100%;
+  max-width: 320px;
 }
 
 
@@ -252,6 +253,11 @@
   flex-direction: column;
   gap: 6px;
   min-height: 36px;
+  background: rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 5px;
+  box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .costSlotTop {
@@ -434,19 +440,18 @@
 }
 
 .costPositionBox {
-  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 36px;
-  padding: 6px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(241, 245, 249, 0.85);
-  color: rgba(15, 23, 42, 0.85);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  background: #2d3748;
+  color: #63b3ed;
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .costPositionBoxEmpty {
