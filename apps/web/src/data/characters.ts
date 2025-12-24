@@ -109,6 +109,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "akito-daidou",
     name: "橙堂 アキラ",
     title: "共鳴する調停者",
+    image: "/characters/akito-daidou.png",
+    imageAlt: "橙堂 アキラのキャラクターイメージ",
     theme: "交渉と説得でリソースをやり取りしながらバランスを取る外交型",
     overview:
       "説得（交渉）アクションを強化し、他プレイヤーとの協力で追加VPや資源を得る。常にテーブル全体の状況を見極める必要がある。",
@@ -191,6 +193,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "kazari-hizumi",
     name: "黄昏 灯純",
     title: "光彩の錬成者",
+    image: "/characters/kazari-hizumi.png",
+    imageAlt: "黄昏 灯純のキャラクターイメージ",
     theme: "光・虹・淀みのバランス管理で高得点を狙う資源管理型",
     overview:
       "各資源の上限拡張や換算ボーナスを持ち、リソースマネジメントに長ける。終盤に向けてきれいに資源を整えるほど伸びる。",
@@ -275,6 +279,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "midori-rina",
     name: "翠川 燐名",
     title: "残響する設計士",
+    image: "/characters/midori-rina.png",
+    imageAlt: "翠川 燐名のキャラクターイメージ",
     theme: "高コストのレンズと淀みトークンを活用するテクニカル型",
     overview:
       "重いレンズを自分のものにし、淀みの扱いを軽減する能力で一気に得点を稼ぐ。リスクを取るほど爆発力が出るピーキーな構成。",
@@ -357,6 +363,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "aono-haruyo",
     name: "青野 春陽",
     title: "光律の研究者",
+    image: "/characters/aono-haruyo.png",
+    imageAlt: "青野 春陽のキャラクターイメージ",
     theme: "自己完結的に行動力を増やしレンズを連続起動するアタッカー型",
     overview:
       "自分のレンズ起動時に追加行動力などを得る。テンポよく行動して他プレイヤーの準備を待たずに勝負を決めたい人向け。",
@@ -445,6 +453,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "akane-hiyori",
     name: "赤嶺 ひより",
     title: "虹彩の演算者",
+    image: "/characters/akane-hiyori.png",
+    imageAlt: "赤嶺 ひよりのキャラクターイメージ",
     theme: "レンズ完成時や虹資源を利用したフィニッシュ型コンボを得意とする",
     overview:
       "レンズを完成させるたびに大きなVPボーナスを得る。虹資源を先行確保しつつ、タイミングよくフィニッシュを決めるのがポイント。",
