@@ -261,6 +261,49 @@
   gap: 20px;
 }
 
+.characterPortrait {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(226, 232, 240, 0.92));
+}
+
+.characterPortraitAccent {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 18% 20%, var(--character-color, #cbd5f5), transparent 60%);
+  opacity: 0.4;
+}
+
+.characterPortraitImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.characterPortraitPlaceholder {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 12px 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.characterPortraitTitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+
 .characterCard {
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.08);
@@ -273,6 +316,19 @@
 }
 
 @media (prefers-color-scheme: dark) {
+  .characterPortrait {
+    border-color: rgba(148, 163, 184, 0.4);
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.85), rgba(15, 23, 42, 0.92));
+  }
+
+  .characterPortraitPlaceholder {
+    color: #f8fafc;
+  }
+
+  .characterPortraitTitle {
+    color: #cbd5f5;
+  }
+
   .characterCard {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.12);

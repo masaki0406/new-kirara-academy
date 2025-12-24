@@ -1,6 +1,6 @@
 "use client";
 
-import type { JSX, SetStateAction } from "react";
+import type { CSSProperties, JSX, SetStateAction } from "react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1408,6 +1408,15 @@ export default function PlayPage(): JSX.Element {
       (profile) => profile.id === localGamePlayer.characterId,
     );
   }, [localGamePlayer?.characterId]);
+  const localCharacterColor = localGamePlayer?.characterId
+    ? getCharacterColor(localGamePlayer.characterId)
+    : undefined;
+  const localCharacterLabel = localCharacterProfile
+    ? `${localCharacterProfile.name}（${localCharacterProfile.title}）`
+    : localGamePlayer?.characterId ?? "未選択";
+  const localCharacterPortraitStyle = localCharacterColor
+    ? ({ "--character-color": localCharacterColor } as CSSProperties)
+    : undefined;
 
   const currentPlayer = gameState?.currentPlayerId
     ? gameState.players[gameState.currentPlayerId]
@@ -3857,12 +3866,42 @@ export default function PlayPage(): JSX.Element {
                         {localPlayer?.role === "host" ? "ホスト" : "参加者"}
                       </span>
                     </div>
+                    <div
+                      className={styles.characterPortrait}
+                      style={localCharacterPortraitStyle}
+                    >
+                      <span
+                        className={styles.characterPortraitAccent}
+                        aria-hidden="true"
+                      />
+                      {localCharacterProfile?.image ? (
+                        <img
+                          src={localCharacterProfile.image}
+                          alt={
+                            localCharacterProfile.imageAlt ??
+                            `${localCharacterProfile.name} のイメージ`
+                          }
+                          className={styles.characterPortraitImage}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className={styles.characterPortraitPlaceholder}>
+                          <span className={styles.characterPortraitName}>
+                            {localCharacterProfile?.name ?? "キャラクター未選択"}
+                          </span>
+                          {localCharacterProfile?.title ? (
+                            <span className={styles.characterPortraitTitle}>
+                              {localCharacterProfile.title}
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>キャラクター</span>
                       <span className={styles.characterValue}>
-                        {localCharacterProfile
-                          ? `${localCharacterProfile.name}（${localCharacterProfile.title}）`
-                          : localGamePlayer.characterId ?? "未選択"}
+                        {localCharacterLabel}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>

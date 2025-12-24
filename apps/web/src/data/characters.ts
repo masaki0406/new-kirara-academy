@@ -14,6 +14,8 @@ export interface CharacterSummary {
   overview: string;
   difficulty?: "easy" | "normal" | "hard";
   growthNodes?: CharacterGrowthNode[];
+  image?: string;
+  imageAlt?: string;
 }
 
 export const CHARACTER_CATALOG: CharacterSummary[] = [
@@ -21,6 +23,8 @@ export const CHARACTER_CATALOG: CharacterSummary[] = [
     id: "shirogami-yuu",
     name: "白神 幽",
     title: "幻燈の観察者",
+    image: "/characters/shirogami-yuu.png",
+    imageAlt: "白神 幽のキャラクターイメージ",
     theme: "他者の行動を利用して得点を伸ばす妨害型キャラクター",
     overview:
       "他プレイヤーが自分のレンズを起動するとボーナスを得るなど、受動的なトリガーでVPを稼ぐタイプ。序盤のマイナスVPを取り返す判断が鍵。",

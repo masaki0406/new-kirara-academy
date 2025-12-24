@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { JSX } from "react";
+import type { CSSProperties, JSX } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
@@ -9,7 +9,7 @@ import {
   DEFAULT_FUNCTIONS_BASE_URL,
   useSession,
 } from "../../context/SessionContext";
-import { CHARACTER_CATALOG } from "../../data/characters";
+import { CHARACTER_CATALOG, getCharacterColor } from "../../data/characters";
 
 export default function CharacterSelectPage(): JSX.Element {
   const router = useRouter();
@@ -267,9 +267,38 @@ export default function CharacterSelectPage(): JSX.Element {
               : selectedByOther
                 ? `${selection.displayName} が使用中`
                 : "選択可能";
+            const characterColor = getCharacterColor(character.id);
+            const characterPortraitStyle = characterColor
+              ? ({ "--character-color": characterColor } as CSSProperties)
+              : undefined;
 
             return (
               <article key={character.id} className={styles.characterCard}>
+                <div
+                  className={styles.characterPortrait}
+                  style={characterPortraitStyle}
+                >
+                  <span
+                    className={styles.characterPortraitAccent}
+                    aria-hidden="true"
+                  />
+                  {character.image ? (
+                    <img
+                      src={character.image}
+                      alt={character.imageAlt ?? `${character.name} のイメージ`}
+                      className={styles.characterPortraitImage}
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    <div className={styles.characterPortraitPlaceholder}>
+                      <span>{character.name}</span>
+                      <span className={styles.characterPortraitTitle}>
+                        {character.title}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <div className={styles.characterHeader}>
                   <h3 className={styles.characterName}>{character.name}</h3>
                   <span className={styles.characterTitle}>
