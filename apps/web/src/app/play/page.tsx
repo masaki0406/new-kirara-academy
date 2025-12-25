@@ -578,7 +578,6 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
         description ||
         "集光ボードにロビーを配置し、創造力を消費して光トークンを 1 つ得ます。",
       requirement: combineRequirements(
-        requireActionPoints(1),
         requireLobbyStock(),
         requireResourceCapacity("light", 1),
       ),
@@ -620,9 +619,9 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "lens-activate",
     label: "レンズ起動",
     category: "general",
-    summary: "行動力 1 / 所有レンズを起動",
+    summary: "行動力 土台カード分のみ / 所有レンズを起動",
     description: "所有するレンズを起動し、対応する効果を発動します。",
-    requirement: combineRequirements(requireActionPoints(1), requireLensActivateTarget()),
+    requirement: requireLensActivateTarget(),
     highlight: "primary",
   },
   {
@@ -655,10 +654,10 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "persuasion",
     label: "説得",
     category: "student",
-    summary: "行動力 2 / 対象レンズの起動コストを支払う",
+    summary: "行動力 土台カード分のみ / 対象レンズの起動コストを支払う",
     description:
       "相手のロビーを使ってレンズを起動し、効果を得たあとロビーを使用済みとして戻します。",
-    requirement: combineRequirements(requireActionPoints(2), requirePersuasionTarget()),
+    requirement: requirePersuasionTarget(),
     implemented: true,
   },
   {
@@ -1987,7 +1986,7 @@ export default function PlayPage(): JSX.Element {
         const mergedRainbow = (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0);
         const mergedStagnation = (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0);
         const mergedCreativity = (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0);
-        const totalAction = 1 + (lens.cost.actionPoints ?? 0);
+        const totalAction = lens.cost.actionPoints ?? 0;
         if (localGamePlayer.actionPoints < totalAction) {
           return false;
         }
@@ -2496,6 +2495,10 @@ export default function PlayPage(): JSX.Element {
       }
       const lens = lenses[slot.lensId];
       if (!lens || lens.status !== "available") {
+        return;
+      }
+      const requiredAction = lens.cost.actionPoints ?? 0;
+      if ((localGamePlayer.actionPoints ?? 0) < requiredAction) {
         return;
       }
       const occupant = gameState.players[slot.occupantId];

@@ -121,7 +121,7 @@ const defaultLabs: Ruleset['labs'] = {
     labId: 'focus-light',
     name: '集光',
     description: '創造力とロビーを使って光資源を生成します。',
-    cost: { actionPoints: 1, creativity: 1, lobby: 1 },
+    cost: { creativity: 1, lobby: 1 },
     rewards: [
       { type: 'resource', value: { light: 1 } },
     ],
@@ -148,8 +148,8 @@ const defaultLabs: Ruleset['labs'] = {
 
 const defaultRuleset: Ruleset = {
   version: 'prototype',
-  resourceCaps: { light: 6, rainbow: 6, stagnation: 6 },
-  endgameConversions: { light: 1, rainbow: 2, stagnation: 0 },
+  resourceCaps: { light: 12, rainbow: 12, stagnation: 12 },
+  endgameConversions: { light: 0, rainbow: 0, stagnation: 0 },
   characters: {},
   labs: defaultLabs,
   lenses: {},

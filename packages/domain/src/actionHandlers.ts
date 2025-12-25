@@ -900,7 +900,7 @@ export const validateLensActivate: Validator = async (action, context) => {
     errors.push('このレンズを起動する条件を満たしていません');
   }
 
-  const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
+  const totalActionCost = lens.cost.actionPoints ?? 0;
   if (player.actionPoints < totalActionCost) {
     errors.push('行動力が不足しています');
   }
@@ -1004,7 +1004,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
 
     const startStagnation = player.resources.stagnation ?? 0;
 
-    const totalActionCost = 1 + (lens.cost.actionPoints ?? 0);
+    const totalActionCost = lens.cost.actionPoints ?? 0;
     player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
 
     const itemCost = accumulateItemEffects(
@@ -2441,7 +2441,7 @@ export const validatePersuasion: Validator = async (action, context) => {
   }
 
   const reduction = getPassiveCostReduction(player, context.ruleset, 'persuasion');
-  const requiredActionPoints = Math.max(0, 2 + (lens.cost.actionPoints ?? 0) - reduction);
+  const requiredActionPoints = Math.max(0, (lens.cost.actionPoints ?? 0) - reduction);
   if (player.actionPoints < requiredActionPoints) {
     errors.push('行動力が不足しています');
   }
@@ -2513,7 +2513,7 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
   const occupantPlayer = gameState.players[occupantId];
 
   const reduction = getPassiveCostReduction(player, context.ruleset, 'persuasion');
-  const totalApCost = Math.max(0, 2 + (lens.cost.actionPoints ?? 0) - reduction);
+  const totalApCost = Math.max(0, (lens.cost.actionPoints ?? 0) - reduction);
   player.actionPoints = Math.max(0, player.actionPoints - totalApCost);
 
   const itemCost = accumulateItemEffects(
