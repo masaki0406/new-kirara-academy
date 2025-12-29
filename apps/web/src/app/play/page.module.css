@@ -1712,12 +1712,23 @@
 
 .craftedLensGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  --crafted-lens-size: 320px;
+  grid-template-columns: repeat(auto-fit, minmax(var(--crafted-lens-size), 1fr));
+  gap: 16px;
+  justify-items: center;
 }
 
 .craftedLensCard {
-  height: 100%;
+  max-width: 100%;
+}
+
+.craftedLensCardFrame {
+  width: var(--crafted-lens-size);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .collectedCardFrame {
@@ -2943,6 +2954,7 @@
   }
 
   .craftedLensGrid {
+    --crafted-lens-size: 260px;
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }

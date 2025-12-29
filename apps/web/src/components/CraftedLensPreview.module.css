@@ -6,8 +6,8 @@
 /* 1. Main Card Container (Lens Body) */
 .lensCard {
   position: relative;
-  width: 420px;
-  height: 420px;
+  width: var(--crafted-lens-size, 420px);
+  height: var(--crafted-lens-size, 420px);
   border-radius: 50%;
   /* 完全な円 */
 

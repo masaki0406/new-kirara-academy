@@ -1144,6 +1144,9 @@ export default function PlayPage(): JSX.Element {
   const [isWillDialogOpen, setIsWillDialogOpen] = useState(false);
   const [selectedWillNodeId, setSelectedWillNodeId] = useState<string | null>(null);
   const [isWillSubmitting, setIsWillSubmitting] = useState(false);
+  const [willCollectSelectionKey, setWillCollectSelectionKey] = useState<string | null>(null);
+  const [finalChainOrder, setFinalChainOrder] = useState<string[]>([]);
+  const [isFinalChainOrderSubmitting, setIsFinalChainOrderSubmitting] = useState(false);
   const [isLensActivateDialogOpen, setIsLensActivateDialogOpen] = useState(false);
   const [selectedLensActivateId, setSelectedLensActivateId] = useState<string | null>(null);
   const [isLensActivateSubmitting, setIsLensActivateSubmitting] = useState(false);
@@ -1158,6 +1161,7 @@ export default function PlayPage(): JSX.Element {
   const [persuasionGrowthSelections, setPersuasionGrowthSelections] = useState<string[]>([]);
   const [pendingCollectKey, setPendingCollectKey] = useState<string | null>(null);
   const [pendingPolishResult, setPendingPolishResult] = useState<PendingPolishResult | null>(null);
+  const [pendingAutoOpenLensId, setPendingAutoOpenLensId] = useState<string | null>(null);
   const collectSectionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -1794,6 +1798,7 @@ export default function PlayPage(): JSX.Element {
         selection: selection.map((entry) => ({ cardId: entry.cardId, cardType: entry.cardType })),
         foundationCost: polishFoundationChoice,
       });
+      setPendingAutoOpenLensId(lensId);
       setFeedback("研磨を実行しました。");
       closePolishDialog();
       await refresh();
@@ -1904,6 +1909,100 @@ export default function PlayPage(): JSX.Element {
     [growthNodesWithStatus],
   );
   const willAbilityCount = availableWillNodes.length;
+  const activeWillNodeId = selectedWillNodeId ?? availableWillNodes[0]?.id ?? null;
+  const requiresWillCollect = activeWillNodeId === "midori-rina:s";
+  const willCollectOptions = useMemo(() => {
+    if (!gameState) {
+      return [];
+    }
+    const options: { key: string; label: string; payload: CollectRequestPayload }[] = [];
+    const developmentSlots = gameState.board?.publicDevelopmentCards ?? [];
+    developmentSlots.forEach((cardId, index) => {
+      if (!cardId) return;
+      const card = developmentCardCatalog.get(cardId);
+      options.push({
+        key: `dev-${index}`,
+        label: `開発 ${index + 1}: ${card?.name ?? cardId}`,
+        payload: { slotType: "development", slotIndex: index },
+      });
+    });
+    const vpSlots = gameState.board?.publicVpCards ?? [];
+    vpSlots.forEach((cardId, index) => {
+      if (!cardId) return;
+      const card = vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId);
+      options.push({
+        key: `vp-${index}`,
+        label: `VP ${index + 1}: ${card?.name ?? cardId}`,
+        payload: { slotType: "vp", slotIndex: index },
+      });
+    });
+    foundationSupply.forEach(({ cost, remaining }) => {
+      if (remaining <= 0) return;
+      options.push({
+        key: `foundation-${cost}`,
+        label: `土台 コスト ${cost}（残り ${remaining}）`,
+        payload: { slotType: "foundation", foundationCost: cost },
+      });
+    });
+    return options;
+  }, [
+    gameState,
+    foundationSupply,
+    developmentCardCatalog,
+    vpCardCatalog,
+  ]);
+  useEffect(() => {
+    if (!isWillDialogOpen || !requiresWillCollect) {
+      setWillCollectSelectionKey(null);
+      return;
+    }
+    if (
+      willCollectSelectionKey &&
+      willCollectOptions.some((option) => option.key === willCollectSelectionKey)
+    ) {
+      return;
+    }
+    setWillCollectSelectionKey(willCollectOptions[0]?.key ?? null);
+  }, [
+    isWillDialogOpen,
+    requiresWillCollect,
+    willCollectOptions,
+    willCollectSelectionKey,
+  ]);
+
+  const finalChainEligibleLenses = useMemo(() => {
+    if (!gameState || !localPlayer?.id) {
+      return [];
+    }
+    const slots = gameState.board?.lobbySlots ?? [];
+    const ids = slots
+      .filter((slot) => slot.ownerId === localPlayer.id)
+      .map((slot) => slot.lensId);
+    return Array.from(new Set(ids));
+  }, [gameState, localPlayer?.id]);
+  const canEditFinalChainOrder =
+    localGamePlayer?.characterId === "midori-rina" &&
+    (localGamePlayer.unlockedCharacterNodes ?? []).includes("midori-rina:9") &&
+    finalChainEligibleLenses.length > 0;
+
+  useEffect(() => {
+    if (!canEditFinalChainOrder) {
+      setFinalChainOrder([]);
+      return;
+    }
+    const stored = Array.isArray(localGamePlayer?.finalChainOrder)
+      ? localGamePlayer.finalChainOrder
+      : [];
+    const filtered = stored.filter((id) => finalChainEligibleLenses.includes(id));
+    const missing = finalChainEligibleLenses.filter((id) => !filtered.includes(id));
+    const nextOrder =
+      filtered.length > 0 ? [...filtered, ...missing] : [...finalChainEligibleLenses];
+    setFinalChainOrder(nextOrder);
+  }, [
+    canEditFinalChainOrder,
+    localGamePlayer?.finalChainOrder,
+    finalChainEligibleLenses,
+  ]);
 
   const lensActivateTargets = useMemo<LensActivateOption[]>(() => {
     if (!gameState || !localPlayer?.id || !localGamePlayer) {
@@ -1955,6 +2054,24 @@ export default function PlayPage(): JSX.Element {
         }
       });
     });
+
+    if (pendingPolishResult && localPlayer?.id) {
+      const pendingLens = pendingPolishResult.lens;
+      if (!allLensesMap.has(pendingLens.lensId)) {
+        const pendingLensState: LensState = {
+          lensId: pendingLens.lensId,
+          ownerId: localPlayer.id,
+          cost: { actionPoints: pendingLens.foundationCost ?? 0 },
+          rewards: [],
+          slots: 1,
+          tags: ['crafted'],
+          status: 'available',
+          leftItems: pendingLens.leftItems,
+          rightItems: pendingLens.rightItems,
+        };
+        allLensesMap.set(pendingLens.lensId, pendingLensState);
+      }
+    }
 
     const lenses = allLensesMap;
 
@@ -2026,6 +2143,7 @@ export default function PlayPage(): JSX.Element {
     gameState,
     localPlayer?.id,
     localGamePlayer,
+    pendingPolishResult,
     effectiveResources,
     lobbySummary.handUnused,
     lobbySummary.handUsed,
@@ -2146,6 +2264,22 @@ export default function PlayPage(): JSX.Element {
     });
     setIsLensActivateDialogOpen(true);
   }, [lensActivateTargets, setFeedback]);
+
+  useEffect(() => {
+    if (!pendingAutoOpenLensId) {
+      return;
+    }
+    const target = lensActivateTargets.find((lens) => lens.lensId === pendingAutoOpenLensId);
+    if (target) {
+      setSelectedLensActivateId(target.lensId);
+      setIsLensActivateDialogOpen(true);
+      setPendingAutoOpenLensId(null);
+      return;
+    }
+    if (pendingPolishResult?.lens.lensId === pendingAutoOpenLensId) {
+      setPendingAutoOpenLensId(null);
+    }
+  }, [lensActivateTargets, pendingAutoOpenLensId, pendingPolishResult]);
 
   const closeLensActivateDialog = useCallback(() => {
     setIsLensActivateDialogOpen(false);
@@ -2300,15 +2434,31 @@ export default function PlayPage(): JSX.Element {
       setFeedback("意思能力を選択してください。");
       return;
     }
+    if (nodeId === "midori-rina:s") {
+      const selection = willCollectOptions.find(
+        (option) => option.key === willCollectSelectionKey,
+      );
+      if (!selection) {
+        setFeedback("収集するカードを選択してください。");
+        return;
+      }
+    }
 
     setIsWillSubmitting(true);
     setPendingActionId("will");
     try {
+      const selection =
+        nodeId === "midori-rina:s"
+          ? willCollectOptions.find((option) => option.key === willCollectSelectionKey)
+          : null;
       await performAction({
         action: {
           playerId: localPlayer.id,
           actionType: "will",
-          payload: { nodeId },
+          payload:
+            nodeId === "midori-rina:s" && selection
+              ? { nodeId, collect: selection.payload }
+              : { nodeId },
         },
       });
       const executedNode = availableWillNodes.find((node) => node.id === nodeId);
@@ -2330,9 +2480,62 @@ export default function PlayPage(): JSX.Element {
     localPlayer?.id,
     selectedWillNodeId,
     availableWillNodes,
+    willCollectOptions,
+    willCollectSelectionKey,
     performAction,
     refresh,
     closeWillDialog,
+    setFeedback,
+  ]);
+
+  const moveFinalChainOrder = useCallback((index: number, direction: -1 | 1) => {
+    setFinalChainOrder((current) => {
+      const next = [...current];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) {
+        return current;
+      }
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+      return next;
+    });
+  }, []);
+
+  const handleSubmitFinalChainOrder = useCallback(async () => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    if (!canEditFinalChainOrder || finalChainOrder.length === 0) {
+      setFeedback("設定できるレンズがありません。");
+      return;
+    }
+    setIsFinalChainOrderSubmitting(true);
+    try {
+      await performAction({
+        action: {
+          playerId: localPlayer.id,
+          actionType: "setFinalChainOrder",
+          payload: { lensOrder: finalChainOrder },
+        },
+      });
+      setFeedback("終局連鎖の順番を保存しました。");
+      await refresh();
+    } catch (error) {
+      console.error(error);
+      setFeedback(
+        error instanceof Error ? error.message : "順番の保存に失敗しました。",
+      );
+    } finally {
+      setIsFinalChainOrderSubmitting(false);
+    }
+  }, [
+    localPlayer?.id,
+    canEditFinalChainOrder,
+    finalChainOrder,
+    performAction,
+    refresh,
     setFeedback,
   ]);
 
@@ -4061,7 +4264,7 @@ export default function PlayPage(): JSX.Element {
                           {allCraftedLenses.length > 0 ? (
                             <div className={styles.craftedLensGrid}>
                               {allCraftedLenses.map(({ lens, ownerId, ownerName }) => (
-                                <div key={`all-lens-${lens.lensId}`} className={styles.craftedLensCard}>
+                                <div key={`all-lens-${lens.lensId}`} className={styles.craftedLensCardFrame}>
                                   <div className={styles.journalSlotHeader}>
                                     <span className={styles.journalSlotIndex}>LP</span>
                                     <span className={styles.journalSlotType}>
@@ -4070,6 +4273,7 @@ export default function PlayPage(): JSX.Element {
                                   </div>
                                   <CraftedLensPreview
                                     lens={lens}
+                                    className={styles.craftedLensCard}
                                     getCard={getCardDefinition}
                                     ownerName={ownerName ?? ownerId}
                                   />
@@ -4269,6 +4473,68 @@ export default function PlayPage(): JSX.Element {
                               </section>
                             );
                           })}
+                        </div>
+                      </div>
+                    ) : null}
+                    {canEditFinalChainOrder ? (
+                      <div className={styles.playerActionsSection}>
+                        <div className={styles.playerActionsHeader}>
+                          <h5 className={styles.playerActionsTitle}>終局連鎖の順番</h5>
+                          <p className={styles.playerActionsCaption}>
+                            翠川燐名⑨で起動する自レンズの順番を設定します。
+                          </p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                          {finalChainOrder.map((lensId, index) => (
+                            <div key={lensId} className={styles.playerActionCard}>
+                              <div className={styles.playerActionHeader}>
+                                <span className={styles.playerActionName}>
+                                  {index + 1}. レンズ {lensId}
+                                </span>
+                              </div>
+                              <div className={styles.playerActionFooter}>
+                                <button
+                                  type="button"
+                                  className={styles.playerActionButton}
+                                  style={{ marginRight: "0.5rem" }}
+                                  disabled={
+                                    !isLocalTurn ||
+                                    isFinalChainOrderSubmitting ||
+                                    index === 0
+                                  }
+                                  onClick={() => moveFinalChainOrder(index, -1)}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.playerActionButton}
+                                  disabled={
+                                    !isLocalTurn ||
+                                    isFinalChainOrderSubmitting ||
+                                    index === finalChainOrder.length - 1
+                                  }
+                                  onClick={() => moveFinalChainOrder(index, 1)}
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className={styles.playerActionFooter}>
+                          <button
+                            type="button"
+                            className={styles.playerActionButton}
+                            disabled={
+                              !isLocalTurn ||
+                              isFinalChainOrderSubmitting ||
+                              finalChainOrder.length === 0
+                            }
+                            onClick={() => void handleSubmitFinalChainOrder()}
+                          >
+                            {isFinalChainOrderSubmitting ? "保存中..." : "順番を保存"}
+                          </button>
                         </div>
                       </div>
                     ) : null}
@@ -4524,6 +4790,45 @@ export default function PlayPage(): JSX.Element {
                   <p className={styles.willEmpty}>使用可能な意思能力がありません。</p>
                 )}
               </div>
+              {requiresWillCollect ? (
+                <>
+                  <p className={styles.willHelp}>収集するカードを選択してください。</p>
+                  <div
+                    className={styles.willList}
+                    role="radiogroup"
+                    aria-label="収集先の選択肢"
+                  >
+                    {willCollectOptions.length > 0 ? (
+                      willCollectOptions.map((option) => {
+                        const checked = willCollectSelectionKey === option.key;
+                        return (
+                          <label
+                            key={option.key}
+                            className={classNames(
+                              styles.willOption,
+                              checked ? styles.willOptionActive : undefined,
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="willCollectTarget"
+                              value={option.key}
+                              checked={checked}
+                              onChange={() => setWillCollectSelectionKey(option.key)}
+                              disabled={isWillSubmitting}
+                            />
+                            <div>
+                              <span className={styles.willAbilityTitle}>{option.label}</span>
+                            </div>
+                          </label>
+                        );
+                      })
+                    ) : (
+                      <p className={styles.willEmpty}>収集できるカードがありません。</p>
+                    )}
+                  </div>
+                </>
+              ) : null}
               <div className={styles.willFooter}>
                 <button
                   type="button"
@@ -4538,7 +4843,11 @@ export default function PlayPage(): JSX.Element {
                   className={styles.willPrimaryButton}
                   onClick={() => void handleSubmitWill()}
                   disabled={
-                    isWillSubmitting || !selectedWillNodeId || availableWillNodes.length === 0
+                    isWillSubmitting ||
+                    !selectedWillNodeId ||
+                    availableWillNodes.length === 0 ||
+                    (requiresWillCollect &&
+                      (willCollectOptions.length === 0 || !willCollectSelectionKey))
                   }
                 >
                   {isWillSubmitting ? "送信中..." : "意思を実行"}
