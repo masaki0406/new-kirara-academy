@@ -1712,9 +1712,9 @@
 
 .craftedLensGrid {
   display: grid;
-  --crafted-lens-size: 320px;
+  --crafted-lens-size: 380px;
   grid-template-columns: repeat(auto-fit, minmax(var(--crafted-lens-size), 1fr));
-  gap: 16px;
+  gap: 20px;
   justify-items: center;
 }
 
@@ -2954,7 +2954,7 @@
   }
 
   .craftedLensGrid {
-    --crafted-lens-size: 260px;
+    --crafted-lens-size: 300px;
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }
