@@ -102,7 +102,8 @@ export type ActionType =
   | 'pass'
   | 'growth'
   | 'replenishLobby'
-  | 'supplySelect';
+  | 'supplySelect'
+  | 'setFinalChainOrder';
 
 export interface LobbyLocation {
   type: 'lens' | 'lab' | 'hand';
