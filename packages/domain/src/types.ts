@@ -182,6 +182,7 @@ export interface PlayerState {
   passedAt?: number;
   isRooting?: boolean;
   unlockedCharacterNodes?: string[];
+  finalChainOrder?: LensId[];
   lobbyReserve?: number;
   lobbyAvailable?: number;
   lobbyStock?: number;
