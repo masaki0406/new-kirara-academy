@@ -1922,7 +1922,7 @@ export default function PlayPage(): JSX.Element {
       const card = developmentCardCatalog.get(cardId);
       options.push({
         key: `dev-${index}`,
-        label: `開発 ${index + 1}: ${card?.name ?? cardId}`,
+        label: `開発 ${index + 1}: ${card?.cardId ?? card?.id ?? cardId}`,
         payload: { slotType: "development", slotIndex: index },
       });
     });
@@ -1932,7 +1932,7 @@ export default function PlayPage(): JSX.Element {
       const card = vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId);
       options.push({
         key: `vp-${index}`,
-        label: `VP ${index + 1}: ${card?.name ?? cardId}`,
+        label: `VP ${index + 1}: ${card?.cardId ?? card?.id ?? cardId}`,
         payload: { slotType: "vp", slotIndex: index },
       });
     });
