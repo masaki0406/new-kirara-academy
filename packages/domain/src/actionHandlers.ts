@@ -329,6 +329,7 @@ function applyPolishResult(
   payload: NormalizedPolishPayload,
 ): void {
   const board = context.gameState.board;
+  consumeFoundationCard(player, payload.foundationCost);
   player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
   player.collectedVpCards = player.collectedVpCards ?? [];
   const developmentCards = player.collectedDevelopmentCards;
@@ -601,8 +602,7 @@ export const validateLabActivate: Validator = async (action, context) => {
   }
 
   const cost = resolveLabCost(lab);
-  const actionPointCost =
-    (cost.actionPoints ?? 0) + (normalizedPolish ? normalizedPolish.foundationCost : 0);
+  const actionPointCost = cost.actionPoints ?? 0;
   if (player.actionPoints < actionPointCost) {
     errors.push('行動力が不足しています');
   }
@@ -758,8 +758,7 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
     }
 
     const cost = resolveLabCost(lab);
-    const actionPointCost =
-      (cost.actionPoints ?? 0) + (normalizedPolish ? normalizedPolish.foundationCost : 0);
+    const actionPointCost = cost.actionPoints ?? 0;
     if (actionPointCost > 0) {
       player.actionPoints = Math.max(0, player.actionPoints - actionPointCost);
     }

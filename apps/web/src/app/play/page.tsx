@@ -52,7 +52,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "POLISH",
     side: "left",
     material: "共有設備が揃う研究棟で、レンズ改良を進めるための研磨機を利用できます。",
-    cost: ["行動力 1 + 土台コスト", "ロビー ×1 (研磨スペースへ配置)"],
+    cost: ["行動力 1", "ロビー ×1 (研磨スペースへ配置)", "土台カード 1 枚消費"],
     result: ["未完成のレンズを研究進捗 +1", "共有レンズのロビーを整理"],
   },
   {
@@ -560,7 +560,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
       id: "polish",
       label: "研磨",
       category: "lab",
-      summary: summary || "行動力 1 / ロビー ×1",
+      summary: summary || "行動力 1 / ロビー ×1 / 土台カード 1 枚消費",
       description:
         description ||
         "共有設備を使いレンズの研磨とロビー整理を進めます。研究の基礎アクションです。",
@@ -1889,12 +1889,9 @@ export default function PlayPage(): JSX.Element {
           selectedFoundation.count > 0 &&
           selectedFoundation.cost >= foundationRequirement,
         );
-    const actionPointRequired =
-      polishFoundationChoice !== null ? POLISH_BASE_ACTION_POINTS + polishFoundationChoice : null;
+    const actionPointRequired = POLISH_BASE_ACTION_POINTS;
     const actionPointMet =
-      actionPointRequired === null
-        ? false
-        : (localGamePlayer?.actionPoints ?? 0) >= actionPointRequired;
+      (localGamePlayer?.actionPoints ?? 0) >= actionPointRequired;
     const leftPositions = new Set<number>();
     const rightPositions = new Set<number>();
     let leftConflict = false;
@@ -5569,7 +5566,10 @@ export default function PlayPage(): JSX.Element {
               </div>
               <div className={styles.polishModalBody}>
                 <p className={styles.polishSummaryHint}>
-                  研磨コスト: 行動力 {POLISH_BASE_ACTION_POINTS} + 土台コスト / 必要土台コスト: {polishSummary.foundationRequirement}
+                  研磨コスト: 行動力 {POLISH_BASE_ACTION_POINTS} + ロビー ×1 / 土台カード 1 枚消費
+                </p>
+                <p className={styles.polishSummaryHint}>
+                  必要土台カードコスト: {polishSummary.foundationRequirement}
                 </p>
                 {polishSummary.positionConflict ? (
                   <p className={styles.polishWarning}>
@@ -5923,11 +5923,13 @@ export default function PlayPage(): JSX.Element {
                   <p className={styles.helpLead}>目的：VP を最も多く集める。</p>
                   <ul className={styles.helpList}>
                     <li>収集：行動力 2／公開カードを獲得。</li>
-                    <li>研磨：行動力 1 + 土台コスト／レンズを作成。</li>
+                    <li>研磨：行動力 1 + ロビー ×1 + 土台カード 1 枚消費／レンズを作成。</li>
                     <li>レンズ起動：レンズの行動力・資源を支払い報酬を得る。</li>
                     <li>再起動：行動力 3 + レンズ行動力／使用済みレンズを再利用。</li>
                     <li>説得：レンズ行動力・資源を支払い他人レンズを起動。</li>
-                    <li>研磨後は、起動コストを払えればすぐ起動可能。</li>
+                    <li>
+                      研磨後は、土台カードのコスト分の行動力＋資源が払えれば起動可能。
+                    </li>
                   </ul>
                 </>
               ) : (
@@ -5970,11 +5972,13 @@ export default function PlayPage(): JSX.Element {
                   <section className={styles.helpSection}>
                     <h4>研磨</h4>
                     <ul className={styles.helpList}>
-                      <li>獲得済みカードを選び、土台カードのコストを指定してレンズを作成。</li>
-                      <li>研磨コストは行動力 1 + 土台コスト。</li>
-                      <li>土台カードは所持が必要（消費はしない）。</li>
+                      <li>獲得済みカードを選び、所持している土台カード 1 枚でレンズを作成。</li>
+                      <li>研磨コストは行動力 1 + ロビー ×1。</li>
+                      <li>土台カードは 1 枚消費（選んだ土台カードのコストが反映）。</li>
                       <li>左側がコスト、右側が報酬。</li>
-                      <li>作ったレンズはコストを払えればすぐ起動可能。</li>
+                      <li>
+                        作ったレンズは土台カードのコスト分の行動力＋資源を払えば起動可能。
+                      </li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>
