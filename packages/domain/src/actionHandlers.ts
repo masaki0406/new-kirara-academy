@@ -446,8 +446,6 @@ function clampCreativity(value: number): number {
   return Math.max(0, Math.min(MAX_CREATIVITY, value));
 }
 
-type ResourceKey = 'light' | 'rainbow' | 'stagnation';
-
 function resolveLabCost(lab: LabDefinition | undefined): LabCostDefinition {
   const base: LabCostDefinition = { actionPoints: 1 };
   if (!lab?.cost) {
@@ -1072,6 +1070,11 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
           // We removed the token from Active (Hand/Board), now add to Reserve.
           const currentReserve = getLobbyReserve(player);
           player.lobbyReserve = currentReserve + 1;
+          triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+            actorId: action.playerId,
+            actionType: 'returnLobby',
+            lensId,
+          });
           // DEBUG LOG
           gameState.logs.push({
             id: `debug-${Date.now()}-${Math.random()}`,
@@ -1092,7 +1095,14 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
           payload: { message: '[DEBUG] Auto-return triggered' },
           result: { success: true }
         });
-        returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+        const returned = returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+        for (let i = 0; i < returned; i += 1) {
+          triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+            actorId: action.playerId,
+            actionType: 'returnLobby',
+            lensId,
+          });
+        }
       }
     }
 
@@ -1547,7 +1557,14 @@ export const applyRefresh: EffectApplier = async (action, context) => {
     player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
   }
   if (itemCost.lobbyReturn > 0) {
-    returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    const returned = returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    for (let i = 0; i < returned; i += 1) {
+      triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+        actorId: action.playerId,
+        actionType: 'returnLobby',
+        lensId,
+      });
+    }
   }
   if (itemCost.growthLoss > 0) {
     for (let i = 0; i < itemCost.growthLoss; i += 1) {
@@ -1615,7 +1632,11 @@ export const applyRefresh: EffectApplier = async (action, context) => {
   });
 };
 
-export const validateCollect: Validator = async (action, context) => {
+async function validateCollectInternal(
+  action: PlayerAction,
+  context: ActionContext,
+  options: { skipActionPointCheck?: boolean } = {},
+): Promise<string[]> {
   const errors: string[] = [];
   const { gameState } = context;
   const player = gameState.players[action.playerId];
@@ -1628,7 +1649,7 @@ export const validateCollect: Validator = async (action, context) => {
     errors.push('現在の手番プレイヤーではありません');
   }
 
-  if (player.actionPoints < 2) {
+  if (!options.skipActionPointCheck && player.actionPoints < 2) {
     errors.push('行動力が不足しています');
   }
 
@@ -1674,16 +1695,25 @@ export const validateCollect: Validator = async (action, context) => {
   }
 
   return errors;
-};
+}
 
-export const applyCollect: EffectApplier = async (action, context) => {
+export const validateCollect: Validator = async (action, context) =>
+  validateCollectInternal(action, context);
+
+async function applyCollectInternal(
+  action: PlayerAction,
+  context: ActionContext,
+  options: { consumeActionPoints?: boolean } = {},
+): Promise<void> {
   const { gameState } = context;
   const player = gameState.players[action.playerId];
   if (!player) {
     throw new Error('プレイヤーが存在しません');
   }
 
-  player.actionPoints = Math.max(0, player.actionPoints - 2);
+  if (options.consumeActionPoints !== false) {
+    player.actionPoints = Math.max(0, player.actionPoints - 2);
+  }
 
   const slotTypeRaw =
     typeof action.payload.slotType === 'string' ? action.payload.slotType : 'development';
@@ -1760,7 +1790,10 @@ export const applyCollect: EffectApplier = async (action, context) => {
     actorId: action.playerId,
     actionType: 'collect',
   });
-};
+}
+
+export const applyCollect: EffectApplier = async (action, context) =>
+  applyCollectInternal(action, context);
 
 export const validateWill: Validator = async (action, context) => {
   const errors: string[] = [];
@@ -1816,6 +1849,30 @@ export const validateWill: Validator = async (action, context) => {
   }
 
   validateWillRewards(payload, player, errors);
+
+  const willCollect = payload?.rewards?.some(
+    (reward) => reward.type === 'action' && reward.value === 'collect',
+  );
+  if (willCollect) {
+    const collectPayload =
+      typeof (action.payload as { collect?: unknown }).collect === 'object'
+        ? (action.payload as { collect?: Record<string, unknown> }).collect
+        : undefined;
+    if (!collectPayload) {
+      errors.push('収集先を指定してください');
+    } else {
+      const collectErrors = await validateCollectInternal(
+        {
+          playerId: action.playerId,
+          actionType: 'collect',
+          payload: collectPayload,
+        },
+        context,
+        { skipActionPointCheck: true },
+      );
+      errors.push(...collectErrors);
+    }
+  }
 
   return errors;
 };
@@ -2198,6 +2255,28 @@ export const applyWill: EffectApplier = async (action, context) => {
     player.vp += amount * 2;
   }
 
+  const actionRewards = payload?.rewards?.filter((reward) => reward.type === 'action') ?? [];
+  for (const reward of actionRewards) {
+    if (reward.value === 'collect') {
+      const collectPayload =
+        typeof (action.payload as { collect?: unknown }).collect === 'object'
+          ? (action.payload as { collect?: Record<string, unknown> }).collect
+          : undefined;
+      if (!collectPayload) {
+        throw new Error('収集先を指定してください');
+      }
+      await applyCollectInternal(
+        {
+          playerId: action.playerId,
+          actionType: 'collect',
+          payload: collectPayload,
+        },
+        context,
+        { consumeActionPoints: false },
+      );
+    }
+  }
+
 
   triggerEvent(gameState, ruleset, 'actionPerformed', {
     actorId: action.playerId,
@@ -2529,7 +2608,14 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
     player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
   }
   if (itemCost.lobbyReturn > 0) {
-    returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    const returned = returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
+    for (let i = 0; i < returned; i += 1) {
+      triggerEvent(gameState, context.ruleset, 'actionPerformed', {
+        actorId: action.playerId,
+        actionType: 'returnLobby',
+        lensId,
+      });
+    }
   }
   if (itemCost.growthLoss > 0) {
     for (let i = 0; i < itemCost.growthLoss; i += 1) {
@@ -2711,7 +2797,7 @@ function addResourcesWithLimits(wallet: ResourceWallet, reward: ResourceReward):
 }
 
 function applyReward(player: { resources: ResourceWallet; vp: number; actionPoints: number; creativity: number }, reward: {
-  type: 'vp' | 'resource' | 'growth' | 'trigger';
+  type: 'vp' | 'resource' | 'growth' | 'trigger' | 'action';
   value: number | ResourceReward | unknown;
 }): void {
   switch (reward.type) {
@@ -2736,6 +2822,9 @@ function applyReward(player: { resources: ResourceWallet; vp: number; actionPoin
       break;
     case 'trigger':
       // トリガーはイベント処理でハンドリングするためここでは何もしない
+      break;
+    case 'action':
+      // Action rewards are handled by the caller (e.g. Will effects)
       break;
     default:
       // Check for lobby reward in unknown types or extended properties
@@ -2807,25 +2896,50 @@ function ensureUnlimitedMap(wallet: ResourceWallet): void {
   }
 }
 
-function toResourceKey(label: string | null | undefined): ResourceKey | null {
+type ItemKind =
+  | 'light'
+  | 'rainbow'
+  | 'stagnation'
+  | 'creativity'
+  | 'lobby'
+  | 'growth'
+  | 'vp';
+
+const ITEM_KEYWORDS: Record<ItemKind, string[]> = {
+  light: ['light', '光', 'hikari'],
+  rainbow: ['rainbow', '虹', 'niji', '虹彩'],
+  stagnation: ['stagnation', '淀み', 'yodomi', '淀'],
+  creativity: ['creativity', 'cp', '創造', '創造力', '創', 'img', '想', 'イメージ'],
+  lobby: ['lobby', 'ロビー', 'loby'],
+  growth: ['growth', '成長', 'grow'],
+  vp: ['vp', 'victory', 'point', 'points', 'vp点'],
+};
+
+const NORMALIZED_ITEM_KEYWORDS = Object.entries(ITEM_KEYWORDS).map(([kind, keywords]) => ({
+  kind: kind as ItemKind,
+  keywords: keywords.map((keyword) => normalizeKeyword(keyword)),
+}));
+
+function normalizeKeyword(raw: string): string {
+  return raw
+    .normalize('NFKC')
+    .replace(/[\s_\-・:：]/g, '')
+    .toLowerCase();
+}
+
+function resolveItemKind(label: string | null | undefined): ItemKind | null {
   if (!label) {
     return null;
   }
-  const normalized = label.toLowerCase();
-  if (normalized.includes('光') || normalized.includes('light')) {
-    return 'light';
-  }
-  if (normalized.includes('虹') || normalized.includes('rainbow')) {
-    return 'rainbow';
-  }
-  if (normalized.includes('淀') || normalized.includes('stagnation') || normalized.includes('yodomi')) {
-    return 'stagnation';
+  const normalized = normalizeKeyword(label);
+  for (const entry of NORMALIZED_ITEM_KEYWORDS) {
+    for (const keyword of entry.keywords) {
+      if (normalized.includes(keyword)) {
+        return entry.kind;
+      }
+    }
   }
   return null;
-}
-
-function normalizeItemLabel(value: string | null | undefined): string {
-  return (value ?? '').toString().toLowerCase();
 }
 
 interface ItemEffectSummary {
@@ -2856,22 +2970,28 @@ function accumulateItemEffects(
   }
 
   items.forEach((item) => {
-    const label = normalizeItemLabel(item.item ?? item.cardId);
+    const rawLabel = (item.item ?? item.cardId ?? '').toString();
     const amount =
       typeof item.quantity === 'number' && Number.isFinite(item.quantity) ? item.quantity : 1;
+    const kind = resolveItemKind(rawLabel);
 
-    const resourceKey = toResourceKey(label);
-    if (resourceKey) {
-      summary.resources[resourceKey] = (summary.resources[resourceKey] ?? 0) + amount;
+    if (kind === 'light') {
+      summary.resources.light = (summary.resources.light ?? 0) + amount;
       return;
     }
-
-    if (label.includes('img') || label.includes('creativity') || label.includes('想') || label.includes('創')) {
+    if (kind === 'rainbow') {
+      summary.resources.rainbow = (summary.resources.rainbow ?? 0) + amount;
+      return;
+    }
+    if (kind === 'stagnation') {
+      summary.resources.stagnation = (summary.resources.stagnation ?? 0) + amount;
+      return;
+    }
+    if (kind === 'creativity') {
       summary.resources.creativity = (summary.resources.creativity ?? 0) + amount;
       return;
     }
-
-    if (label.includes('grow')) {
+    if (kind === 'growth') {
       if (direction === 'reward') {
         summary.growthGain += amount;
       } else {
@@ -2879,8 +2999,7 @@ function accumulateItemEffects(
       }
       return;
     }
-
-    if (label.includes('loby') || label.includes('lobby') || label.includes('ロビー')) {
+    if (kind === 'lobby') {
       if (direction === 'reward') {
         summary.lobbyGain += amount;
       } else {
@@ -2888,8 +3007,7 @@ function accumulateItemEffects(
       }
       return;
     }
-
-    if (label.includes('vp')) {
+    if (kind === 'vp') {
       let vpAmount = amount;
       if (
         !(typeof item.quantity === 'number' && Number.isFinite(item.quantity)) &&
@@ -3092,11 +3210,12 @@ function returnLobbyToStock(
   gameState: GameState,
   lensId: string,
   amount: number,
-): void {
+): number {
   if (amount <= 0) {
-    return;
+    return 0;
   }
   let remaining = amount;
+  let returned = 0;
 
   // 手持ち使用済み (Prioritize returning Used first)
   if (remaining > 0) {
@@ -3106,6 +3225,7 @@ function returnLobbyToStock(
       player.lobbyUsed = Math.max(0, currentUsed - takeUsed);
       player.lobbyReserve = getLobbyReserve(player) + takeUsed;
       remaining -= takeUsed;
+      returned += takeUsed;
     }
   }
 
@@ -3119,6 +3239,7 @@ function returnLobbyToStock(
       slot.isActive = true;
       remaining -= 1;
       player.lobbyReserve = getLobbyReserve(player) + 1;
+      returned += 1;
     }
   });
 
@@ -3135,6 +3256,7 @@ function returnLobbyToStock(
       placement.count -= take;
       remaining -= take;
       player.lobbyReserve = getLobbyReserve(player) + take;
+      returned += take;
     }
   }
 
@@ -3146,12 +3268,14 @@ function returnLobbyToStock(
       player.lobbyAvailable = available - takeAvail;
       player.lobbyReserve = getLobbyReserve(player) + takeAvail;
       remaining -= takeAvail;
+      returned += takeAvail;
     }
   }
 
   if (remaining > 0) {
     throw new Error('ロビー返却コストを支払うためのロビーが不足しています');
   }
+  return returned;
 }
 function applyGrowthReward(
   player: {
@@ -3178,6 +3302,81 @@ function applyGrowthReward(
     }
   }
 }
+
+export const validateFinalChainOrder: Validator = async (action, context) => {
+  const errors: string[] = [];
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    errors.push('プレイヤーが存在しません');
+    return errors;
+  }
+
+  if (gameState.currentPlayerId !== action.playerId) {
+    errors.push('現在の手番プレイヤーではありません');
+  }
+
+  if (gameState.currentPhase === 'finalScoring') {
+    errors.push('最終スコア計算中は順番を変更できません');
+  }
+
+  if (player.characterId !== 'midori-rina' || !player.unlockedCharacterNodes?.includes('midori-rina:9')) {
+    errors.push('翠川燐名⑨が未解放のため順番を設定できません');
+  }
+
+  const rawOrder = (action.payload as { lensOrder?: unknown }).lensOrder;
+  const lensOrder =
+    Array.isArray(rawOrder) ? rawOrder.filter((id): id is string => typeof id === 'string') : [];
+  if (lensOrder.length === 0) {
+    errors.push('レンズの順番が指定されていません');
+    return errors;
+  }
+
+  const eligibleLensIds = Array.from(
+    new Set(
+      (gameState.board.lobbySlots ?? [])
+        .filter((slot) => slot.ownerId === player.playerId)
+        .map((slot) => slot.lensId),
+    ),
+  );
+
+  if (eligibleLensIds.length === 0) {
+    errors.push('設定できるレンズがありません');
+    return errors;
+  }
+
+  const unique = new Set(lensOrder);
+  if (unique.size !== lensOrder.length) {
+    errors.push('レンズの指定が重複しています');
+  }
+
+  const eligibleSet = new Set(eligibleLensIds);
+  const unknown = lensOrder.find((id) => !eligibleSet.has(id));
+  if (unknown) {
+    errors.push('指定されたレンズが存在しません');
+  }
+
+  if (lensOrder.length !== eligibleLensIds.length) {
+    errors.push('レンズの指定数が不足しています');
+  }
+
+  return errors;
+};
+
+export const applyFinalChainOrder: EffectApplier = async (action, context) => {
+  const { gameState } = context;
+  const player = gameState.players[action.playerId];
+  if (!player) {
+    throw new Error('プレイヤーが存在しません');
+  }
+  const rawOrder = (action.payload as { lensOrder?: unknown }).lensOrder;
+  const lensOrder =
+    Array.isArray(rawOrder) ? rawOrder.filter((id): id is string => typeof id === 'string') : [];
+  if (lensOrder.length === 0) {
+    throw new Error('レンズの順番が指定されていません');
+  }
+  player.finalChainOrder = [...lensOrder];
+};
 
 export const validateGrowth: Validator = async (action, context) => {
   const errors: string[] = [];
