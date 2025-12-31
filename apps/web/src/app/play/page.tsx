@@ -3578,9 +3578,8 @@ export default function PlayPage(): JSX.Element {
               }`}
           >
             <span className={styles.turnNoticeLabel}>
-              {turnNotice.isLocal
-                ? "あなたの手番です"
-                : `${turnNotice.name} の手番です`}
+              次の手番: {turnNotice.name}
+              {turnNotice.isLocal ? "（あなた）" : ""}
             </span>
             <span className={styles.turnNoticeSub}>行動メニューで操作できます</span>
           </div>
