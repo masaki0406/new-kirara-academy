@@ -4694,6 +4694,215 @@ export default function PlayPage(): JSX.Element {
                         </span>
                       )}
                     </div>
+                    {playerActionsByCategory.length > 0 ? (
+                      <div className={styles.playerActionsSection}>
+                        <div className={styles.playerActionsHeader}>
+                          <h5 className={styles.playerActionsTitle}>行動メニュー</h5>
+                          <p className={styles.playerActionsCaption}>
+                            行動可能な選択肢と条件を一覧で確認できます。条件を満たすと実行ボタンが有効になります。
+                          </p>
+                        </div>
+                        <div className={styles.playerActionGroups}>
+                          {playerActionsByCategory.map((group) => {
+                            const availableCount = group.actions.filter(
+                              (action) => action.available,
+                            ).length;
+                            return (
+                              <section key={group.category} className={styles.playerActionGroup}>
+                                <div className={styles.playerActionGroupHeader}>
+                                  <h6 className={styles.playerActionGroupLabel}>{group.label}</h6>
+                                  <span className={styles.playerActionGroupCount}>
+                                    {availableCount} / {group.actions.length} 実行可能
+                                  </span>
+                                </div>
+                                <div className={styles.playerActionGrid}>
+                                  {group.actions.map((action) => {
+                                    const cardClass = classNames(
+                                      styles.playerActionCard,
+                                      action.available
+                                        ? styles.playerActionCardAvailable
+                                        : styles.playerActionCardDisabled,
+                                      action.available && action.highlight === "primary"
+                                        ? styles.playerActionCardHighlightPrimary
+                                        : undefined,
+                                      action.available && action.highlight === "warning"
+                                        ? styles.playerActionCardHighlightWarning
+                                        : undefined,
+                                    );
+                                    const badgeClass = classNames(
+                                      styles.playerActionStatus,
+                                      action.available
+                                        ? styles.playerActionStatusAvailable
+                                        : styles.playerActionStatusBlocked,
+                                    );
+                                    const implemented = action.implemented !== false;
+                                    const hasPolishSources =
+                                      action.id !== "polish" ||
+                                      polishDevelopmentOptions.length > 0 ||
+                                      polishVpOptions.length > 0;
+                                    const hasLensActivateSources =
+                                      action.id !== "lens-activate" || lensActivateTargets.length > 0;
+                                    const hasRefreshSources =
+                                      action.id !== "restart" || exhaustedLensTargets.length > 0;
+                                    const buttonDisabled =
+                                      !isLocalTurn ||
+                                      !action.available ||
+                                      action.implemented === false ||
+                                      !hasPolishSources ||
+                                      !hasLensActivateSources ||
+                                      !hasRefreshSources ||
+                                      pendingActionId === action.id;
+                                    const handleActionClick = () => {
+                                      if (action.implemented === false) {
+                                        setFeedback("この行動は現在準備中です。");
+                                        return;
+                                      }
+                                      if (action.id === "collect") {
+                                        scrollIntoViewIfPossible(collectSectionRef.current);
+                                      }
+                                      if (action.id === "polish") {
+                                        openPolishDialog();
+                                      } else if (action.id === "will") {
+                                        openWillDialog();
+                                      } else if (action.id === "lens-activate") {
+                                        openLensActivateDialog();
+                                      } else if (action.id === "restart") {
+                                        openRefreshDialog();
+                                      } else if (action.id === "persuasion") {
+                                        openPersuasionDialog();
+                                      } else if (action.id === "pass") {
+                                        void handleSubmitPass();
+                                      } else if (action.id === "replenishLobby") {
+                                        void handleReplenishLobby();
+                                      } else if (LAB_ACTION_LOOKUP.has(action.id)) {
+                                        openLabConfirmDialog(action.id);
+                                      }
+                                    };
+                                    return (
+                                      <div key={action.id} className={cardClass}>
+                                        <div className={styles.playerActionHeader}>
+                                          <span className={styles.playerActionName}>
+                                            {action.label}
+                                          </span>
+                                          <span className={badgeClass}>
+                                            {action.available
+                                              ? "実行可能"
+                                              : action.reason ?? "条件不足"}
+                                          </span>
+                                        </div>
+                                        <p className={styles.playerActionSummary}>
+                                          {action.summary}
+                                        </p>
+                                        <p className={styles.playerActionDescription}>
+                                          {action.description}
+                                        </p>
+                                        {!action.available && action.reason ? (
+                                          <p className={styles.playerActionHint}>
+                                            不足: {action.reason}
+                                          </p>
+                                        ) : null}
+                                        {action.id === "polish" && implemented && !hasPolishSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            獲得済みのカードがありません。
+                                          </p>
+                                        ) : null}
+                                        {action.id === "lens-activate" &&
+                                          implemented &&
+                                          !hasLensActivateSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            起動できるレンズがありません。
+                                          </p>
+                                        ) : null}
+                                        {action.id === "restart" && implemented && !hasRefreshSources ? (
+                                          <p className={styles.playerActionHint}>
+                                            再起動できるレンズがありません。
+                                          </p>
+                                        ) : null}
+                                        {action.implemented === false ? (
+                                          <p className={styles.playerActionHint}>この行動は現在準備中です。</p>
+                                        ) : null}
+                                        <div className={styles.playerActionFooter}>
+                                          <button
+                                            type="button"
+                                            className={styles.playerActionButton}
+                                            disabled={buttonDisabled}
+                                            onClick={handleActionClick}
+                                          >
+                                            行動を選択
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </section>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                    {canEditFinalChainOrder ? (
+                      <div className={styles.playerActionsSection}>
+                        <div className={styles.playerActionsHeader}>
+                          <h5 className={styles.playerActionsTitle}>終局連鎖の順番</h5>
+                          <p className={styles.playerActionsCaption}>
+                            翠川燐名⑨で起動する自レンズの順番を設定します。
+                          </p>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                          {finalChainOrder.map((lensId, index) => (
+                            <div key={lensId} className={styles.playerActionCard}>
+                              <div className={styles.playerActionHeader}>
+                                <span className={styles.playerActionName}>
+                                  {index + 1}. レンズ {lensId}
+                                </span>
+                              </div>
+                              <div className={styles.playerActionFooter}>
+                                <button
+                                  type="button"
+                                  className={styles.playerActionButton}
+                                  style={{ marginRight: "0.5rem" }}
+                                  disabled={
+                                    !isLocalTurn ||
+                                    isFinalChainOrderSubmitting ||
+                                    index === 0
+                                  }
+                                  onClick={() => moveFinalChainOrder(index, -1)}
+                                >
+                                  ↑
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.playerActionButton}
+                                  disabled={
+                                    !isLocalTurn ||
+                                    isFinalChainOrderSubmitting ||
+                                    index === finalChainOrder.length - 1
+                                  }
+                                  onClick={() => moveFinalChainOrder(index, 1)}
+                                >
+                                  ↓
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className={styles.playerActionFooter}>
+                          <button
+                            type="button"
+                            className={styles.playerActionButton}
+                            disabled={
+                              !isLocalTurn ||
+                              isFinalChainOrderSubmitting ||
+                              finalChainOrder.length === 0
+                            }
+                            onClick={() => void handleSubmitFinalChainOrder()}
+                          >
+                            {isFinalChainOrderSubmitting ? "保存中..." : "順番を保存"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <details className={styles.stateDetails}>
                       <summary>GameState の詳細を表示</summary>
                       <pre className={styles.stateViewer}>
