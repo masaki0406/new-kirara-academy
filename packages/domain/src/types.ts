@@ -226,8 +226,8 @@ export interface ResourceCost {
 }
 
 export interface RewardDefinition {
-  type: 'vp' | 'resource' | 'growth' | 'trigger';
-  value: number | ResourceReward | TriggerReward | GrowthReward;
+  type: 'vp' | 'resource' | 'growth' | 'trigger' | 'action';
+  value: number | ResourceReward | TriggerReward | GrowthReward | ActionType;
 }
 
 export interface ResourceReward {
