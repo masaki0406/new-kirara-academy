@@ -52,7 +52,7 @@ const LAB_ACTIONS: LabActionDefinition[] = [
     nameEn: "POLISH",
     side: "left",
     material: "共有設備が揃う研究棟で、レンズ改良を進めるための研磨機を利用できます。",
-    cost: ["行動力 1", "ロビー ×1 (研磨スペースへ配置)"],
+    cost: ["行動力 1 + 土台コスト", "ロビー ×1 (研磨スペースへ配置)"],
     result: ["未完成のレンズを研究進捗 +1", "共有レンズのロビーを整理"],
   },
   {
@@ -295,6 +295,8 @@ const PLAYER_ACTION_CATEGORY_LABELS: Record<PlayerActionCategory, string> = {
   student: "学生アクション",
   general: "共通操作",
 };
+
+const POLISH_BASE_ACTION_POINTS = 1;
 
 interface CraftedLensWithOwner {
   lens: CraftedLens;
@@ -619,7 +621,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "lens-activate",
     label: "レンズ起動",
     category: "general",
-    summary: "行動力 土台カード分のみ / 所有レンズを起動",
+    summary: "行動力 + 資源（レンズ表示）/ 所有レンズを起動",
     description: "所有するレンズを起動し、対応する効果を発動します。",
     requirement: requireLensActivateTarget(),
     highlight: "primary",
@@ -628,8 +630,8 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "restart",
     label: "再起動",
     category: "general",
-    summary: "行動力 3 / 自分の使用済みレンズを再起動",
-    description: "使用済みレンズを再び使用可能状態に戻します。行動力を3消費します。",
+    summary: "行動力 3 + レンズ行動力 / 自分の使用済みレンズを再起動",
+    description: "使用済みレンズを再び使用可能状態に戻します。行動力を消費します。",
     requirement: combineRequirements(requireActionPoints(3), requireExhaustedLens()),
   },
   {
@@ -654,7 +656,7 @@ const PLAYER_ACTIONS: PlayerActionDefinition[] = [
     id: "persuasion",
     label: "説得",
     category: "student",
-    summary: "行動力 土台カード分のみ / 対象レンズの起動コストを支払う",
+    summary: "行動力 + 資源（レンズ表示）/ 相手レンズを起動",
     description:
       "相手のロビーを使ってレンズを起動し、効果を得たあとロビーを使用済みとして戻します。",
     requirement: requirePersuasionTarget(),
@@ -1627,12 +1629,9 @@ export default function PlayPage(): JSX.Element {
       const raw = collection[cost];
       const count =
         typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
-      const pendingAdjustment =
-        pendingPolishResult?.foundationCost === cost ? 1 : 0;
-      const adjustedCount = Math.max(0, count - pendingAdjustment);
-      return { cost, count: adjustedCount };
+      return { cost, count };
     });
-  }, [localGamePlayer?.collectedFoundationCards, pendingPolishResult?.foundationCost]);
+  }, [localGamePlayer?.collectedFoundationCards]);
 
   const pendingPolishRemoval = useMemo(() => {
     if (!pendingPolishResult) {
@@ -1890,6 +1889,12 @@ export default function PlayPage(): JSX.Element {
           selectedFoundation.count > 0 &&
           selectedFoundation.cost >= foundationRequirement,
         );
+    const actionPointRequired =
+      polishFoundationChoice !== null ? POLISH_BASE_ACTION_POINTS + polishFoundationChoice : null;
+    const actionPointMet =
+      actionPointRequired === null
+        ? false
+        : (localGamePlayer?.actionPoints ?? 0) >= actionPointRequired;
     const leftPositions = new Set<number>();
     const rightPositions = new Set<number>();
     let leftConflict = false;
@@ -1919,6 +1924,7 @@ export default function PlayPage(): JSX.Element {
     const canSubmit =
       polishSelectionDetails.length > 0 &&
       foundationMet &&
+      actionPointMet &&
       !positionConflict &&
       !isPolishSubmitting &&
       lensResult !== null;
@@ -1926,6 +1932,8 @@ export default function PlayPage(): JSX.Element {
     return {
       foundationRequirement,
       foundationMet,
+      actionPointRequired,
+      actionPointMet,
       selectedFoundation,
       positionConflict,
       lensResult,
@@ -1935,6 +1943,7 @@ export default function PlayPage(): JSX.Element {
     polishSelectionDetails,
     polishFoundationChoice,
     collectedFoundationEntries,
+    localGamePlayer?.actionPoints,
     isPolishSubmitting,
   ]);
 
@@ -5560,7 +5569,7 @@ export default function PlayPage(): JSX.Element {
               </div>
               <div className={styles.polishModalBody}>
                 <p className={styles.polishSummaryHint}>
-                  必要土台コスト: {polishSummary.foundationRequirement}
+                  研磨コスト: 行動力 {POLISH_BASE_ACTION_POINTS} + 土台コスト / 必要土台コスト: {polishSummary.foundationRequirement}
                 </p>
                 {polishSummary.positionConflict ? (
                   <p className={styles.polishWarning}>
@@ -5570,6 +5579,11 @@ export default function PlayPage(): JSX.Element {
                 {polishSelectionDetails.length > 0 && !polishSummary.foundationMet ? (
                   <p className={styles.polishWarning}>
                     土台カードのコストが不足しています（必要 {polishSummary.foundationRequirement}）。
+                  </p>
+                ) : null}
+                {polishSummary.actionPointRequired !== null && !polishSummary.actionPointMet ? (
+                  <p className={styles.polishWarning}>
+                    行動力が不足しています（必要 {polishSummary.actionPointRequired}）。
                   </p>
                 ) : null}
                 <div className={styles.polishColumns}>
@@ -5908,15 +5922,26 @@ export default function PlayPage(): JSX.Element {
                 <>
                   <p className={styles.helpLead}>目的：VP を最も多く集める。</p>
                   <ul className={styles.helpList}>
-                    <li>収集：公開カードを獲得する。</li>
-                    <li>研磨：獲得カードでレンズを作る。</li>
-                    <li>レンズ起動：資源を支払い報酬を得る。</li>
-                    <li>再起動：使用済みレンズを再利用する。</li>
-                    <li>説得：他人レンズを起動する（条件あり）。</li>
+                    <li>収集：行動力 2／公開カードを獲得。</li>
+                    <li>研磨：行動力 1 + 土台コスト／レンズを作成。</li>
+                    <li>レンズ起動：レンズの行動力・資源を支払い報酬を得る。</li>
+                    <li>再起動：行動力 3 + レンズ行動力／使用済みレンズを再利用。</li>
+                    <li>説得：レンズ行動力・資源を支払い他人レンズを起動。</li>
+                    <li>研磨後は、起動コストを払えればすぐ起動可能。</li>
                   </ul>
                 </>
               ) : (
                 <>
+                  <section className={styles.helpSection}>
+                    <h4>フェーズ</h4>
+                    <ul className={styles.helpList}>
+                      <li>準備：初期配置と参加準備。</li>
+                      <li>補給：公開カードの補充やリソース調整。</li>
+                      <li>メイン：各プレイヤーが行動を実行。</li>
+                      <li>終了：使用済み処理や次ラウンド準備。</li>
+                      <li>最終得点：VP 集計で勝敗決定。</li>
+                    </ul>
+                  </section>
                   <section className={styles.helpSection}>
                     <h4>ゲームの流れ</h4>
                     <ul className={styles.helpList}>
@@ -5939,14 +5964,17 @@ export default function PlayPage(): JSX.Element {
                       <li>光・虹・淀み：資源。レンズ起動やラボで使用。</li>
                       <li>創造力：一部アクションのコスト。</li>
                       <li>ロビー：行動回数の目安。起動時に消費。</li>
+                      <li>資源上限：各資源は最大 12（効果で変動）。</li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>
                     <h4>研磨</h4>
                     <ul className={styles.helpList}>
-                      <li>獲得済みカードを選び、土台カードを消費してレンズを作成。</li>
+                      <li>獲得済みカードを選び、土台カードのコストを指定してレンズを作成。</li>
+                      <li>研磨コストは行動力 1 + 土台コスト。</li>
+                      <li>土台カードは所持が必要（消費はしない）。</li>
                       <li>左側がコスト、右側が報酬。</li>
-                      <li>作ったレンズはすぐ起動可能。</li>
+                      <li>作ったレンズはコストを払えればすぐ起動可能。</li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>

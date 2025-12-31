@@ -329,7 +329,6 @@ function applyPolishResult(
   payload: NormalizedPolishPayload,
 ): void {
   const board = context.gameState.board;
-  consumeFoundationCard(player, payload.foundationCost);
   player.collectedDevelopmentCards = player.collectedDevelopmentCards ?? [];
   player.collectedVpCards = player.collectedVpCards ?? [];
   const developmentCards = player.collectedDevelopmentCards;
@@ -574,6 +573,20 @@ export const validateLabActivate: Validator = async (action, context) => {
     return errors;
   }
 
+  let normalizedPolish: NormalizedPolishPayload | null = null;
+  if (labId === 'polish') {
+    const rawPayload =
+      action.payload && typeof action.payload === 'object'
+        ? (action.payload as Record<string, unknown>).polish
+        : undefined;
+    const normalized = normalizePolishPayload(rawPayload);
+    if (!normalized) {
+      errors.push('研磨の設定が不正です');
+      return errors;
+    }
+    normalizedPolish = normalized;
+  }
+
   if (labId === 'negotiation') {
     const existingPlacement = gameState.labPlacements.some(
       (placement) => placement.labId === labId && placement.count > 0,
@@ -588,7 +601,8 @@ export const validateLabActivate: Validator = async (action, context) => {
   }
 
   const cost = resolveLabCost(lab);
-  const actionPointCost = cost.actionPoints ?? 0;
+  const actionPointCost =
+    (cost.actionPoints ?? 0) + (normalizedPolish ? normalizedPolish.foundationCost : 0);
   if (player.actionPoints < actionPointCost) {
     errors.push('行動力が不足しています');
   }
@@ -619,21 +633,12 @@ export const validateLabActivate: Validator = async (action, context) => {
       }
     });
 
-  if (labId === 'polish') {
-    const rawPayload =
-      action.payload && typeof action.payload === 'object'
-        ? (action.payload as Record<string, unknown>).polish
-        : undefined;
-    const normalized = normalizePolishPayload(rawPayload);
-    if (!normalized) {
-      errors.push('研磨の設定が不正です');
-      return errors;
-    }
-    if (!normalized.selection.length) {
+  if (normalizedPolish) {
+    if (!normalizedPolish.selection.length) {
       errors.push('研磨で使用するカードを選択してください');
     }
     const foundationAvailable =
-      player.collectedFoundationCards?.[normalized.foundationCost] ?? 0;
+      player.collectedFoundationCards?.[normalizedPolish.foundationCost] ?? 0;
     if (foundationAvailable <= 0) {
       errors.push('指定された土台カードを所持していません');
     }
@@ -645,7 +650,7 @@ export const validateLabActivate: Validator = async (action, context) => {
     (player.collectedVpCards ?? []).forEach((cardId) => {
       vpCounts.set(cardId, (vpCounts.get(cardId) ?? 0) + 1);
     });
-    normalized.selection.forEach((selection) => {
+    normalizedPolish.selection.forEach((selection) => {
       if (selection.cardType === 'development') {
         const remaining = developmentCounts.get(selection.cardId) ?? 0;
         if (remaining <= 0) {
@@ -662,25 +667,25 @@ export const validateLabActivate: Validator = async (action, context) => {
         }
       }
     });
-    const diff = Math.max(0, normalized.result.rightTotal - normalized.result.leftTotal);
-    if (diff > normalized.foundationCost) {
+    const diff = Math.max(0, normalizedPolish.result.rightTotal - normalizedPolish.result.leftTotal);
+    if (diff > normalizedPolish.foundationCost) {
       errors.push('土台カードのコストが不足しています');
     }
-    const leftDuplicate = findDuplicatePositions(normalized.result.leftItems);
+    const leftDuplicate = findDuplicatePositions(normalizedPolish.result.leftItems);
     if (leftDuplicate !== null) {
       errors.push('左側のPOSが重複しています');
     }
-    const rightDuplicate = findDuplicatePositions(normalized.result.rightItems);
+    const rightDuplicate = findDuplicatePositions(normalizedPolish.result.rightItems);
     if (rightDuplicate !== null) {
       errors.push('右側のPOSが重複しています');
     }
     const selectionCountMap = new Map<string, number>();
-    normalized.selection.forEach((selection) => {
+    normalizedPolish.selection.forEach((selection) => {
       const key = buildSelectionKey(selection.cardId, selection.cardType, selection.flipped);
       selectionCountMap.set(key, (selectionCountMap.get(key) ?? 0) + 1);
     });
     const resultCountMap = new Map<string, number>();
-    normalized.result.sourceCards.forEach((source) => {
+    normalizedPolish.result.sourceCards.forEach((source) => {
       const key = buildSelectionKey(source.cardId, source.cardType, source.flipped);
       resultCountMap.set(key, (resultCountMap.get(key) ?? 0) + 1);
     });
@@ -693,13 +698,13 @@ export const validateLabActivate: Validator = async (action, context) => {
         }
       });
     }
-    normalized.result.leftItems.forEach((item) => {
+    normalizedPolish.result.leftItems.forEach((item) => {
       const key = buildSelectionKey(item.cardId, item.cardType, false);
       if (!selectionCountMap.has(key)) {
         errors.push('左側のアイテム割り当てが不正です');
       }
     });
-    normalized.result.rightItems.forEach((item) => {
+    normalizedPolish.result.rightItems.forEach((item) => {
       const key = buildSelectionKey(item.cardId, item.cardType, true);
       if (!selectionCountMap.has(key)) {
         errors.push('右側のアイテム割り当てが不正です');
@@ -724,6 +729,19 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
       throw new Error('指定されたラボが存在しません');
     }
 
+    let normalizedPolish: NormalizedPolishPayload | null = null;
+    if (labId === 'polish') {
+      const rawPayload =
+        action.payload && typeof action.payload === 'object'
+          ? (action.payload as Record<string, unknown>).polish
+          : undefined;
+      const normalized = normalizePolishPayload(rawPayload);
+      if (!normalized) {
+        throw new Error('研磨の設定が不正です');
+      }
+      normalizedPolish = normalized;
+    }
+
     // DEBUG LOG for Negotiation
     if (labId === 'negotiation') {
       gameState.logs.push({
@@ -740,7 +758,8 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
     }
 
     const cost = resolveLabCost(lab);
-    const actionPointCost = cost.actionPoints ?? 0;
+    const actionPointCost =
+      (cost.actionPoints ?? 0) + (normalizedPolish ? normalizedPolish.foundationCost : 0);
     if (actionPointCost > 0) {
       player.actionPoints = Math.max(0, player.actionPoints - actionPointCost);
     }
@@ -825,25 +844,16 @@ export const applyLabActivate: EffectApplier = async (action, context) => {
     if (apGain > 0) player.actionPoints = (player.actionPoints ?? 0) + apGain;
     if (creativityGain > 0) player.creativity = (player.creativity ?? 0) + creativityGain;
 
-    if (labId === 'polish') {
-      const rawPayload =
-        action.payload && typeof action.payload === 'object'
-          ? (action.payload as Record<string, unknown>).polish
-          : undefined;
-      const normalized = normalizePolishPayload(rawPayload);
-      if (!normalized) {
-        throw new Error('研磨の設定が不正です');
-      }
-
+    if (normalizedPolish) {
       // DEBUG LOG for Polish
       console.log('[DEBUG] Polish action executing:', {
         playerId: action.playerId,
-        selection: normalized.selection,
-        foundationCost: normalized.foundationCost,
-        lensId: normalized.result.lensId,
+        selection: normalizedPolish.selection,
+        foundationCost: normalizedPolish.foundationCost,
+        lensId: normalizedPolish.result.lensId,
       });
 
-      applyPolishResult(action, context, player, normalized);
+      applyPolishResult(action, context, player, normalizedPolish);
 
       // DEBUG LOG for Polish Result
       console.log('[DEBUG] Polish result applied:', {
