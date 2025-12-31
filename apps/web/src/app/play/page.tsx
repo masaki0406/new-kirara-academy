@@ -1489,10 +1489,11 @@ export default function PlayPage(): JSX.Element {
     if (!gameState?.currentPlayerId || !currentPlayer) {
       return;
     }
-    if (lastTurnNoticeRef.current === gameState.currentPlayerId) {
+    const noticeKey = `${gameState.currentPlayerId}:${localPlayer?.id ?? "unknown"}`;
+    if (lastTurnNoticeRef.current === noticeKey) {
       return;
     }
-    lastTurnNoticeRef.current = gameState.currentPlayerId;
+    lastTurnNoticeRef.current = noticeKey;
     setTurnNotice({
       playerId: gameState.currentPlayerId,
       name: currentPlayer.displayName ?? currentPlayer.playerId,
