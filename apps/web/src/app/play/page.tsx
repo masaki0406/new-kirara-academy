@@ -1004,6 +1004,7 @@ interface LensActivateOption {
   rewards: RewardDefinition[];
   status: string;
   ownerName?: string;
+  itemEffects?: LensState["itemEffects"];
   leftItems?: CraftedLensSideItem[];
   rightItems?: CraftedLensSideItem[];
 }
@@ -2296,6 +2297,7 @@ export default function PlayPage(): JSX.Element {
     return Array.from(lenses.values())
       .filter((lens) => lens.status === "available")
       .filter((lens) => {
+        const lensItemEffects = (lens as LensState).itemEffects;
         const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
         const hasAnyLobby = lensSlots.some((slot) => Boolean(slot.occupantId));
         if (hasAnyLobby) {
@@ -2308,13 +2310,14 @@ export default function PlayPage(): JSX.Element {
         if (!canUseOwnLobby) {
           return false;
         }
-        const itemCost = accumulateItemCostEffects(
+        const itemCost = lensItemEffects?.cost ?? accumulateItemCostEffects(
           (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
         );
-        const mergedLight = (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0);
-        const mergedRainbow = (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0);
-        const mergedStagnation = (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0);
-        const mergedCreativity = (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0);
+        const shouldMergeItemCost = !lensItemEffects;
+        const mergedLight = (lens.cost.light ?? 0) + (shouldMergeItemCost ? (itemCost.resources.light ?? 0) : 0);
+        const mergedRainbow = (lens.cost.rainbow ?? 0) + (shouldMergeItemCost ? (itemCost.resources.rainbow ?? 0) : 0);
+        const mergedStagnation = (lens.cost.stagnation ?? 0) + (shouldMergeItemCost ? (itemCost.resources.stagnation ?? 0) : 0);
+        const mergedCreativity = (lens.cost.creativity ?? 0) + (shouldMergeItemCost ? (itemCost.resources.creativity ?? 0) : 0);
         const totalAction = lens.cost.actionPoints ?? 0;
         if (localGamePlayer.actionPoints < totalAction) {
           return false;
@@ -2348,6 +2351,7 @@ export default function PlayPage(): JSX.Element {
         rewards: lens.rewards,
         status: lens.status,
         ownerName: players[lens.ownerId]?.displayName ?? lens.ownerId,
+        itemEffects: (lens as LensState).itemEffects,
         leftItems: (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
         rightItems: (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
       }));
@@ -2541,10 +2545,17 @@ export default function PlayPage(): JSX.Element {
         : [],
     [selectedLensActivateTarget],
   );
-  const lensActivateGrowthNeeded = useMemo(
-    () => countGrow((selectedLensActivateTarget as { rightItems?: CraftedLensSideItem[] } | null)?.rightItems),
-    [selectedLensActivateTarget],
-  );
+  const lensActivateGrowthNeeded = useMemo(() => {
+    if (!selectedLensActivateTarget) {
+      return 0;
+    }
+    if (selectedLensActivateTarget.itemEffects?.reward) {
+      return selectedLensActivateTarget.itemEffects.reward.growthGain ?? 0;
+    }
+    return countGrow(
+      (selectedLensActivateTarget as { rightItems?: CraftedLensSideItem[] } | null)?.rightItems,
+    );
+  }, [selectedLensActivateTarget]);
   useEffect(() => {
     if (lensActivateGrowthNeeded <= 0) {
       setLensActivateGrowthSelections([]);
@@ -2555,6 +2566,9 @@ export default function PlayPage(): JSX.Element {
 
   const lensActivateLobbyReturnNeeded = useMemo(() => {
     if (!selectedLensActivateTarget) return 0;
+    if (selectedLensActivateTarget.itemEffects?.cost) {
+      return selectedLensActivateTarget.itemEffects.cost.lobbyReturn ?? 0;
+    }
     const items = (selectedLensActivateTarget as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems;
     const cost = accumulateItemCostEffects(items);
     return cost.lobbyReturn;
