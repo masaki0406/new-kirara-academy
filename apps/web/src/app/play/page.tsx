@@ -5906,17 +5906,33 @@ export default function PlayPage(): JSX.Element {
             <div className={styles.helpContent}>
               {helpTab === "summary" ? (
                 <>
-                  <p className={styles.helpLead}>
-                    目的：レンズを起動して VP を集め、最終的に最多 VP を目指します。
-                  </p>
+                  <p className={styles.helpLead}>目的：VP を最も多く集める。</p>
                   <ul className={styles.helpList}>
-                    <li>手番：行動を選ぶ → コスト支払い → 効果解決 → 次の手番</li>
-                    <li>主要行動：収集 / 研磨 / レンズ起動</li>
-                    <li>勝利条件：ゲーム終了時の VP が最も高いプレイヤー</li>
+                    <li>収集：公開カードを獲得する。</li>
+                    <li>研磨：獲得カードでレンズを作る。</li>
+                    <li>レンズ起動：資源を支払い報酬を得る。</li>
+                    <li>再起動：使用済みレンズを再利用する。</li>
+                    <li>説得：他人レンズを起動する（条件あり）。</li>
                   </ul>
                 </>
               ) : (
                 <>
+                  <section className={styles.helpSection}>
+                    <h4>ゲームの流れ</h4>
+                    <ul className={styles.helpList}>
+                      <li>手番開始：現在の手番プレイヤーを確認。</li>
+                      <li>行動選択：収集 / 研磨 / レンズ起動 などから選ぶ。</li>
+                      <li>コスト支払い：行動力・資源・創造力・ロビーを支払う。</li>
+                      <li>効果解決：報酬獲得・成長・ロビー移動など。</li>
+                      <li>次の手番：行動後に次プレイヤーへ。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>勝利条件</h4>
+                    <ul className={styles.helpList}>
+                      <li>ゲーム終了時の VP が最も高いプレイヤーが勝利。</li>
+                    </ul>
+                  </section>
                   <section className={styles.helpSection}>
                     <h4>用語</h4>
                     <ul className={styles.helpList}>
