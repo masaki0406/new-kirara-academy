@@ -207,6 +207,7 @@ export interface LensState {
   status: 'available' | 'exhausted';
   leftItems?: CraftedLensSideItem[];
   rightItems?: CraftedLensSideItem[];
+  itemEffects?: LensItemEffectBundle;
 }
 
 export interface BoardState {
@@ -236,6 +237,20 @@ export interface ResourceReward {
   stagnation?: number;
   actionPoints?: number;
   creativity?: number;
+}
+
+export interface LensItemEffectSummary {
+  resources: ResourceReward;
+  lobbyGain: number;
+  lobbyReturn: number;
+  growthGain: number;
+  growthLoss: number;
+  vpGain: number;
+}
+
+export interface LensItemEffectBundle {
+  cost: LensItemEffectSummary;
+  reward: LensItemEffectSummary;
 }
 
 export interface TriggerReward {

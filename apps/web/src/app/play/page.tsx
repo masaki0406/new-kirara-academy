@@ -1506,6 +1506,25 @@ export default function PlayPage(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [gameState?.currentPlayerId, currentPlayer, localPlayer?.id]);
 
+  useEffect(() => {
+    if (!showTurnNotice) {
+      return;
+    }
+    const handleDismiss = () => {
+      setShowTurnNotice(false);
+    };
+    window.addEventListener("pointerdown", handleDismiss, { passive: true });
+    window.addEventListener("keydown", handleDismiss);
+    window.addEventListener("wheel", handleDismiss, { passive: true });
+    window.addEventListener("touchstart", handleDismiss, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleDismiss);
+      window.removeEventListener("keydown", handleDismiss);
+      window.removeEventListener("wheel", handleDismiss);
+      window.removeEventListener("touchstart", handleDismiss);
+    };
+  }, [showTurnNotice]);
+
   const isLocalTurn = Boolean(
     currentPlayer && localPlayer?.id === currentPlayer.playerId,
   );

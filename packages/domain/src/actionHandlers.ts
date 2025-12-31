@@ -11,11 +11,14 @@ import {
   FoundationCost,
   GameState,
   GrowthReward,
+  LensItemEffectBundle,
+  LensItemEffectSummary,
   LensState,
   PlayerAction,
   PlayerState,
   PolishActionPayload,
   PolishCardType,
+  RewardDefinition,
   ResourceCost,
   ResourceReward,
   ResourceType,
@@ -381,18 +384,44 @@ function applyPolishResult(
     player.ownedLenses.push(lensId);
   }
 
+  const itemCost = accumulateItemEffects(lens.leftItems, 'cost');
+  const itemReward = accumulateItemEffects(lens.rightItems, 'reward');
+  const rewards: RewardDefinition[] = [];
+  if (hasResourceReward(itemReward.resources)) {
+    rewards.push({ type: 'resource', value: itemReward.resources });
+  }
+  if (itemReward.vpGain > 0) {
+    rewards.push({ type: 'vp', value: itemReward.vpGain });
+  }
+  const cost: ResourceCost = {
+    actionPoints: payload.foundationCost,
+  };
+  if (itemCost.resources.light) {
+    cost.light = itemCost.resources.light;
+  }
+  if (itemCost.resources.rainbow) {
+    cost.rainbow = itemCost.resources.rainbow;
+  }
+  if (itemCost.resources.stagnation) {
+    cost.stagnation = itemCost.resources.stagnation;
+  }
+  if (itemCost.resources.creativity) {
+    cost.creativity = itemCost.resources.creativity;
+  }
+
   // ボード上に完成レンズを配置し、ロビーを確保する
   if (!board.lenses[lensId]) {
     const craftedLensState: LensState = {
       lensId,
       ownerId: action.playerId,
-      cost: { actionPoints: payload.foundationCost },
-      rewards: [],
+      cost,
+      rewards,
       slots: 1,
       tags: ['crafted'],
       status: 'available',
       leftItems: lens.leftItems,
       rightItems: lens.rightItems,
+      itemEffects: { cost: itemCost, reward: itemReward },
     };
     board.lenses[lensId] = craftedLensState;
   }
@@ -889,10 +918,7 @@ export const validateLensActivate: Validator = async (action, context) => {
     errors.push('レンズは使用済みです');
   }
 
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
+  const itemCost = resolveLensItemEffects(lens, 'cost');
 
   if (!canActivateLens(lensId, lens.ownerId, action.playerId, gameState, itemCost.lobbyReturn)) {
     errors.push('このレンズを起動する条件を満たしていません');
@@ -902,13 +928,7 @@ export const validateLensActivate: Validator = async (action, context) => {
   if (player.actionPoints < totalActionCost) {
     errors.push('行動力が不足しています');
   }
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
-  };
+  const mergedCost = buildLensResourceCost(lens, itemCost);
   if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
@@ -1005,10 +1025,8 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     const totalActionCost = lens.cost.actionPoints ?? 0;
     player.actionPoints = Math.max(0, player.actionPoints - totalActionCost);
 
-    const itemCost = accumulateItemEffects(
-      (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-      'cost',
-    );
+    const itemCost = resolveLensItemEffects(lens, 'cost');
+    const mergedCost = buildLensResourceCost(lens, itemCost);
     // DEBUG LOG
     gameState.logs.push({
       id: `debug-${Date.now()}-${Math.random()}`,
@@ -1018,13 +1036,9 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       payload: { message: '[DEBUG] Item Cost', itemCost },
       result: { success: true }
     });
-    payResourceCost(player.resources, lens.cost);
-    payResourceCost(player.resources, itemCost.resources);
-    if (lens.cost.creativity) {
-      player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
-    }
-    if (itemCost.resources.creativity) {
-      player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
+    payResourceCost(player.resources, mergedCost);
+    if (mergedCost.creativity) {
+      player.creativity = Math.max(0, player.creativity - mergedCost.creativity);
     }
     if (itemCost.lobbyReturn > 0) {
       const payload = action.payload as unknown as LensActivatePayload;
@@ -1114,10 +1128,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
 
     // 報酬の計算と適用
     // アイテム効果の計算（先に計算してリソースを合算する）
-    const itemReward = accumulateItemEffects(
-      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-      'reward',
-    );
+    const itemReward = resolveLensItemEffects(lens, 'reward');
     console.log('[DEBUG] Item Reward calculated', itemReward);
 
     const pendingResources: Partial<Record<ResourceType, number>> = {};
@@ -1140,7 +1151,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     }
 
     // Item Rewards (Resources)
-    if (itemReward.resources) {
+    if (shouldMergeItemResources(lens) && itemReward.resources) {
       RESOURCE_ORDER.forEach((res) => {
         if (itemReward.resources![res]) pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
       });
@@ -1216,7 +1227,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
     }
 
-    if (itemReward.vpGain > 0) {
+    if (shouldMergeItemResources(lens) && itemReward.vpGain > 0) {
       player.vp = (player.vp ?? 0) + itemReward.vpGain;
     }
 
@@ -1383,17 +1394,8 @@ export const validateMove: Validator = async (action, context) => {
   if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
     errors.push('創造力が不足しています');
   }
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
-  };
+  const itemCost = resolveLensItemEffects(lens, 'cost');
+  const mergedCost = buildLensResourceCost(lens, itemCost);
   if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
@@ -1486,17 +1488,8 @@ export const validateRefresh: Validator = async (action, context) => {
   if (lens.cost.creativity && player.creativity < lens.cost.creativity) {
     errors.push('創造力が不足しています');
   }
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
-  };
+  const itemCost = resolveLensItemEffects(lens, 'cost');
+  const mergedCost = buildLensResourceCost(lens, itemCost);
   if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
@@ -1544,17 +1537,11 @@ export const applyRefresh: EffectApplier = async (action, context) => {
   const cost = lens.cost;
   const totalApCost = Math.max(0, 3 + (cost.actionPoints ?? 0) - reduction);
   player.actionPoints = Math.max(0, player.actionPoints - totalApCost);
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  payResourceCost(player.resources, cost);
-  payResourceCost(player.resources, itemCost.resources);
-  if (cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - cost.creativity);
-  }
-  if (itemCost.resources.creativity) {
-    player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
+  const itemCost = resolveLensItemEffects(lens, 'cost');
+  const mergedCost = buildLensResourceCost(lens, itemCost);
+  payResourceCost(player.resources, mergedCost);
+  if (mergedCost.creativity) {
+    player.creativity = Math.max(0, player.creativity - mergedCost.creativity);
   }
   if (itemCost.lobbyReturn > 0) {
     const returned = returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
@@ -1585,17 +1572,8 @@ export const applyRefresh: EffectApplier = async (action, context) => {
   for (const reward of lens.rewards) {
     applyReward(player, reward);
   }
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  if (
-    itemReward.resources.light ||
-    itemReward.resources.rainbow ||
-    itemReward.resources.stagnation ||
-    itemReward.resources.actionPoints ||
-    itemReward.resources.creativity
-  ) {
+  const itemReward = resolveLensItemEffects(lens, 'reward');
+  if (shouldMergeItemResources(lens) && hasResourceReward(itemReward.resources)) {
     applyReward(player, { type: 'resource', value: itemReward.resources });
   }
   if (itemReward.lobbyGain > 0) {
@@ -1607,7 +1585,7 @@ export const applyRefresh: EffectApplier = async (action, context) => {
       : undefined;
     applyGrowthSelection(gameState, context.ruleset, player, growthSelections, itemReward.growthGain);
   }
-  if (itemReward.vpGain > 0) {
+  if (shouldMergeItemResources(lens) && itemReward.vpGain > 0) {
     player.vp += itemReward.vpGain;
   }
 
@@ -2111,10 +2089,7 @@ export const applyWill: EffectApplier = async (action, context) => {
 
     // Apply Rewards (Lens + Items)
     // Calculate rewards
-    const itemReward = accumulateItemEffects(
-      (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-      'reward',
-    );
+    const itemReward = resolveLensItemEffects(lens, 'reward');
 
     const pendingResources: Partial<Record<ResourceType, number>> = {};
     let apGain = 0;
@@ -2135,7 +2110,7 @@ export const applyWill: EffectApplier = async (action, context) => {
     }
 
     // Item Rewards (Resources)
-    if (itemReward.resources) {
+    if (shouldMergeItemResources(lens) && itemReward.resources) {
       RESOURCE_ORDER.forEach((res) => {
         if (itemReward.resources![res]) pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
       });
@@ -2525,17 +2500,8 @@ export const validatePersuasion: Validator = async (action, context) => {
     errors.push('行動力が不足しています');
   }
 
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  const mergedCost: ResourceCost = {
-    light: (lens.cost.light ?? 0) + (itemCost.resources.light ?? 0),
-    rainbow: (lens.cost.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0),
-    stagnation: (lens.cost.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0),
-    creativity: (lens.cost.creativity ?? 0) + (itemCost.resources.creativity ?? 0),
-    actionPoints: lens.cost.actionPoints,
-  };
+  const itemCost = resolveLensItemEffects(lens, 'cost');
+  const mergedCost = buildLensResourceCost(lens, itemCost);
   if (!canPayResourceCost(player.resources, mergedCost)) {
     errors.push('必要な資源が不足しています');
   }
@@ -2564,6 +2530,14 @@ export const validatePersuasion: Validator = async (action, context) => {
         }
       }
     });
+  const itemReward = resolveLensItemEffects(lens, 'reward');
+  if (shouldMergeItemResources(lens) && hasResourceReward(itemReward.resources)) {
+    for (const [resource, amount] of resourceRewardEntries(itemReward.resources)) {
+      if (!hasCapacity(player.resources, resource, amount)) {
+        errors.push(`${resource} の上限を超えます`);
+      }
+    }
+  }
 
   return errors;
 };
@@ -2595,17 +2569,11 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
   const totalApCost = Math.max(0, (lens.cost.actionPoints ?? 0) - reduction);
   player.actionPoints = Math.max(0, player.actionPoints - totalApCost);
 
-  const itemCost = accumulateItemEffects(
-    (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems,
-    'cost',
-  );
-  payResourceCost(player.resources, lens.cost);
-  payResourceCost(player.resources, itemCost.resources);
-  if (lens.cost.creativity) {
-    player.creativity = Math.max(0, player.creativity - lens.cost.creativity);
-  }
-  if (itemCost.resources.creativity) {
-    player.creativity = Math.max(0, player.creativity - itemCost.resources.creativity);
+  const itemCost = resolveLensItemEffects(lens, 'cost');
+  const mergedCost = buildLensResourceCost(lens, itemCost);
+  payResourceCost(player.resources, mergedCost);
+  if (mergedCost.creativity) {
+    player.creativity = Math.max(0, player.creativity - mergedCost.creativity);
   }
   if (itemCost.lobbyReturn > 0) {
     const returned = returnLobbyToStock(player, gameState, lensId, itemCost.lobbyReturn);
@@ -2626,17 +2594,8 @@ export const applyPersuasion: EffectApplier = async (action, context) => {
   for (const reward of lens.rewards) {
     applyReward(player, reward);
   }
-  const itemReward = accumulateItemEffects(
-    (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems,
-    'reward',
-  );
-  if (
-    itemReward.resources.light ||
-    itemReward.resources.rainbow ||
-    itemReward.resources.stagnation ||
-    itemReward.resources.actionPoints ||
-    itemReward.resources.creativity
-  ) {
+  const itemReward = resolveLensItemEffects(lens, 'reward');
+  if (shouldMergeItemResources(lens) && hasResourceReward(itemReward.resources)) {
     applyReward(player, { type: 'resource', value: itemReward.resources });
   }
   if (itemReward.lobbyGain > 0) {
@@ -2942,27 +2901,79 @@ function resolveItemKind(label: string | null | undefined): ItemKind | null {
   return null;
 }
 
-interface ItemEffectSummary {
-  resources: ResourceReward;
-  lobbyGain: number;
-  lobbyReturn: number;
-  growthGain: number;
-  growthLoss: number;
-  creativityCost: number;
-  vpGain: number;
+function cloneLensItemEffectSummary(summary: LensItemEffectSummary): LensItemEffectSummary {
+  return {
+    resources: { ...summary.resources },
+    lobbyGain: summary.lobbyGain,
+    lobbyReturn: summary.lobbyReturn,
+    growthGain: summary.growthGain,
+    growthLoss: summary.growthLoss,
+    vpGain: summary.vpGain,
+  };
+}
+
+function resolveLensItemEffects(
+  lens: LensState,
+  direction: 'cost' | 'reward',
+): LensItemEffectSummary {
+  if (lens.itemEffects) {
+    const stored = direction === 'cost' ? lens.itemEffects.cost : lens.itemEffects.reward;
+    return cloneLensItemEffectSummary(stored);
+  }
+  const items =
+    direction === 'cost'
+      ? (lens as unknown as { leftItems?: CraftedLensSideItem[] }).leftItems
+      : (lens as unknown as { rightItems?: CraftedLensSideItem[] }).rightItems;
+  return accumulateItemEffects(items, direction);
+}
+
+function shouldMergeItemResources(lens: LensState): boolean {
+  return !lens.itemEffects;
+}
+
+function buildLensResourceCost(
+  lens: LensState,
+  itemCost: LensItemEffectSummary,
+): ResourceCost {
+  const merged: ResourceCost = {
+    light: lens.cost.light ?? 0,
+    rainbow: lens.cost.rainbow ?? 0,
+    stagnation: lens.cost.stagnation ?? 0,
+    creativity: lens.cost.creativity ?? 0,
+    actionPoints: lens.cost.actionPoints,
+  };
+  if (shouldMergeItemResources(lens)) {
+    merged.light = (merged.light ?? 0) + (itemCost.resources.light ?? 0);
+    merged.rainbow = (merged.rainbow ?? 0) + (itemCost.resources.rainbow ?? 0);
+    merged.stagnation = (merged.stagnation ?? 0) + (itemCost.resources.stagnation ?? 0);
+    merged.creativity = (merged.creativity ?? 0) + (itemCost.resources.creativity ?? 0);
+  }
+  return merged;
+}
+
+function hasResourceReward(value: ResourceReward | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  return Boolean(
+    value.light ||
+      value.rainbow ||
+      value.stagnation ||
+      value.actionPoints ||
+      value.creativity,
+  );
 }
 
 function accumulateItemEffects(
   items: CraftedLensSideItem[] | undefined,
   direction: 'cost' | 'reward',
-): ItemEffectSummary {
-  const summary: ItemEffectSummary = {
+): LensItemEffectSummary {
+  const summary: LensItemEffectSummary = {
     resources: {},
     lobbyGain: 0,
     lobbyReturn: 0,
     growthGain: 0,
     growthLoss: 0,
-    creativityCost: 0,
     vpGain: 0,
   };
   if (!Array.isArray(items)) {
@@ -3022,6 +3033,12 @@ function accumulateItemEffects(
         }
       }
       summary.vpGain += vpAmount;
+      return;
+    }
+
+    if (!kind && direction === 'reward' && item.cardType === 'vp') {
+      summary.vpGain += amount;
+      return;
     }
   });
 
