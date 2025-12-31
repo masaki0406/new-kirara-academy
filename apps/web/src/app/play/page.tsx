@@ -1330,12 +1330,47 @@ export default function PlayPage(): JSX.Element {
     return Object.values(gameState.players);
   }, [gameState]);
 
+  const [activeBoardTab, setActiveBoardTab] = useState<"lab" | "journal" | "character">("lab");
+  const [characterViewId, setCharacterViewId] = useState<string>("");
+
   const localGamePlayer = useMemo(() => {
     if (!localPlayer?.id || !gameState) {
       return undefined;
     }
     return gameState.players[localPlayer.id];
   }, [localPlayer?.id, gameState]);
+
+  useEffect(() => {
+    if (!characterViewId && localPlayer?.id) {
+      setCharacterViewId(localPlayer.id);
+    }
+  }, [characterViewId, localPlayer?.id]);
+
+  const resolvedCharacterViewId = useMemo(() => {
+    if (!gameState?.players) {
+      return characterViewId || localPlayer?.id || "";
+    }
+    if (characterViewId && gameState.players[characterViewId]) {
+      return characterViewId;
+    }
+    if (localPlayer?.id && gameState.players[localPlayer.id]) {
+      return localPlayer.id;
+    }
+    const fallback = Object.keys(gameState.players)[0];
+    return fallback ?? "";
+  }, [characterViewId, gameState?.players, localPlayer?.id]);
+
+  const viewGamePlayer = useMemo(() => {
+    if (!gameState?.players || !resolvedCharacterViewId) {
+      return localGamePlayer;
+    }
+    return gameState.players[resolvedCharacterViewId] ?? localGamePlayer;
+  }, [gameState?.players, resolvedCharacterViewId, localGamePlayer]);
+
+  const isViewingLocal =
+    Boolean(viewGamePlayer?.playerId) &&
+    Boolean(localGamePlayer?.playerId) &&
+    viewGamePlayer?.playerId === localGamePlayer?.playerId;
 
   useEffect(() => {
     if (!pendingPolishResult) {
@@ -1364,6 +1399,16 @@ export default function PlayPage(): JSX.Element {
   const debugEnabled = process.env.NODE_ENV !== "production";
 
   const effectiveResources = localGamePlayer?.resources ?? null;
+
+  const viewResources = useMemo(() => {
+    if (!viewGamePlayer) {
+      return null;
+    }
+    if (isViewingLocal) {
+      return effectiveResources ?? viewGamePlayer.resources;
+    }
+    return viewGamePlayer.resources;
+  }, [viewGamePlayer, isViewingLocal, effectiveResources]);
 
   const effectiveLensCount = playerLensCount;
 
@@ -1411,14 +1456,22 @@ export default function PlayPage(): JSX.Element {
       (profile) => profile.id === localGamePlayer.characterId,
     );
   }, [localGamePlayer?.characterId]);
-  const localCharacterColor = localGamePlayer?.characterId
-    ? getCharacterColor(localGamePlayer.characterId)
+  const viewCharacterProfile = useMemo(() => {
+    if (!viewGamePlayer?.characterId) {
+      return undefined;
+    }
+    return CHARACTER_CATALOG.find(
+      (profile) => profile.id === viewGamePlayer.characterId,
+    );
+  }, [viewGamePlayer?.characterId]);
+  const viewCharacterColor = viewGamePlayer?.characterId
+    ? getCharacterColor(viewGamePlayer.characterId)
     : undefined;
-  const localCharacterLabel = localCharacterProfile
-    ? `${localCharacterProfile.name}（${localCharacterProfile.title}）`
-    : localGamePlayer?.characterId ?? "未選択";
-  const localCharacterPortraitStyle = localCharacterColor
-    ? ({ "--character-color": localCharacterColor } as CSSProperties)
+  const viewCharacterLabel = viewCharacterProfile
+    ? `${viewCharacterProfile.name}（${viewCharacterProfile.title}）`
+    : viewGamePlayer?.characterId ?? "未選択";
+  const viewCharacterPortraitStyle = viewCharacterColor
+    ? ({ "--character-color": viewCharacterColor } as CSSProperties)
     : undefined;
 
   const currentPlayer = gameState?.currentPlayerId
@@ -1435,57 +1488,70 @@ export default function PlayPage(): JSX.Element {
     JOURNAL_DEVELOPMENT_SLOT_COUNT,
   );
 
-  const lobbySummary = useMemo<LobbySummary>(() => {
-    if (!gameState || !localGamePlayer) {
-      return {
-        reserve: 0,
-        handUnused: 0,
-        handUsed: 0,
-        boardActive: 0,
-        boardFatigued: 0,
-        labCommitted: 0,
-      };
-    }
-
-    const lobbySlots = gameState.board?.lobbySlots ?? [];
-    const playerSlots = lobbySlots.filter(
-      (slot) => slot.occupantId === localGamePlayer.playerId,
-    );
-    const boardActive = playerSlots.filter((slot) => slot.isActive).length;
-    const boardFatigued = playerSlots.length - boardActive;
-
-    const labCommitted = (gameState.labPlacements ?? []).reduce((sum, placement) => {
-      if (placement.playerId === localGamePlayer.playerId) {
-        return sum + (placement.count ?? 0);
+  const buildLobbySummary = useCallback(
+    (player?: PlayerState): LobbySummary => {
+      if (!gameState || !player) {
+        return {
+          reserve: DEFAULT_LOBBY_STOCK,
+          handUnused: DEFAULT_LOBBY_STOCK,
+          handUsed: 0,
+          boardActive: 0,
+          boardFatigued: 0,
+          labCommitted: 0,
+        };
       }
-      return sum;
-    }, 0);
 
-    const handUsed =
-      typeof localGamePlayer.lobbyUsed === "number" && Number.isFinite(localGamePlayer.lobbyUsed)
-        ? Math.max(0, localGamePlayer.lobbyUsed)
-        : 0;
+      const lobbySlots = gameState.board?.lobbySlots ?? [];
+      const playerSlots = lobbySlots.filter(
+        (slot) => slot.occupantId === player.playerId,
+      );
+      const boardActive = playerSlots.filter((slot) => slot.isActive).length;
+      const boardFatigued = playerSlots.length - boardActive;
 
-    const reserve =
-      typeof localGamePlayer.lobbyReserve === "number" && Number.isFinite(localGamePlayer.lobbyReserve)
-        ? Math.max(0, localGamePlayer.lobbyReserve)
-        : DEFAULT_LOBBY_STOCK;
+      const labCommitted = (gameState.labPlacements ?? []).reduce((sum, placement) => {
+        if (placement.playerId === player.playerId) {
+          return sum + (placement.count ?? 0);
+        }
+        return sum;
+      }, 0);
 
-    const handUnused =
-      typeof localGamePlayer.lobbyAvailable === "number" &&
-        Number.isFinite(localGamePlayer.lobbyAvailable)
-        ? Math.max(0, localGamePlayer.lobbyAvailable)
-        : DEFAULT_LOBBY_STOCK;
+      const handUsed =
+        typeof player.lobbyUsed === "number" && Number.isFinite(player.lobbyUsed)
+          ? Math.max(0, player.lobbyUsed)
+          : 0;
 
-    return {
-      reserve,
-      handUnused,
-      handUsed,
-      boardActive,
-      boardFatigued,
-      labCommitted,
-    };
-  }, [gameState, localGamePlayer]);
+      const reserve =
+        typeof player.lobbyReserve === "number" && Number.isFinite(player.lobbyReserve)
+          ? Math.max(0, player.lobbyReserve)
+          : DEFAULT_LOBBY_STOCK;
+
+      const handUnused =
+        typeof player.lobbyAvailable === "number" &&
+          Number.isFinite(player.lobbyAvailable)
+          ? Math.max(0, player.lobbyAvailable)
+          : DEFAULT_LOBBY_STOCK;
+
+      return {
+        reserve,
+        handUnused,
+        handUsed,
+        boardActive,
+        boardFatigued,
+        labCommitted,
+      };
+    },
+    [gameState],
+  );
+
+  const lobbySummary = useMemo(
+    () => buildLobbySummary(localGamePlayer),
+    [buildLobbySummary, localGamePlayer],
+  );
+
+  const viewLobbySummary = useMemo(
+    () => buildLobbySummary(viewGamePlayer),
+    [buildLobbySummary, viewGamePlayer],
+  );
 
   const foundationSupply = useMemo<FoundationSupplySlot[]>(() => {
     const foundationStock =
@@ -1550,6 +1616,72 @@ export default function PlayPage(): JSX.Element {
     const alreadyExists = lenses.some((lens) => lens.lensId === pendingPolishResult.lens.lensId);
     return alreadyExists ? lenses : [...lenses, pendingPolishResult.lens];
   }, [localGamePlayer?.craftedLenses, pendingPolishResult]);
+
+  const viewCollectedFoundationEntries = useMemo<FoundationInventoryEntry[]>(() => {
+    const collection =
+      (isViewingLocal
+        ? (localGamePlayer?.collectedFoundationCards as Partial<Record<FoundationCost, number>> | undefined)
+        : (viewGamePlayer?.collectedFoundationCards as Partial<Record<FoundationCost, number>> | undefined)) ??
+      {};
+    return FOUNDATION_CARD_COSTS.map((cost) => {
+      const raw = collection[cost];
+      const count =
+        typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+      const pendingAdjustment =
+        isViewingLocal && pendingPolishResult?.foundationCost === cost ? 1 : 0;
+      const adjustedCount = Math.max(0, count - pendingAdjustment);
+      return { cost, count: adjustedCount };
+    });
+  }, [
+    isViewingLocal,
+    localGamePlayer?.collectedFoundationCards,
+    viewGamePlayer?.collectedFoundationCards,
+    pendingPolishResult?.foundationCost,
+  ]);
+
+  const viewTotalCollectedFoundation = useMemo(
+    () => viewCollectedFoundationEntries.reduce((sum, entry) => sum + entry.count, 0),
+    [viewCollectedFoundationEntries],
+  );
+
+  const viewCollectedDevelopmentCards = useMemo(() => {
+    if (isViewingLocal) {
+      return effectiveCollectedDevelopmentCards;
+    }
+    return [...(viewGamePlayer?.collectedDevelopmentCards ?? [])];
+  }, [isViewingLocal, effectiveCollectedDevelopmentCards, viewGamePlayer?.collectedDevelopmentCards]);
+
+  const viewCollectedVpCards = useMemo(() => {
+    if (isViewingLocal) {
+      return effectiveCollectedVpCards;
+    }
+    return [...(viewGamePlayer?.collectedVpCards ?? [])];
+  }, [isViewingLocal, effectiveCollectedVpCards, viewGamePlayer?.collectedVpCards]);
+
+  const viewDevelopmentOptions = useMemo(
+    () =>
+      viewCollectedDevelopmentCards.map((cardId) => ({
+        cardId,
+        card: developmentCardCatalog.get(cardId) ?? null,
+      })),
+    [viewCollectedDevelopmentCards, developmentCardCatalog],
+  );
+
+  const viewVpOptions = useMemo(
+    () =>
+      viewCollectedVpCards.map((cardId) => ({
+        cardId,
+        card: vpCardCatalog.get(cardId) ?? developmentCardCatalog.get(cardId) ?? null,
+      })),
+    [viewCollectedVpCards, vpCardCatalog, developmentCardCatalog],
+  );
+
+  const viewCraftedLenses = useMemo(() => {
+    if (isViewingLocal) {
+      return effectiveCraftedLenses;
+    }
+    return viewGamePlayer?.craftedLenses ?? [];
+  }, [isViewingLocal, effectiveCraftedLenses, viewGamePlayer?.craftedLenses]);
 
   const allCraftedLenses = useMemo<CraftedLensWithOwner[]>(() => {
     if (!gameState?.players) {
@@ -1889,6 +2021,39 @@ export default function PlayPage(): JSX.Element {
       };
     });
   }, [growthNodes, localGamePlayer?.characterId, localGamePlayer?.unlockedCharacterNodes]);
+
+  const viewGrowthNodes = viewCharacterProfile?.growthNodes ?? [];
+
+  const viewGrowthNodesWithStatus = useMemo<CharacterGrowthNodeWithStatus[]>(() => {
+    if (!viewGrowthNodes.length || !viewGamePlayer?.characterId) {
+      return viewGrowthNodes.map((node) => ({
+        ...node,
+        isUnlocked: false,
+        isUnlockable: false,
+      }));
+    }
+
+    const unlockedSet = buildUnlockedSetWithAuto(
+      viewGamePlayer.characterId,
+      viewGamePlayer.unlockedCharacterNodes ?? [],
+    );
+
+    return viewGrowthNodes.map((node) => {
+      const definition = getGrowthNode(viewGamePlayer.characterId!, node.id);
+      const isUnlocked = unlockedSet.has(node.id);
+      const isUnlockable =
+        !!definition &&
+        !definition.autoUnlock &&
+        !isUnlocked &&
+        canUnlockGrowthNode(viewGamePlayer.characterId!, node.id, unlockedSet);
+      return {
+        ...node,
+        isUnlocked,
+        definition,
+        isUnlockable,
+      };
+    });
+  }, [viewGrowthNodes, viewGamePlayer?.characterId, viewGamePlayer?.unlockedCharacterNodes]);
   const availableGrowthNodes = useMemo(
     () => growthNodesWithStatus.filter((node) => node.isUnlockable),
     [growthNodesWithStatus],
@@ -3491,90 +3656,100 @@ export default function PlayPage(): JSX.Element {
       }
 
       <section className={styles.card}>
-        <h2 className={styles.cardTitle}>接続情報</h2>
-        <form className={styles.form} onSubmit={handleConnect}>
-          <label className={styles.label}>
-            <span>Functions Base URL</span>
-            <input
-              className={styles.input}
-              value={baseUrlInput}
-              onChange={(event) => setBaseUrlInput(event.target.value)}
-              placeholder="http://127.0.0.1:5002/PROJECT_ID/us-central1"
-            />
-          </label>
-          <label className={styles.label}>
-            <span>Room ID</span>
-            <input
-              className={styles.input}
-              value={roomIdInput}
-              onChange={(event) => setRoomIdInput(event.target.value)}
-              placeholder="room-xxxx"
-            />
-          </label>
-          <div className={styles.buttonRow}>
-            <button
-              type="submit"
-              className={`${styles.button} ${styles.primary}`}
-              disabled={isSubmitting}
-            >
-              接続
-            </button>
-            <button
-              type="button"
-              className={styles.button}
-              onClick={() => {
-                void refresh();
-              }}
-              disabled={!isConnected || isSubmitting}
-            >
-              最新状態を取得
-            </button>
-            <button
-              type="button"
-              className={styles.button}
-              onClick={() => {
-                void disconnect();
-              }}
-              disabled={!isConnected || isSubmitting}
-            >
-              切断
-            </button>
-          </div>
-        </form>
-        <div className={`${styles.status} ${styles[`status-${status.type}`] ?? ""}`}>
-          {status.message}
-        </div>
-        <div className={styles.sessionMeta}>
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>ルーム</span>
-            <span className={styles.metaValue}>
-              {gameState?.roomId ?? sessionRoomId ?? "未接続"}
+        <details className={styles.accordion} open={!isConnected}>
+          <summary className={styles.accordionSummary}>
+            <span>接続情報</span>
+            <span className={styles.accordionHint}>
+              {isConnected ? "接続済み" : "未接続"}
             </span>
+          </summary>
+          <div className={styles.accordionBody}>
+            <p className={styles.muted}>復帰時や接続先の変更時のみ入力します。</p>
+            <form className={styles.form} onSubmit={handleConnect}>
+              <label className={styles.label}>
+                <span>Functions Base URL</span>
+                <input
+                  className={styles.input}
+                  value={baseUrlInput}
+                  onChange={(event) => setBaseUrlInput(event.target.value)}
+                  placeholder="http://127.0.0.1:5002/PROJECT_ID/us-central1"
+                />
+              </label>
+              <label className={styles.label}>
+                <span>Room ID</span>
+                <input
+                  className={styles.input}
+                  value={roomIdInput}
+                  onChange={(event) => setRoomIdInput(event.target.value)}
+                  placeholder="room-xxxx"
+                />
+              </label>
+              <div className={styles.buttonRow}>
+                <button
+                  type="submit"
+                  className={`${styles.button} ${styles.primary}`}
+                  disabled={isSubmitting}
+                >
+                  接続
+                </button>
+                <button
+                  type="button"
+                  className={styles.button}
+                  onClick={() => {
+                    void refresh();
+                  }}
+                  disabled={!isConnected || isSubmitting}
+                >
+                  最新状態を取得
+                </button>
+                <button
+                  type="button"
+                  className={styles.button}
+                  onClick={() => {
+                    void disconnect();
+                  }}
+                  disabled={!isConnected || isSubmitting}
+                >
+                  切断
+                </button>
+              </div>
+            </form>
+            <div className={`${styles.status} ${styles[`status-${status.type}`] ?? ""}`}>
+              {status.message}
+            </div>
+            <div className={styles.sessionMeta}>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>ルーム</span>
+                <span className={styles.metaValue}>
+                  {gameState?.roomId ?? sessionRoomId ?? "未接続"}
+                </span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>フェーズ</span>
+                <span className={styles.metaValue}>{gameState?.currentPhase ?? "-"}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>ラウンド</span>
+                <span className={styles.metaValue}>{gameState?.currentRound ?? "-"}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>現在の手番</span>
+                <span className={styles.metaValue}>
+                  {currentPlayer ? currentPlayer.displayName : "-"}
+                </span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>ローカルプレイヤー</span>
+                <span className={styles.metaValue}>
+                  {localPlayer
+                    ? `${localPlayer.name} (${localPlayer.role === "host" ? "ホスト" : "参加者"})`
+                    : "未登録"}
+                </span>
+              </div>
+            </div>
+            {feedback && <p className={styles.feedback}>{feedback}</p>}
           </div>
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>フェーズ</span>
-            <span className={styles.metaValue}>{gameState?.currentPhase ?? "-"}</span>
-          </div>
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>ラウンド</span>
-            <span className={styles.metaValue}>{gameState?.currentRound ?? "-"}</span>
-          </div>
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>現在の手番</span>
-            <span className={styles.metaValue}>
-              {currentPlayer ? currentPlayer.displayName : "-"}
-            </span>
-          </div>
-          <div className={styles.metaItem}>
-            <span className={styles.metaLabel}>ローカルプレイヤー</span>
-            <span className={styles.metaValue}>
-              {localPlayer
-                ? `${localPlayer.name} (${localPlayer.role === "host" ? "ホスト" : "参加者"})`
-                : "未登録"}
-            </span>
-          </div>
-        </div>
-        {feedback && <p className={styles.feedback}>{feedback}</p>}
+        </details>
       </section>
 
       <section className={styles.grid}>
@@ -3635,62 +3810,91 @@ export default function PlayPage(): JSX.Element {
           <h3 className={styles.sectionTitle}>共有ボード</h3>
           {gameState ? (
             <>
-              <div className={styles.boardSection}>
-                <div>
-                  <h4 className={styles.boardTitle}>公開開発カード</h4>
-                  {isLoadingDevelopmentCards && (
-                    <p className={styles.muted}>カード情報を取得中です...</p>
-                  )}
-                  {developmentCardError && (
-                    <p className={`${styles.status} ${styles["status-error"]}`}>
-                      カード情報の取得に失敗しました: {developmentCardError}
-                    </p>
-                  )}
-                  {gameState.board.publicDevelopmentCards.length === 0 ? (
-                    <p className={styles.muted}>カードは公開されていません。</p>
-                  ) : (
-                    <p className={styles.muted}>
-                      公開中の開発カードは研究日誌のカード置き場で確認できます。
-                    </p>
-                  )}
+              <details className={styles.accordion} open>
+                <summary className={styles.accordionSummary}>
+                  <span>共有ボードの概要</span>
+                  <span className={styles.accordionHint}>必要時に展開</span>
+                </summary>
+                <div className={styles.accordionBody}>
+                  <div className={styles.boardSection}>
+                    <div>
+                      <h4 className={styles.boardTitle}>公開開発カード</h4>
+                      {isLoadingDevelopmentCards && (
+                        <p className={styles.muted}>カード情報を取得中です...</p>
+                      )}
+                      {developmentCardError && (
+                        <p className={`${styles.status} ${styles["status-error"]}`}>
+                          カード情報の取得に失敗しました: {developmentCardError}
+                        </p>
+                      )}
+                      {gameState.board.publicDevelopmentCards.length === 0 ? (
+                        <p className={styles.muted}>カードは公開されていません。</p>
+                      ) : (
+                        <p className={styles.muted}>
+                          公開中の開発カードは研究日誌のカード置き場で確認できます。
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className={styles.boardTitle}>公開 VP カード</h4>
+                      {isLoadingVpCards && (
+                        <p className={styles.muted}>VPカード情報を取得中です...</p>
+                      )}
+                      {vpCardError && (
+                        <p className={`${styles.status} ${styles["status-error"]}`}>
+                          VPカード情報の取得に失敗しました: {vpCardError}
+                        </p>
+                      )}
+                      {(gameState.board.publicVpCards ?? []).length === 0 ? (
+                        <p className={styles.muted}>VPカードは公開されていません。</p>
+                      ) : (
+                        <p className={styles.muted}>
+                          公開中の VP カードは研究日誌の VP カード置き場で確認できます。
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className={styles.boardTitle}>ロビー配置</h4>
+                      {gameState.board.lobbySlots.length === 0 ? (
+                        <p className={styles.muted}>ロビーは空です。</p>
+                      ) : (
+                        <ul className={styles.simpleList}>
+                          {gameState.board.lobbySlots.map((slot, index) => (
+                            <li key={slot.lensId ?? index}>
+                              {slot.lensId ?? "-"} : {slot.occupantId ?? "空席"} (
+                                {slot.isActive ? "未使用" : "使用済"}
+                              )
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 className={styles.boardTitle}>公開 VP カード</h4>
-                  {isLoadingVpCards && (
-                    <p className={styles.muted}>VPカード情報を取得中です...</p>
-                  )}
-                  {vpCardError && (
-                    <p className={`${styles.status} ${styles["status-error"]}`}>
-                      VPカード情報の取得に失敗しました: {vpCardError}
-                    </p>
-                  )}
-                  {(gameState.board.publicVpCards ?? []).length === 0 ? (
-                    <p className={styles.muted}>VPカードは公開されていません。</p>
-                  ) : (
-                    <p className={styles.muted}>
-                      公開中の VP カードは研究日誌の VP カード置き場で確認できます。
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <h4 className={styles.boardTitle}>ロビー配置</h4>
-                  {gameState.board.lobbySlots.length === 0 ? (
-                    <p className={styles.muted}>ロビーは空です。</p>
-                  ) : (
-                    <ul className={styles.simpleList}>
-                      {gameState.board.lobbySlots.map((slot, index) => (
-                        <li key={slot.lensId ?? index}>
-                          {slot.lensId ?? "-"} : {slot.occupantId ?? "空席"} ({
-                            slot.isActive ? "未使用" : "使用済"
-                          })
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+              </details>
+
+              <div className={styles.tabBar} role="tablist" aria-label="ボード切替">
+                {[
+                  { id: "lab", label: "ラボ案内図" },
+                  { id: "journal", label: "研究日誌" },
+                  { id: "character", label: "キャラクターボード" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeBoardTab === tab.id}
+                    className={`${styles.tabButton} ${activeBoardTab === tab.id ? styles.tabButtonActive : ""}`}
+                    onClick={() => setActiveBoardTab(tab.id as typeof activeBoardTab)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              <article className={`${styles.card} ${styles.labBoard}`}>
+              <div className={styles.tabPanel}>
+                {activeBoardTab === "lab" && (
+                  <article className={`${styles.card} ${styles.labBoard}`}>
                 <div className={styles.labHeader}>
                   <div>
                     <h4 className={styles.boardTitle}>ラボ案内図</h4>
@@ -3865,8 +4069,10 @@ export default function PlayPage(): JSX.Element {
                   </div>
                 </div>
               </article>
+                )}
 
-              <article className={`${styles.card} ${styles.journalBoard}`} ref={collectSectionRef}>
+                {activeBoardTab === "journal" && (
+                  <article className={`${styles.card} ${styles.journalBoard}`} ref={collectSectionRef}>
                 <div className={styles.journalHeader}>
                   <div>
                     <h4 className={styles.boardTitle}>研究日誌</h4>
@@ -4054,78 +4260,101 @@ export default function PlayPage(): JSX.Element {
                   </aside>
                 </div>
               </article>
+                )}
 
-              <article className={`${styles.card} ${styles.characterCard}`}>
+                {activeBoardTab === "character" && (
+                  <article className={`${styles.card} ${styles.characterCard}`}>
                 <div className={styles.boardPreviewHeader}>
-                  <h4 className={styles.boardTitle}>自分のキャラクターボード</h4>
+                  <h4 className={styles.boardTitle}>キャラクターボード</h4>
                   <p className={styles.boardCaption}>
                     ラウンド中に参照しやすいよう、現在の成長状況とステータスをまとめました。
                   </p>
                 </div>
-                {localGamePlayer ? (
+                {viewGamePlayer ? (
                   <div className={styles.characterContent}>
                     <div className={styles.characterHeader}>
                       <span className={styles.characterPlayer}>
-                        {localGamePlayer.displayName}
+                        {viewGamePlayer.displayName ?? viewGamePlayer.playerId}
                       </span>
                       <span className={styles.characterRole}>
-                        {localPlayer?.role === "host" ? "ホスト" : "参加者"}
+                        {viewGamePlayer.isHost ? "ホスト" : "参加者"}
                       </span>
+                    </div>
+                    <div className={styles.characterViewRow}>
+                      <span className={styles.characterViewLabel}>表示中</span>
+                      <select
+                        className={styles.characterViewSelect}
+                        value={resolvedCharacterViewId}
+                        onChange={(event) => setCharacterViewId(event.target.value)}
+                      >
+                        {players.map((player) => (
+                          <option key={player.playerId} value={player.playerId}>
+                            {player.displayName ?? player.playerId}
+                          </option>
+                        ))}
+                      </select>
+                      {!isViewingLocal && (
+                        <span className={styles.characterViewBadge}>閲覧のみ</span>
+                      )}
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>キャラクター</span>
                       <span className={styles.characterValue}>
-                        {localCharacterLabel}
+                        {viewCharacterLabel}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>VP</span>
                       <span className={styles.characterValue}>
-                        {localGamePlayer.vp}
+                        {viewGamePlayer.vp}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>創造力 / 行動力</span>
                       <span className={styles.characterValue}>
-                        {localGamePlayer.creativity} / {localGamePlayer.actionPoints}
+                        {viewGamePlayer.creativity} / {viewGamePlayer.actionPoints}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>資源</span>
                       <span className={styles.characterValue}>
-                        光 {effectiveResources?.light ?? localGamePlayer.resources.light}
+                        光 {viewResources?.light ?? viewGamePlayer.resources.light}
                         {" / "}
-                        虹 {effectiveResources?.rainbow ?? localGamePlayer.resources.rainbow}
+                        虹 {viewResources?.rainbow ?? viewGamePlayer.resources.rainbow}
                         {" / 淀み "}
-                        {localGamePlayer.resources.stagnation}
+                        {viewResources?.stagnation ?? viewGamePlayer.resources.stagnation}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>ロビー管理</span>
                       <span className={styles.characterValue}>
-                        ストック {lobbySummary.reserve} ｜ ロビー 未使用 {lobbySummary.handUnused} / 使用済み{" "}
-                        {lobbySummary.handUsed} ｜ レンズ 使用 {lobbySummary.boardActive + lobbySummary.boardFatigued}（未使用 {lobbySummary.boardActive} / 使用済み {lobbySummary.boardFatigued}） ｜ ラボ配置{" "}
-                        {lobbySummary.labCommitted}
+                        ストック {viewLobbySummary.reserve} ｜ ロビー 未使用 {viewLobbySummary.handUnused} / 使用済み{" "}
+                        {viewLobbySummary.handUsed} ｜ レンズ 使用 {viewLobbySummary.boardActive + viewLobbySummary.boardFatigued}（未使用 {viewLobbySummary.boardActive} / 使用済み {viewLobbySummary.boardFatigued}） ｜ ラボ配置{" "}
+                        {viewLobbySummary.labCommitted}
                       </span>
                     </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>開放ノード</span>
                       <span className={styles.characterValue}>
-                        {(localGamePlayer.unlockedCharacterNodes?.length ?? 0).toString()}
+                        {(viewGamePlayer.unlockedCharacterNodes?.length ?? 0).toString()}
                       </span>
                     </div>
-                    <div className={styles.collectedSection}>
-                      <h5 className={styles.collectedHeading}>獲得済みカード</h5>
-                      <div className={styles.collectedColumns}>
+                    <details className={styles.accordion} open={isViewingLocal}>
+                      <summary className={styles.accordionSummary}>
+                        <span>獲得済みカード</span>
+                        <span className={styles.accordionHint}>必要時に展開</span>
+                      </summary>
+                      <div className={styles.accordionBody}>
+                        <div className={styles.collectedColumns}>
                         <section className={styles.collectedColumn}>
                           <header className={styles.collectedSummary}>
-                            開発カード {polishDevelopmentOptions.length} 枚
+                            開発カード {viewDevelopmentOptions.length} 枚
                           </header>
-                          {polishDevelopmentOptions.length === 0 ? (
+                          {viewDevelopmentOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
                           ) : (
                             <div className={styles.collectedCardGrid}>
-                              {polishDevelopmentOptions.map(({ cardId, card }) => (
+                              {viewDevelopmentOptions.map(({ cardId, card }) => (
                                 <div
                                   key={`collected-dev-${cardId}`}
                                   className={`${styles.journalSlot} ${styles.collectedCardFrame}`}
@@ -4148,13 +4377,13 @@ export default function PlayPage(): JSX.Element {
                         </section>
                         <section className={styles.collectedColumn}>
                           <header className={styles.collectedSummary}>
-                            土台カード {totalCollectedFoundation} 枚
+                            土台カード {viewTotalCollectedFoundation} 枚
                           </header>
-                          {totalCollectedFoundation === 0 ? (
+                          {viewTotalCollectedFoundation === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
                           ) : (
                             <ul className={styles.foundationInventoryList}>
-                              {collectedFoundationEntries.map((entry) =>
+                              {viewCollectedFoundationEntries.map((entry) =>
                                 entry.count > 0 ? (
                                   <li
                                     key={`collected-foundation-${entry.cost}`}
@@ -4174,13 +4403,13 @@ export default function PlayPage(): JSX.Element {
                         </section>
                         <section className={styles.collectedColumn}>
                           <header className={styles.collectedSummary}>
-                            VPカード {polishVpOptions.length} 枚
+                            VPカード {viewVpOptions.length} 枚
                           </header>
-                          {polishVpOptions.length === 0 ? (
+                          {viewVpOptions.length === 0 ? (
                             <p className={styles.collectedEmpty}>まだ獲得していません。</p>
                           ) : (
                             <div className={styles.collectedCardGrid}>
-                              {polishVpOptions.map(({ cardId, card }) => (
+                              {viewVpOptions.map(({ cardId, card }) => (
                                 <div
                                   key={`collected-vp-${cardId}`}
                                   className={`${styles.journalSlot} ${styles.collectedCardFrame}`}
@@ -4207,16 +4436,16 @@ export default function PlayPage(): JSX.Element {
                         </section>
                         <section className={styles.collectedColumn}>
                           <header className={styles.collectedSummary}>
-                            完成レンズ {effectiveCraftedLenses.length} 枚
+                            完成レンズ {viewCraftedLenses.length} 枚
                           </header>
-                          {effectiveCraftedLenses.length > 0 ? (
+                          {viewCraftedLenses.length > 0 ? (
                             <div className={styles.craftedLensGrid}>
-                              {effectiveCraftedLenses.map((lens) => (
+                              {viewCraftedLenses.map((lens) => (
                                 <CraftedLensPreview
                                   key={lens.lensId}
                                   lens={lens}
                                   className={styles.craftedLensCard}
-                                  ownerName={localGamePlayer?.displayName ?? localGamePlayer?.playerId}
+                                  ownerName={viewGamePlayer.displayName ?? viewGamePlayer.playerId}
                                   getCard={getCardDefinition}
                                 />
                               ))}
@@ -4254,43 +4483,51 @@ export default function PlayPage(): JSX.Element {
                         </section>
                       </div>
                     </div>
+                    </details>
                     <div className={styles.characterDetailGrid}>
                       <div className={styles.characterDetailMain}>
-                        {localCharacterProfile ? (
-                          growthNodesWithStatus.length > 0 ? (
-                            <div className={styles.growthSection}>
-                              <h5 className={styles.growthTitle}>成長能力一覧</h5>
-                              <ul className={styles.growthList}>
-                                {growthNodesWithStatus.map((node) => (
-                                  <li
-                                    key={node.id}
-                                    className={`${styles.growthItem} ${node.isUnlocked
-                                      ? styles.growthItemUnlocked
-                                      : styles.growthItemLocked
-                                      }`}
-                                  >
-                                    <div className={styles.growthHeader}>
-                                      <span className={styles.growthPosition}>{node.position}</span>
-                                      <span className={styles.growthName}>{node.name}</span>
-                                      <span
-                                        className={`${styles.growthStatus} ${node.isUnlocked
-                                          ? styles.growthStatusUnlocked
-                                          : styles.growthStatusLocked
+                        {viewCharacterProfile ? (
+                          viewGrowthNodesWithStatus.length > 0 ? (
+                            <details className={styles.accordion} open>
+                              <summary className={styles.accordionSummary}>
+                                <span>成長能力一覧</span>
+                                <span className={styles.accordionHint}>展開して確認</span>
+                              </summary>
+                              <div className={styles.accordionBody}>
+                                <div className={styles.growthSection}>
+                                  <ul className={styles.growthList}>
+                                    {viewGrowthNodesWithStatus.map((node) => (
+                                      <li
+                                        key={node.id}
+                                        className={`${styles.growthItem} ${node.isUnlocked
+                                          ? styles.growthItemUnlocked
+                                          : styles.growthItemLocked
                                           }`}
                                       >
-                                        {node.isUnlocked ? "解放済み" : "未解放"}
-                                      </span>
-                                    </div>
-                                    <p className={styles.growthDescription}>{node.description}</p>
-                                    {!node.isUnlocked && node.definition && (
-                                      <p className={styles.growthPrereq}>
-                                        {formatPrerequisites(node.definition) ?? "条件なし"}
-                                      </p>
-                                    )}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
+                                        <div className={styles.growthHeader}>
+                                          <span className={styles.growthPosition}>{node.position}</span>
+                                          <span className={styles.growthName}>{node.name}</span>
+                                          <span
+                                            className={`${styles.growthStatus} ${node.isUnlocked
+                                              ? styles.growthStatusUnlocked
+                                              : styles.growthStatusLocked
+                                              }`}
+                                          >
+                                            {node.isUnlocked ? "解放済み" : "未解放"}
+                                          </span>
+                                        </div>
+                                        <p className={styles.growthDescription}>{node.description}</p>
+                                        {!node.isUnlocked && node.definition && (
+                                          <p className={styles.growthPrereq}>
+                                            {formatPrerequisites(node.definition) ?? "条件なし"}
+                                          </p>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            </details>
                           ) : (
                             <p className={styles.muted}>
                               このキャラクターの成長能力データはまだ登録されていません。
@@ -4305,18 +4542,18 @@ export default function PlayPage(): JSX.Element {
                       <div className={styles.characterDetailAside}>
                         <div
                           className={styles.characterPortrait}
-                          style={localCharacterPortraitStyle}
+                          style={viewCharacterPortraitStyle}
                         >
                           <span
                             className={styles.characterPortraitAccent}
                             aria-hidden="true"
                           />
-                          {localCharacterProfile?.image ? (
+                          {viewCharacterProfile?.image ? (
                             <img
-                              src={localCharacterProfile.image}
+                              src={viewCharacterProfile.image}
                               alt={
-                                localCharacterProfile.imageAlt ??
-                                `${localCharacterProfile.name} のイメージ`
+                                viewCharacterProfile.imageAlt ??
+                                `${viewCharacterProfile.name} のイメージ`
                               }
                               className={styles.characterPortraitImage}
                               loading="lazy"
@@ -4325,11 +4562,11 @@ export default function PlayPage(): JSX.Element {
                           ) : (
                             <div className={styles.characterPortraitPlaceholder}>
                               <span className={styles.characterPortraitName}>
-                                {localCharacterProfile?.name ?? "キャラクター未選択"}
+                                {viewCharacterProfile?.name ?? "キャラクター未選択"}
                               </span>
-                              {localCharacterProfile?.title ? (
+                              {viewCharacterProfile?.title ? (
                                 <span className={styles.characterPortraitTitle}>
-                                  {localCharacterProfile.title}
+                                  {viewCharacterProfile.title}
                                 </span>
                               ) : null}
                             </div>
@@ -4337,216 +4574,7 @@ export default function PlayPage(): JSX.Element {
                         </div>
                       </div>
                     </div>
-                    {playerActionsByCategory.length > 0 ? (
-                      <div className={styles.playerActionsSection}>
-                        <div className={styles.playerActionsHeader}>
-                          <h5 className={styles.playerActionsTitle}>行動メニュー</h5>
-                          <p className={styles.playerActionsCaption}>
-                            行動可能な選択肢と条件を一覧で確認できます。条件を満たすと実行ボタンが有効になります。
-                          </p>
-                        </div>
-                        <div className={styles.playerActionGroups}>
-                          {playerActionsByCategory.map((group) => {
-                            const availableCount = group.actions.filter(
-                              (action) => action.available,
-                            ).length;
-                            return (
-                              <section key={group.category} className={styles.playerActionGroup}>
-                                <div className={styles.playerActionGroupHeader}>
-                                  <h6 className={styles.playerActionGroupLabel}>{group.label}</h6>
-                                  <span className={styles.playerActionGroupCount}>
-                                    {availableCount} / {group.actions.length} 実行可能
-                                  </span>
-                                </div>
-                                <div className={styles.playerActionGrid}>
-                                  {group.actions.map((action) => {
-                                    const cardClass = classNames(
-                                      styles.playerActionCard,
-                                      action.available
-                                        ? styles.playerActionCardAvailable
-                                        : styles.playerActionCardDisabled,
-                                      action.available && action.highlight === "primary"
-                                        ? styles.playerActionCardHighlightPrimary
-                                        : undefined,
-                                      action.available && action.highlight === "warning"
-                                        ? styles.playerActionCardHighlightWarning
-                                        : undefined,
-                                    );
-                                    const badgeClass = classNames(
-                                      styles.playerActionStatus,
-                                      action.available
-                                        ? styles.playerActionStatusAvailable
-                                        : styles.playerActionStatusBlocked,
-                                    );
-                                    const implemented = action.implemented !== false;
-                                    const hasPolishSources =
-                                      action.id !== "polish" ||
-                                      polishDevelopmentOptions.length > 0 ||
-                                      polishVpOptions.length > 0;
-                                    const hasLensActivateSources =
-                                      action.id !== "lens-activate" || lensActivateTargets.length > 0;
-                                    const hasRefreshSources =
-                                      action.id !== "restart" || exhaustedLensTargets.length > 0;
-                                    const buttonDisabled =
-                                      !isLocalTurn ||
-                                      !action.available ||
-                                      action.implemented === false ||
-                                      !hasPolishSources ||
-                                      !hasLensActivateSources ||
-                                      !hasRefreshSources ||
-                                      pendingActionId === action.id;
-                                    const handleActionClick = () => {
-                                      if (action.implemented === false) {
-                                        setFeedback("この行動は現在準備中です。");
-                                        return;
-                                      }
-                                      if (action.id === "collect") {
-                                        scrollIntoViewIfPossible(collectSectionRef.current);
-                                      }
-                                      if (action.id === "polish") {
-                                        openPolishDialog();
-                                      } else if (action.id === "will") {
-                                        openWillDialog();
-                                      } else if (action.id === "lens-activate") {
-                                        openLensActivateDialog();
-                                      } else if (action.id === "restart") {
-                                        openRefreshDialog();
-                                      } else if (action.id === "persuasion") {
-                                        openPersuasionDialog();
-                                      } else if (action.id === "pass") {
-                                        void handleSubmitPass();
-                                      } else if (action.id === "replenishLobby") {
-                                        void handleReplenishLobby();
-                                      } else if (LAB_ACTION_LOOKUP.has(action.id)) {
-                                        openLabConfirmDialog(action.id);
-                                      }
-                                    };
-                                    return (
-                                      <div key={action.id} className={cardClass}>
-                                        <div className={styles.playerActionHeader}>
-                                          <span className={styles.playerActionName}>
-                                            {action.label}
-                                          </span>
-                                          <span className={badgeClass}>
-                                            {action.available
-                                              ? "実行可能"
-                                              : action.reason ?? "条件不足"}
-                                          </span>
-                                        </div>
-                                        <p className={styles.playerActionSummary}>
-                                          {action.summary}
-                                        </p>
-                                        <p className={styles.playerActionDescription}>
-                                          {action.description}
-                                        </p>
-                                        {!action.available && action.reason ? (
-                                          <p className={styles.playerActionHint}>
-                                            不足: {action.reason}
-                                          </p>
-                                        ) : null}
-                                        {action.id === "polish" && implemented && !hasPolishSources ? (
-                                          <p className={styles.playerActionHint}>
-                                            獲得済みのカードがありません。
-                                          </p>
-                                        ) : null}
-                                        {action.id === "lens-activate" &&
-                                          implemented &&
-                                          !hasLensActivateSources ? (
-                                          <p className={styles.playerActionHint}>
-                                            起動できるレンズがありません。
-                                          </p>
-                                        ) : null}
-                                        {action.id === "restart" && implemented && !hasRefreshSources ? (
-                                          <p className={styles.playerActionHint}>
-                                            再起動できるレンズがありません。
-                                          </p>
-                                        ) : null}
-                                        {action.implemented === false ? (
-                                          <p className={styles.playerActionHint}>この行動は現在準備中です。</p>
-                                        ) : null}
-                                        <div className={styles.playerActionFooter}>
-                                          <button
-                                            type="button"
-                                            className={styles.playerActionButton}
-                                            disabled={buttonDisabled}
-                                            onClick={handleActionClick}
-                                          >
-                                            行動を選択
-                                          </button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </section>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-                    {canEditFinalChainOrder ? (
-                      <div className={styles.playerActionsSection}>
-                        <div className={styles.playerActionsHeader}>
-                          <h5 className={styles.playerActionsTitle}>終局連鎖の順番</h5>
-                          <p className={styles.playerActionsCaption}>
-                            翠川燐名⑨で起動する自レンズの順番を設定します。
-                          </p>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                          {finalChainOrder.map((lensId, index) => (
-                            <div key={lensId} className={styles.playerActionCard}>
-                              <div className={styles.playerActionHeader}>
-                                <span className={styles.playerActionName}>
-                                  {index + 1}. レンズ {lensId}
-                                </span>
-                              </div>
-                              <div className={styles.playerActionFooter}>
-                                <button
-                                  type="button"
-                                  className={styles.playerActionButton}
-                                  style={{ marginRight: "0.5rem" }}
-                                  disabled={
-                                    !isLocalTurn ||
-                                    isFinalChainOrderSubmitting ||
-                                    index === 0
-                                  }
-                                  onClick={() => moveFinalChainOrder(index, -1)}
-                                >
-                                  ↑
-                                </button>
-                                <button
-                                  type="button"
-                                  className={styles.playerActionButton}
-                                  disabled={
-                                    !isLocalTurn ||
-                                    isFinalChainOrderSubmitting ||
-                                    index === finalChainOrder.length - 1
-                                  }
-                                  onClick={() => moveFinalChainOrder(index, 1)}
-                                >
-                                  ↓
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className={styles.playerActionFooter}>
-                          <button
-                            type="button"
-                            className={styles.playerActionButton}
-                            disabled={
-                              !isLocalTurn ||
-                              isFinalChainOrderSubmitting ||
-                              finalChainOrder.length === 0
-                            }
-                            onClick={() => void handleSubmitFinalChainOrder()}
-                          >
-                            {isFinalChainOrderSubmitting ? "保存中..." : "順番を保存"}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                    {debugEnabled && localGamePlayer ? (
+                    {debugEnabled && localGamePlayer && isViewingLocal ? (
                       <details className={styles.debugPanel}>
                         <summary>デバッグ調整</summary>
                         <div className={styles.debugControls}>
@@ -4634,45 +4662,17 @@ export default function PlayPage(): JSX.Element {
                   </div>
                 ) : (
                   <p className={styles.muted}>
-                    自分のキャラクターはまだ選択されていません。キャラクター選択後にステータスが表示されます。
+                    キャラクター情報を表示できません。プレイヤーが参加しているか確認してください。
                   </p>
                 )}
               </article>
+                )}
+              </div>
             </>
           ) : (
             <p className={styles.muted}>未接続のためデータがありません。</p>
           )}
         </div>
-      </section>
-
-      <section className={styles.card}>
-        <h2 className={styles.cardTitle}>アクション</h2>
-        <p className={styles.description}>
-          行動メニューから実行条件を確認できます。研磨は詳細設定ダイアログを利用して準備できます。
-        </p>
-        <div className={styles.buttonRow}>
-          <button
-            type="button"
-            className={`${styles.button} ${styles.primary}`}
-            onClick={() => {
-              void handlePass();
-            }}
-            disabled={!isConnected || isSubmitting || !isLocalTurn}
-          >
-            パスする
-          </button>
-          {!isLocalTurn && (
-            <span className={styles.inlineHint}>
-              現在の手番ではありません。手番が来ると有効になります。
-            </span>
-          )}
-        </div>
-        <details className={styles.stateDetails}>
-          <summary>GameState の詳細を表示</summary>
-          <pre className={styles.stateViewer}>
-            {JSON.stringify(gameState, null, 2)}
-          </pre>
-        </details>
       </section>
 
       {

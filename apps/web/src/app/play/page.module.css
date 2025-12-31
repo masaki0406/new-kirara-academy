@@ -101,6 +101,81 @@
   font-weight: 600;
 }
 
+.accordion {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  padding: 12px 16px;
+}
+
+.accordionSummary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.accordionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.accordionBody {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accordionHint {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.tabBar {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  flex-wrap: wrap;
+}
+
+.tabButton {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tabButton:hover {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.tabButtonActive {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.16);
+  color: #1d4ed8;
+}
+
+.tabPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .description {
   margin: 0;
   color: #475569;
@@ -140,6 +215,34 @@
 
   .navLink:hover {
     background: rgba(96, 165, 250, 0.18);
+  }
+
+  .accordion {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.25);
+  }
+
+  .accordionSummary {
+    color: #e2e8f0;
+  }
+
+  .accordionHint {
+    color: #94a3b8;
+  }
+
+  .tabBar {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.25);
+  }
+
+  .tabButton {
+    color: #94a3b8;
+  }
+
+  .tabButtonActive {
+    color: #bfdbfe;
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(96, 165, 250, 0.4);
   }
 }
 
@@ -1577,6 +1680,39 @@
   color: #475569;
 }
 
+.characterViewRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.characterViewLabel {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.characterViewSelect {
+  min-width: 180px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.characterViewBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  color: #475569;
+}
+
 .characterDetailGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
@@ -2889,6 +3025,21 @@
 
   .characterContent {
     color: #e2e8f0;
+  }
+
+  .characterViewLabel {
+    color: #e2e8f0;
+  }
+
+  .characterViewSelect {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+    color: #e2e8f0;
+  }
+
+  .characterViewBadge {
+    background: rgba(148, 163, 184, 0.24);
+    color: #cbd5f5;
   }
 
   .characterPortrait {
