@@ -488,7 +488,7 @@
 .labBoard {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .labHeader {
@@ -500,23 +500,23 @@
 .labMap {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 
 .labColumn {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .labCard {
   border-radius: 12px;
   border: 1px solid rgba(37, 99, 235, 0.18);
   background: rgba(37, 99, 235, 0.06);
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .labCardHeader {
@@ -526,13 +526,13 @@
 }
 
 .labName {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: #1e3a8a;
 }
 
 .labNameEn {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #2563eb;
@@ -542,8 +542,8 @@
 .labCardBody {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  font-size: 13px;
+  gap: 10px;
+  font-size: 12px;
   color: #1f2937;
 }
 
@@ -1364,29 +1364,29 @@
 .journalBody {
   display: grid;
   grid-template-columns: minmax(0, 3.5fr) minmax(220px, 1fr);
-  gap: 20px;
+  gap: 16px;
 }
 
 .journalGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .journalSlot {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   background: rgba(255, 255, 255, 0.9);
-  padding: 12px;
-  min-height: 140px;
+  padding: 10px;
+  min-height: 120px;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .journalSlotIndex {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -1401,7 +1401,7 @@
 }
 
 .journalSlotType {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #1d4ed8;
 }
@@ -1436,14 +1436,14 @@
 }
 
 .journalSlotValue {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
   word-break: break-word;
 }
 
 .journalSlotHint {
-  font-size: 12px;
+  font-size: 11px;
   color: #64748b;
 }
 
@@ -1577,15 +1577,34 @@
   color: #475569;
 }
 
+.characterDetailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 260px);
+  gap: 16px;
+  align-items: start;
+}
+
+.characterDetailMain {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.characterDetailAside {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .characterPortrait {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  border-radius: 16px;
+  max-width: 260px;
+  aspect-ratio: 3 / 4;
+  border-radius: 14px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: linear-gradient(135deg, rgba(248, 250, 252, 0.95), rgba(226, 232, 240, 0.9));
-  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 12px 20px rgba(15, 23, 42, 0.08);
 }
 
 .characterPortraitAccent {
@@ -1610,17 +1629,17 @@
   flex-direction: column;
   justify-content: flex-end;
   gap: 4px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   color: #0f172a;
 }
 
 .characterPortraitName {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .characterPortraitTitle {
-  font-size: 12px;
+  font-size: 11px;
   color: #475569;
 }
 
@@ -1707,14 +1726,14 @@
 .collectedCardGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .craftedLensGrid {
   display: grid;
-  --crafted-lens-size: 380px;
+  --crafted-lens-size: 320px;
   grid-template-columns: repeat(auto-fit, minmax(var(--crafted-lens-size), 1fr));
-  gap: 20px;
+  gap: 16px;
   justify-items: center;
 }
 
@@ -1732,7 +1751,7 @@
 }
 
 .collectedCardFrame {
-  padding: 10px;
+  padding: 8px;
 }
 
 .collectedFallback {
@@ -1826,17 +1845,17 @@
 .playerActionGrid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
 .playerActionCard {
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   background: #ffffff;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -2953,8 +2972,21 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .characterDetailGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .characterDetailAside {
+    justify-content: flex-start;
+  }
+
+  .characterPortrait {
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+  }
+
   .craftedLensGrid {
-    --crafted-lens-size: 300px;
+    --crafted-lens-size: 260px;
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
 }

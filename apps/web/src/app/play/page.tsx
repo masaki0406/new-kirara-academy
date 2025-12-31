@@ -4072,38 +4072,6 @@ export default function PlayPage(): JSX.Element {
                         {localPlayer?.role === "host" ? "ホスト" : "参加者"}
                       </span>
                     </div>
-                    <div
-                      className={styles.characterPortrait}
-                      style={localCharacterPortraitStyle}
-                    >
-                      <span
-                        className={styles.characterPortraitAccent}
-                        aria-hidden="true"
-                      />
-                      {localCharacterProfile?.image ? (
-                        <img
-                          src={localCharacterProfile.image}
-                          alt={
-                            localCharacterProfile.imageAlt ??
-                            `${localCharacterProfile.name} のイメージ`
-                          }
-                          className={styles.characterPortraitImage}
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ) : (
-                        <div className={styles.characterPortraitPlaceholder}>
-                          <span className={styles.characterPortraitName}>
-                            {localCharacterProfile?.name ?? "キャラクター未選択"}
-                          </span>
-                          {localCharacterProfile?.title ? (
-                            <span className={styles.characterPortraitTitle}>
-                              {localCharacterProfile.title}
-                            </span>
-                          ) : null}
-                        </div>
-                      )}
-                    </div>
                     <div className={styles.characterMeta}>
                       <span className={styles.characterLabel}>キャラクター</span>
                       <span className={styles.characterValue}>
@@ -4286,49 +4254,89 @@ export default function PlayPage(): JSX.Element {
                         </section>
                       </div>
                     </div>
-                    {localCharacterProfile ? (
-                      <>
-                        {growthNodesWithStatus.length > 0 ? (
-                          <div className={styles.growthSection}>
-                            <h5 className={styles.growthTitle}>成長能力一覧</h5>
-                            <ul className={styles.growthList}>
-                              {growthNodesWithStatus.map((node) => (
-                                <li
-                                  key={node.id}
-                                  className={`${styles.growthItem} ${node.isUnlocked
-                                    ? styles.growthItemUnlocked
-                                    : styles.growthItemLocked
-                                    }`}
-                                >
-                                  <div className={styles.growthHeader}>
-                                    <span className={styles.growthPosition}>{node.position}</span>
-                                    <span className={styles.growthName}>{node.name}</span>
-                                    <span
-                                      className={`${styles.growthStatus} ${node.isUnlocked
-                                        ? styles.growthStatusUnlocked
-                                        : styles.growthStatusLocked
-                                        }`}
-                                    >
-                                      {node.isUnlocked ? "解放済み" : "未解放"}
-                                    </span>
-                                  </div>
-                                  <p className={styles.growthDescription}>{node.description}</p>
-                                  {!node.isUnlocked && node.definition && (
-                                    <p className={styles.growthPrereq}>
-                                      {formatPrerequisites(node.definition) ?? "条件なし"}
-                                    </p>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                    <div className={styles.characterDetailGrid}>
+                      <div className={styles.characterDetailMain}>
+                        {localCharacterProfile ? (
+                          growthNodesWithStatus.length > 0 ? (
+                            <div className={styles.growthSection}>
+                              <h5 className={styles.growthTitle}>成長能力一覧</h5>
+                              <ul className={styles.growthList}>
+                                {growthNodesWithStatus.map((node) => (
+                                  <li
+                                    key={node.id}
+                                    className={`${styles.growthItem} ${node.isUnlocked
+                                      ? styles.growthItemUnlocked
+                                      : styles.growthItemLocked
+                                      }`}
+                                  >
+                                    <div className={styles.growthHeader}>
+                                      <span className={styles.growthPosition}>{node.position}</span>
+                                      <span className={styles.growthName}>{node.name}</span>
+                                      <span
+                                        className={`${styles.growthStatus} ${node.isUnlocked
+                                          ? styles.growthStatusUnlocked
+                                          : styles.growthStatusLocked
+                                          }`}
+                                      >
+                                        {node.isUnlocked ? "解放済み" : "未解放"}
+                                      </span>
+                                    </div>
+                                    <p className={styles.growthDescription}>{node.description}</p>
+                                    {!node.isUnlocked && node.definition && (
+                                      <p className={styles.growthPrereq}>
+                                        {formatPrerequisites(node.definition) ?? "条件なし"}
+                                      </p>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : (
+                            <p className={styles.muted}>
+                              このキャラクターの成長能力データはまだ登録されていません。
+                            </p>
+                          )
                         ) : (
                           <p className={styles.muted}>
-                            このキャラクターの成長能力データはまだ登録されていません。
+                            キャラクターがまだ選択されていません。
                           </p>
                         )}
-                      </>
-                    ) : null}
+                      </div>
+                      <div className={styles.characterDetailAside}>
+                        <div
+                          className={styles.characterPortrait}
+                          style={localCharacterPortraitStyle}
+                        >
+                          <span
+                            className={styles.characterPortraitAccent}
+                            aria-hidden="true"
+                          />
+                          {localCharacterProfile?.image ? (
+                            <img
+                              src={localCharacterProfile.image}
+                              alt={
+                                localCharacterProfile.imageAlt ??
+                                `${localCharacterProfile.name} のイメージ`
+                              }
+                              className={styles.characterPortraitImage}
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <div className={styles.characterPortraitPlaceholder}>
+                              <span className={styles.characterPortraitName}>
+                                {localCharacterProfile?.name ?? "キャラクター未選択"}
+                              </span>
+                              {localCharacterProfile?.title ? (
+                                <span className={styles.characterPortraitTitle}>
+                                  {localCharacterProfile.title}
+                                </span>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                     {playerActionsByCategory.length > 0 ? (
                       <div className={styles.playerActionsSection}>
                         <div className={styles.playerActionsHeader}>
