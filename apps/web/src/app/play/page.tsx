@@ -1330,7 +1330,7 @@ export default function PlayPage(): JSX.Element {
     return Object.values(gameState.players);
   }, [gameState]);
 
-  const [activeBoardTab, setActiveBoardTab] = useState<"lab" | "journal" | "character">("lab");
+  const [activeBoardTab, setActiveBoardTab] = useState<"lab" | "journal" | "character" | "action">("lab");
   const [characterViewId, setCharacterViewId] = useState<string>("");
 
   const localGamePlayer = useMemo(() => {
@@ -3878,6 +3878,7 @@ export default function PlayPage(): JSX.Element {
                   { id: "lab", label: "ラボ案内図" },
                   { id: "journal", label: "研究日誌" },
                   { id: "character", label: "キャラクターボード" },
+                  { id: "action", label: "アクション" },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -4666,6 +4667,40 @@ export default function PlayPage(): JSX.Element {
                   </p>
                 )}
               </article>
+                )}
+
+                {activeBoardTab === "action" && (
+                  <article className={styles.card}>
+                    <div className={styles.boardPreviewHeader}>
+                      <h4 className={styles.boardTitle}>アクション</h4>
+                      <p className={styles.boardCaption}>
+                        手番中に実行できる操作をまとめています。
+                      </p>
+                    </div>
+                    <div className={styles.buttonRow}>
+                      <button
+                        type="button"
+                        className={`${styles.button} ${styles.primary}`}
+                        onClick={() => {
+                          void handleSubmitPass();
+                        }}
+                        disabled={!isConnected || isSubmitting || !isLocalTurn}
+                      >
+                        パスする
+                      </button>
+                      {!isLocalTurn && (
+                        <span className={styles.inlineHint}>
+                          現在の手番ではありません。手番が来ると有効になります。
+                        </span>
+                      )}
+                    </div>
+                    <details className={styles.stateDetails}>
+                      <summary>GameState の詳細を表示</summary>
+                      <pre className={styles.stateViewer}>
+                        {JSON.stringify(gameState, null, 2)}
+                      </pre>
+                    </details>
+                  </article>
                 )}
               </div>
             </>
