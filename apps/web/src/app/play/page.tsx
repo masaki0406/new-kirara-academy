@@ -1340,6 +1340,8 @@ export default function PlayPage(): JSX.Element {
     isLocal: boolean;
   } | null>(null);
   const lastTurnNoticeRef = useRef<string | null>(null);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState<"summary" | "detail">("summary");
 
   const localGamePlayer = useMemo(() => {
     if (!localPlayer?.id || !gameState) {
@@ -5863,6 +5865,100 @@ export default function PlayPage(): JSX.Element {
           </div>
         )
       }
+      <button
+        type="button"
+        className={styles.helpFab}
+        onClick={() => setIsHelpOpen(true)}
+        aria-label="ヘルプを開く"
+      >
+        ?
+      </button>
+      {isHelpOpen ? (
+        <div className={styles.helpModalOverlay} role="dialog" aria-modal="true">
+          <div className={styles.helpModal}>
+            <div className={styles.helpModalHeader}>
+              <h3 className={styles.helpModalTitle}>ヘルプ</h3>
+              <button
+                type="button"
+                className={styles.helpCloseButton}
+                onClick={() => setIsHelpOpen(false)}
+                aria-label="閉じる"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.helpTabs}>
+              <button
+                type="button"
+                className={`${styles.helpTab} ${helpTab === "summary" ? styles.helpTabActive : ""}`}
+                onClick={() => setHelpTab("summary")}
+              >
+                サマリー
+              </button>
+              <button
+                type="button"
+                className={`${styles.helpTab} ${helpTab === "detail" ? styles.helpTabActive : ""}`}
+                onClick={() => setHelpTab("detail")}
+              >
+                詳細説明書
+              </button>
+            </div>
+            <div className={styles.helpContent}>
+              {helpTab === "summary" ? (
+                <>
+                  <p className={styles.helpLead}>
+                    目的：レンズを起動して VP を集め、最終的に最多 VP を目指します。
+                  </p>
+                  <ul className={styles.helpList}>
+                    <li>手番：行動を選ぶ → コスト支払い → 効果解決 → 次の手番</li>
+                    <li>主要行動：収集 / 研磨 / レンズ起動</li>
+                    <li>勝利条件：ゲーム終了時の VP が最も高いプレイヤー</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <section className={styles.helpSection}>
+                    <h4>用語</h4>
+                    <ul className={styles.helpList}>
+                      <li>光・虹・淀み：資源。レンズ起動やラボで使用。</li>
+                      <li>創造力：一部アクションのコスト。</li>
+                      <li>ロビー：行動回数の目安。起動時に消費。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>研磨</h4>
+                    <ul className={styles.helpList}>
+                      <li>獲得済みカードを選び、土台カードを消費してレンズを作成。</li>
+                      <li>左側がコスト、右側が報酬。</li>
+                      <li>作ったレンズはすぐ起動可能。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>レンズ起動</h4>
+                    <ul className={styles.helpList}>
+                      <li>行動力と資源を支払い、報酬を獲得。</li>
+                      <li>ロビーが必要。起動後は使用済み。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>再起動 / 説得</h4>
+                    <ul className={styles.helpList}>
+                      <li>再起動で使用済みレンズを再利用。</li>
+                      <li>説得で他人のレンズを起動（条件あり）。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>成長</h4>
+                    <ul className={styles.helpList}>
+                      <li>成長枠でノードを解放し、能力を強化。</li>
+                    </ul>
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {/* DEBUG OVERLAY */}
       <div style={{
         position: 'fixed',
