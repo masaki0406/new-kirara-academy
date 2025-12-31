@@ -1490,7 +1490,11 @@ export default function PlayPage(): JSX.Element {
     if (!gameState?.currentPlayerId || !currentPlayer) {
       return;
     }
-    const noticeKey = `${gameState.currentPlayerId}:${localPlayer?.id ?? "unknown"}`;
+    const actionMarker = gameState.lastActionCounter ?? 0;
+    if (actionMarker <= 0) {
+      return;
+    }
+    const noticeKey = `${gameState.currentPlayerId}:${localPlayer?.id ?? "unknown"}:${actionMarker}`;
     if (lastTurnNoticeRef.current === noticeKey) {
       return;
     }
@@ -1505,7 +1509,7 @@ export default function PlayPage(): JSX.Element {
       setShowTurnNotice(false);
     }, 2600);
     return () => window.clearTimeout(timer);
-  }, [gameState?.currentPlayerId, currentPlayer, localPlayer?.id]);
+  }, [gameState?.currentPlayerId, gameState?.lastActionCounter, currentPlayer, localPlayer?.id]);
 
   useEffect(() => {
     if (!showTurnNotice) {

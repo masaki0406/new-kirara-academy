@@ -116,6 +116,10 @@ export class GameSessionImpl implements GameSession {
 
     const result = await this.deps.actionResolver.resolve(action, context);
     if (result.success) {
+      mutableState.state.lastActionCounter = (mutableState.state.lastActionCounter ?? 0) + 1;
+      mutableState.state.lastActionAt = timestamp;
+      mutableState.state.lastActionBy = action.playerId;
+      mutableState.state.lastActionType = action.actionType;
       if (action.actionType !== 'pass') {
         const nextPlayer = this.deps.turnOrder.nextPlayer();
         if (nextPlayer) {

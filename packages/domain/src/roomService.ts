@@ -194,6 +194,9 @@ function sanitizeCraftedLenses(value: unknown): CraftedLens[] {
 }
 
 function ensureStateDefaults(state: GameState): void {
+  if (typeof state.lastActionCounter !== 'number' || Number.isNaN(state.lastActionCounter)) {
+    state.lastActionCounter = 0;
+  }
   if (!Array.isArray(state.labPlacements)) {
     state.labPlacements = [];
   }
@@ -258,6 +261,13 @@ function ensureStateDefaults(state: GameState): void {
         player.craftedLenses = [];
       } else {
         player.craftedLenses = sanitizeCraftedLenses(player.craftedLenses);
+      }
+      if (Array.isArray((player as { finalChainOrder?: unknown }).finalChainOrder)) {
+        player.finalChainOrder = (player.finalChainOrder ?? []).filter(
+          (id) => typeof id === 'string',
+        );
+      } else if ((player as { finalChainOrder?: unknown }).finalChainOrder) {
+        delete (player as { finalChainOrder?: unknown }).finalChainOrder;
       }
       if (legacyHand) {
         (player as { hand?: string[] }).hand = [];

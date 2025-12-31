@@ -295,6 +295,10 @@ export interface GameState {
   currentRound: number;
   currentPhase: GamePhase;
   currentPlayerId: PlayerId | null;
+  lastActionCounter?: number;
+  lastActionAt?: number;
+  lastActionBy?: PlayerId;
+  lastActionType?: ActionType;
   lifecycleStage: LifecycleStage;
   turnOrder: PlayerId[];
   players: Record<PlayerId, PlayerState>;
