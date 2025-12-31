@@ -1332,6 +1332,13 @@ export default function PlayPage(): JSX.Element {
 
   const [activeBoardTab, setActiveBoardTab] = useState<"lab" | "journal" | "character" | "action">("lab");
   const [characterViewId, setCharacterViewId] = useState<string>("");
+  const [showTurnNotice, setShowTurnNotice] = useState(false);
+  const [turnNotice, setTurnNotice] = useState<{
+    playerId: string;
+    name: string;
+    isLocal: boolean;
+  } | null>(null);
+  const lastTurnNoticeRef = useRef<string | null>(null);
 
   const localGamePlayer = useMemo(() => {
     if (!localPlayer?.id || !gameState) {
@@ -1477,6 +1484,26 @@ export default function PlayPage(): JSX.Element {
   const currentPlayer = gameState?.currentPlayerId
     ? gameState.players[gameState.currentPlayerId]
     : null;
+
+  useEffect(() => {
+    if (!gameState?.currentPlayerId || !currentPlayer) {
+      return;
+    }
+    if (lastTurnNoticeRef.current === gameState.currentPlayerId) {
+      return;
+    }
+    lastTurnNoticeRef.current = gameState.currentPlayerId;
+    setTurnNotice({
+      playerId: gameState.currentPlayerId,
+      name: currentPlayer.displayName ?? currentPlayer.playerId,
+      isLocal: localPlayer?.id === gameState.currentPlayerId,
+    });
+    setShowTurnNotice(true);
+    const timer = window.setTimeout(() => {
+      setShowTurnNotice(false);
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [gameState?.currentPlayerId, currentPlayer, localPlayer?.id]);
 
   const isLocalTurn = Boolean(
     currentPlayer && localPlayer?.id === currentPlayer.playerId,
@@ -3541,6 +3568,23 @@ export default function PlayPage(): JSX.Element {
 
   return (
     <div className={styles.page}>
+      {showTurnNotice && turnNotice ? (
+        <div className={styles.turnNoticeOverlay} role="status" aria-live="assertive">
+          <div
+            className={`${styles.turnNoticeCard} ${turnNotice.isLocal
+              ? styles.turnNoticeCardLocal
+              : styles.turnNoticeCardOther
+              }`}
+          >
+            <span className={styles.turnNoticeLabel}>
+              {turnNotice.isLocal
+                ? "あなたの手番です"
+                : `${turnNotice.name} の手番です`}
+            </span>
+            <span className={styles.turnNoticeSub}>行動メニューで操作できます</span>
+          </div>
+        </div>
+      ) : null}
       {showSupplySelection && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
