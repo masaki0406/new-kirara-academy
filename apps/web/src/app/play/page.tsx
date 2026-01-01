@@ -5962,10 +5962,12 @@ export default function PlayPage(): JSX.Element {
                     <h4>フェーズ</h4>
                     <ul className={styles.helpList}>
                       <li>準備：初期配置と参加準備。</li>
-                      <li>補給：公開カードの補充やリソース調整。</li>
+                      <li>
+                        補給：公開カード補充、行動力 +7 / 創造力 +1 補充、供給ボーナス選択（ストックがある場合）。
+                      </li>
                       <li>メイン：各プレイヤーが行動を実行。</li>
                       <li>終了：使用済み処理や次ラウンド準備。</li>
-                      <li>最終得点：VP 集計で勝敗決定。</li>
+                      <li>最終得点：4 ラウンド終了時に VP 集計で勝敗決定。</li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>
@@ -5981,7 +5983,7 @@ export default function PlayPage(): JSX.Element {
                   <section className={styles.helpSection}>
                     <h4>勝利条件</h4>
                     <ul className={styles.helpList}>
-                      <li>ゲーム終了時の VP が最も高いプレイヤーが勝利。</li>
+                      <li>4 ラウンド終了時の VP が最も高いプレイヤーが勝利。</li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>
