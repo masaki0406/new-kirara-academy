@@ -5931,6 +5931,16 @@ export default function PlayPage(): JSX.Element {
                       研磨後は、土台カードのコスト分の行動力＋資源が払えれば起動可能。
                     </li>
                   </ul>
+                  <section className={styles.helpSection}>
+                    <h4>フェーズ（概要）</h4>
+                    <ul className={styles.helpList}>
+                      <li>準備：初期配置と参加準備。</li>
+                      <li>補給：供給ボーナス選択（ロビー補充 +1 / 成長解放）。</li>
+                      <li>メイン：各プレイヤーが行動を実行。</li>
+                      <li>終了：使用済み処理や次ラウンド準備。</li>
+                      <li>最終得点：VP 集計で勝敗決定。</li>
+                    </ul>
+                  </section>
                 </>
               ) : (
                 <>
