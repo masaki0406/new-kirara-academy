@@ -5927,6 +5927,7 @@ export default function PlayPage(): JSX.Element {
                     <li>レンズ起動：レンズの行動力・資源を支払い報酬を得る。</li>
                     <li>再起動：行動力 3 + レンズ行動力／使用済みレンズを再利用。</li>
                     <li>説得：レンズ行動力・資源を支払い他人レンズを起動。</li>
+                    <li>課題達成：条件を満たした課題で報酬を得る（コストなし）。</li>
                     <li>
                       研磨後は、土台カードのコスト分の行動力＋資源が払えれば起動可能。
                     </li>
@@ -5935,10 +5936,23 @@ export default function PlayPage(): JSX.Element {
                     <h4>フェーズ（概要）</h4>
                     <ul className={styles.helpList}>
                       <li>準備：初期配置と参加準備。</li>
-                      <li>補給：供給ボーナス選択（ロビー補充 +1 / 成長解放）。</li>
+                      <li>
+                        補給：行動力 +7（上限10）/ 創造力 +1（上限5）を補充。ストックがあれば供給ボーナス（ロビー補充 +1 /
+                        成長解放）を選択。
+                      </li>
                       <li>メイン：各プレイヤーが行動を実行。</li>
                       <li>終了：使用済み処理や次ラウンド準備。</li>
-                      <li>最終得点：VP 集計で勝敗決定。</li>
+                      <li>最終得点：4 ラウンド終了時に VP 集計で勝敗決定。</li>
+                    </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>重要ポイント</h4>
+                    <ul className={styles.helpList}>
+                      <li>ラウンド終了：全員がパスすると終了フェーズへ。</li>
+                      <li>行動力上限 10 / 創造力上限 5。</li>
+                      <li>資源上限：所持合計に上限あり。超過時は獲得する資源を選択。</li>
+                      <li>レンズ起動：ロビーを消費して起動する。</li>
+                      <li>ストック：ロビーになる前の予備。成長で使用し、行動のロビーとしては使えない。</li>
                     </ul>
                   </section>
                 </>
@@ -5976,7 +5990,7 @@ export default function PlayPage(): JSX.Element {
                       <li>光・虹・淀み：資源。レンズ起動やラボで使用。</li>
                       <li>創造力：一部アクションのコスト。</li>
                       <li>ロビー：行動回数の目安。起動時に消費。</li>
-                      <li>資源上限：各資源は最大 12（効果で変動）。</li>
+                      <li>資源上限：所持合計に上限あり（効果で変動）。</li>
                     </ul>
                   </section>
                   <section className={styles.helpSection}>
