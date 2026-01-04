@@ -1160,9 +1160,11 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
     }
 
     // Item Rewards (Resources)
-    if (shouldMergeItemResources(lens) && itemReward.resources) {
+    if (itemReward.resources) {
       RESOURCE_ORDER.forEach((res) => {
-        if (itemReward.resources![res]) pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
+        if (itemReward.resources![res]) {
+          pendingResources[res] = (pendingResources[res] || 0) + itemReward.resources![res];
+        }
       });
       if (itemReward.resources.actionPoints) apGain += itemReward.resources.actionPoints;
       if (itemReward.resources.creativity) creativityGain += itemReward.resources.creativity;
@@ -1236,7 +1238,7 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       // Note: We do NOT update lobbyStock (Total) or lobbyAvailable.
     }
 
-    if (shouldMergeItemResources(lens) && itemReward.vpGain > 0) {
+    if (itemReward.vpGain > 0) {
       player.vp = (player.vp ?? 0) + itemReward.vpGain;
     }
 
@@ -1246,12 +1248,18 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       gameState.board.lobbySlots = [];
     }
 
-    // 既存のスロットを探す（自分が既に占有している場合など）
-    // ただし、レンズ起動は通常「空きスロット」を使う
     const targetSlots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
 
-    // 空きスロットを探す
-    let occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
+    // 既に自分の未使用ロビーがある場合はそれを再利用する
+    let occupiedSlot = targetSlots.find(
+      (slot) => slot.occupantId === action.playerId && slot.isActive,
+    );
+    const usingExistingSlot = Boolean(occupiedSlot);
+
+    // 空きスロットを探す（自分のロビーがない場合のみ）
+    if (!occupiedSlot) {
+      occupiedSlot = targetSlots.find((slot) => !slot.occupantId);
+    }
 
     // 空きスロットがなければ新規作成（ただしレンズのスロット数上限チェックが必要だが、ここでは簡易的に追加）
     // 本来は lens.slots をチェックすべき
@@ -1266,12 +1274,14 @@ export const applyLensActivate: EffectApplier = async (action, context) => {
       occupiedSlot = newSlot;
     }
 
-    const available = getLobbyAvailable(player);
-    if (available <= 0) {
-      throw new Error('ロビー在庫が不足しています');
+    if (!usingExistingSlot) {
+      const available = getLobbyAvailable(player);
+      if (available <= 0) {
+        throw new Error('ロビー在庫が不足しています');
+      }
+      player.lobbyAvailable = available - 1;
+      occupiedSlot.occupantId = action.playerId;
     }
-    player.lobbyAvailable = available - 1;
-    occupiedSlot.occupantId = action.playerId;
 
     // 起動後は使用済み（isActive=false）にする？
     // デザインでは「起動時は使用済み」とは限らないが、ロビー回収の対象になるには「使用済み」である必要がある？
@@ -2490,10 +2500,6 @@ export const validatePersuasion: Validator = async (action, context) => {
     return errors;
   }
 
-  if (lens.status !== 'available') {
-    errors.push('レンズは使用済みです');
-  }
-
   const slot = gameState.board.lobbySlots.find(
     (item) => item.lensId === lensId && item.occupantId && item.occupantId !== action.playerId,
   );
@@ -3062,11 +3068,11 @@ function canActivateLens(
   extraLobby: number = 0,
 ): boolean {
   const slots = gameState.board.lobbySlots.filter((slot) => slot.lensId === lensId);
-  const hasOccupant = slots.some((slot) => Boolean(slot.occupantId));
-  if (hasOccupant) {
-    return false;
+  const hasOwnSlot = slots.some((slot) => slot.occupantId === playerId && slot.isActive);
+  if (hasOwnSlot) {
+    return true;
   }
-  const hasEmptySlot = slots.some((slot) => !slot.occupantId);
+  const hasEmptySlot = slots.length === 0 || slots.some((slot) => !slot.occupantId);
   const player = gameState.players[playerId];
   const hasLobbyToken = player ? (getLobbyAvailable(player) + extraLobby) > 0 : false;
   return hasEmptySlot && hasLobbyToken;

@@ -83,6 +83,10 @@ export class PhaseManagerImpl implements PhaseManager {
       // delete slot.occupantId; // FIX: Do not clear occupantId
       slot.isActive = true;
     });
+    // ラウンド開始時にレンズを再び起動可能状態へ戻す
+    Object.values(gameState.board.lenses ?? {}).forEach((lens) => {
+      lens.status = 'available';
+    });
     await state.save();
   }
 
@@ -411,7 +415,24 @@ function applyFinalChain(gameState: MutableGameState['state'], playerId: PlayerI
   if (!player) return;
 
   const slots = gameState.board.lobbySlots || [];
-  const playerSlots = slots.filter(slot => slot.ownerId === playerId);
+  let playerSlots = slots.filter(slot => slot.ownerId === playerId);
+  const order = Array.isArray(player.finalChainOrder) ? player.finalChainOrder : null;
+  if (order && order.length > 0) {
+    const orderIndex = new Map(order.map((lensId, index) => [lensId, index]));
+    playerSlots = playerSlots
+      .map((slot, index) => ({ slot, index }))
+      .sort((a, b) => {
+        const aOrder = orderIndex.get(a.slot.lensId);
+        const bOrder = orderIndex.get(b.slot.lensId);
+        if (aOrder !== undefined && bOrder !== undefined) {
+          return aOrder - bOrder;
+        }
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
+        return a.index - b.index;
+      })
+      .map((entry) => entry.slot);
+  }
 
   playerSlots.forEach(slot => {
     const lensId = slot.lensId;

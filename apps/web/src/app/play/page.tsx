@@ -30,6 +30,7 @@ import type {
   PolishActionPayload,
   LobbyLocation,
   LensState,
+  ActionLogEntry,
 } from "@domain/types";
 import { CraftedLensPreview } from "../../components/CraftedLensPreview";
 
@@ -316,6 +317,13 @@ const RESOURCE_LABELS: Record<ResourceKey, string> = {
   stagnation: "淀みトークン",
 };
 
+type SavedSession = {
+  roomId: string;
+  playerId: string;
+  playerName: string;
+  savedAt: number;
+};
+
 function getLabActionText(id: string): { summary: string; description: string } {
   const entry = LAB_ACTION_LOOKUP.get(id);
   if (!entry) {
@@ -339,6 +347,57 @@ function scrollIntoViewIfPossible(target: HTMLElement | null | undefined): void 
     // no-op
   }
 }
+
+function formatActionLogTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+}
+
+function resolveActionLogLabel(entry: ActionLogEntry): string {
+  const payload = entry.payload as Record<string, unknown> | undefined;
+  if (payload && typeof payload.label === "string") {
+    return payload.label;
+  }
+  if (entry.actionType === "labActivate") {
+    const labId = payload && typeof payload.labId === "string" ? payload.labId : "";
+    return LAB_ACTION_LOOKUP.get(labId)?.name ?? "ラボアクション";
+  }
+  switch (entry.actionType) {
+    case "lensActivate":
+      return "レンズ起動";
+    case "refresh":
+      return "再起動";
+    case "collect":
+      return "収集";
+    case "persuasion":
+      return "説得";
+    case "will":
+      return "意思";
+    case "task":
+      return "課題達成";
+    case "pass":
+      return "パス";
+    case "growth":
+      return "成長解放";
+    case "supplySelect":
+      return "供給ボーナス選択";
+    case "replenishLobby":
+      return "ロビー補充";
+    case "setFinalChainOrder":
+      return "終局連鎖の順番設定";
+    case "rooting":
+      return "根回し";
+    case "move":
+      return "再起動";
+    default:
+      return entry.actionType;
+  }
+}
+
+const SESSION_SAVE_KEY = "kirara.session.save.v1";
 
 function describeResourceCost(cost: ResourceCost): string[] {
   const parts: string[] = [];
@@ -1094,6 +1153,8 @@ export default function PlayPage(): JSX.Element {
   );
   const [roomIdInput, setRoomIdInput] = useState(sessionRoomId ?? "");
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isActionLogExpanded, setIsActionLogExpanded] = useState(false);
+  const [savedSessions, setSavedSessions] = useState<SavedSession[]>([]);
   // DEBUG: Print logs from server
   useEffect(() => {
     if (gameState?.logs) {
@@ -2311,14 +2372,13 @@ export default function PlayPage(): JSX.Element {
       .filter((lens) => {
         const lensItemEffects = (lens as LensState).itemEffects;
         const lensSlots = slots.filter((slot) => slot.lensId === lens.lensId);
-        const hasAnyLobby = lensSlots.some((slot) => Boolean(slot.occupantId));
-        if (hasAnyLobby) {
-          return false;
-        }
+        const hasOwnSlot = lensSlots.some(
+          (slot) => slot.occupantId === localPlayer.id && slot.isActive,
+        );
         // lobbySlotがない場合でも、レンズは起動可能（スロットは起動時に作成される）
         // ロビートークンがあれば起動できる
         const hasEmptySlot = lensSlots.length === 0 || lensSlots.some((slot) => !slot.occupantId);
-        const canUseOwnLobby = hasEmptySlot && availableLobbyTokens > 0;
+        const canUseOwnLobby = hasOwnSlot || (hasEmptySlot && availableLobbyTokens > 0);
         if (!canUseOwnLobby) {
           return false;
         }
@@ -2935,7 +2995,7 @@ export default function PlayPage(): JSX.Element {
         return;
       }
       const lens = lenses[slot.lensId];
-      if (!lens || lens.status !== "available") {
+      if (!lens) {
         return;
       }
       const requiredAction = lens.cost.actionPoints ?? 0;
@@ -3146,6 +3206,80 @@ export default function PlayPage(): JSX.Element {
     });
     setIsPersuasionDialogOpen(true);
   }, [lensOpponentTargets, setFeedback]);
+
+  const handleSaveSession = useCallback(() => {
+    if (!localPlayer?.id) {
+      setFeedback("先にロビーでプレイヤーとして参加してください。");
+      return;
+    }
+    const resolvedRoomId =
+      (gameState?.roomId ?? sessionRoomId ?? roomIdInput).trim();
+    if (!resolvedRoomId) {
+      setFeedback("ルームIDが未設定です。");
+      return;
+    }
+    const payload = {
+      roomId: resolvedRoomId,
+      playerId: localPlayer.id,
+      playerName: localPlayer.name,
+      savedAt: Date.now(),
+    };
+    try {
+      const raw = window.localStorage.getItem(SESSION_SAVE_KEY);
+      const existing = raw ? (JSON.parse(raw) as SavedSession[]) : [];
+      const next = [payload, ...existing];
+      window.localStorage.setItem(SESSION_SAVE_KEY, JSON.stringify(next));
+      setSavedSessions(next);
+      setFeedback("セーブしました。");
+    } catch (error) {
+      console.error(error);
+      setFeedback("セーブに失敗しました。");
+    }
+  }, [
+    gameState?.roomId,
+    localPlayer?.id,
+    localPlayer?.name,
+    roomIdInput,
+    sessionRoomId,
+    setFeedback,
+  ]);
+
+  const handleLoadSession = useCallback(() => {
+    try {
+      const raw = window.localStorage.getItem(SESSION_SAVE_KEY);
+      if (!raw) {
+        setSavedSessions([]);
+        setFeedback("保存データが見つかりません。");
+        return;
+      }
+      const parsed = JSON.parse(raw) as Array<Partial<SavedSession>>;
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        setSavedSessions([]);
+        setFeedback("保存データが不正です。");
+        return;
+      }
+      const sanitized = parsed
+        .filter((entry) => entry.roomId && entry.playerId && entry.playerName && entry.savedAt)
+        .map((entry) => ({
+          roomId: entry.roomId as string,
+          playerId: entry.playerId as string,
+          playerName: entry.playerName as string,
+          savedAt: entry.savedAt as number,
+        }))
+        .sort((a, b) => b.savedAt - a.savedAt);
+      if (sanitized.length === 0) {
+        setSavedSessions([]);
+        setFeedback("保存データが不正です。");
+        return;
+      }
+      setSavedSessions(sanitized);
+      setFeedback("保存データを読み込みました。");
+    } catch (error) {
+      console.error(error);
+      setSavedSessions([]);
+      setFeedback("ロードに失敗しました。");
+    }
+  }, [setFeedback]);
 
   const closePersuasionDialog = useCallback(() => {
     setIsPersuasionDialogOpen(false);
@@ -3612,6 +3746,21 @@ export default function PlayPage(): JSX.Element {
     return summary;
   }, [gameState?.labPlacements, gameState?.players, playerColorMap]);
 
+  const actionLogs = useMemo(() => {
+    if (!gameState?.logs || !Array.isArray(gameState.logs)) {
+      return [] as ActionLogEntry[];
+    }
+    return gameState.logs.filter((entry) => {
+      const payload = entry?.payload as Record<string, unknown> | undefined;
+      return payload?.kind === "action";
+    });
+  }, [gameState?.logs]);
+
+  const visibleActionLogs = useMemo(() => {
+    const base = isActionLogExpanded ? actionLogs : actionLogs.slice(-10);
+    return [...base].reverse();
+  }, [actionLogs, isActionLogExpanded]);
+
   return (
     <div className={styles.page}>
       {showTurnNotice && turnNotice ? (
@@ -3803,6 +3952,41 @@ export default function PlayPage(): JSX.Element {
                 </button>
               </div>
             </form>
+            <div className={styles.sessionSaveRow}>
+              <button
+                type="button"
+                className={styles.button}
+                onClick={handleSaveSession}
+                disabled={!isConnected}
+              >
+                セーブ
+              </button>
+              <button
+                type="button"
+                className={styles.button}
+                onClick={handleLoadSession}
+              >
+                ロード
+              </button>
+            </div>
+            {savedSessions.length > 0 ? (
+              <div className={styles.sessionSaveInfo}>
+                {savedSessions.map((session, index) => (
+                  <div
+                    key={`${session.roomId}-${session.playerId}-${session.savedAt}`}
+                    className={styles.sessionSaveItem}
+                  >
+                    <span className={styles.sessionSaveLabel}>
+                      セーブ {index + 1}
+                    </span>
+                    <span className={styles.sessionSaveValue}>
+                      {session.roomId} / {session.playerName}（{session.playerId}） /{" "}
+                      {new Date(session.savedAt).toLocaleString("ja-JP")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <div className={`${styles.status} ${styles[`status-${status.type}`] ?? ""}`}>
               {status.message}
             </div>
@@ -4662,6 +4846,16 @@ export default function PlayPage(): JSX.Element {
                             </div>
                           )}
                         </div>
+                        {viewCharacterProfile ? (
+                          <div className={styles.characterTraitCard}>
+                            <p className={styles.characterTraitTheme}>
+                              {viewCharacterProfile.theme}
+                            </p>
+                            <p className={styles.characterTraitOverview}>
+                              {viewCharacterProfile.overview}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     {debugEnabled && localGamePlayer && isViewingLocal ? (
@@ -5004,6 +5198,52 @@ export default function PlayPage(): JSX.Element {
             </>
           ) : (
             <p className={styles.muted}>未接続のためデータがありません。</p>
+          )}
+        </div>
+
+        <div className={`${styles.column} ${styles.logColumn}`}>
+          <div className={styles.actionLogHeader}>
+            <h3 className={styles.sectionTitle}>アクションログ</h3>
+            {actionLogs.length > 10 ? (
+              <button
+                type="button"
+                className={styles.actionLogToggle}
+                onClick={() => setIsActionLogExpanded((prev) => !prev)}
+              >
+                {isActionLogExpanded ? "直近10件" : "すべて表示"}
+              </button>
+            ) : null}
+          </div>
+          {actionLogs.length === 0 ? (
+            <p className={styles.muted}>ログはまだありません。</p>
+          ) : (
+            <>
+              <ul className={styles.actionLogList}>
+                {visibleActionLogs.map((entry) => {
+                  const playerName =
+                    gameState?.players?.[entry.playerId]?.displayName ?? entry.playerId;
+                  const actionLabel = resolveActionLogLabel(entry);
+                  return (
+                    <li key={entry.id} className={styles.actionLogItem}>
+                      <div className={styles.actionLogRow}>
+                        <span className={styles.actionLogText}>
+                          <span className={styles.actionLogPlayer}>{playerName}</span>
+                          <span className={styles.actionLogAction}> が {actionLabel}</span>
+                        </span>
+                        <span className={styles.actionLogTime}>
+                          {formatActionLogTime(entry.timestamp)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {actionLogs.length > 10 && !isActionLogExpanded ? (
+                <p className={styles.actionLogHint}>
+                  全 {actionLogs.length} 件のうち直近 10 件を表示中
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       </section>

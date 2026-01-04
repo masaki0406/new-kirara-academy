@@ -424,6 +424,47 @@
     border-color: rgba(96, 165, 250, 0.4);
   }
 
+  .sessionSaveInfo {
+    border-color: rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.6);
+  }
+
+  .sessionSaveLabel {
+    color: #cbd5f5;
+  }
+
+  .sessionSaveValue {
+    color: #f8fafc;
+  }
+
+  .actionLogToggle {
+    background: rgba(15, 23, 42, 0.6);
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.25);
+  }
+
+  .actionLogToggle:hover {
+    background: rgba(30, 41, 59, 0.8);
+  }
+
+  .actionLogItem {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: rgba(148, 163, 184, 0.25);
+  }
+
+  .actionLogText {
+    color: #e2e8f0;
+  }
+
+  .actionLogAction {
+    color: #cbd5f5;
+  }
+
+  .actionLogTime,
+  .actionLogHint {
+    color: #94a3b8;
+  }
+
   .turnNoticeCard {
     border-color: rgba(148, 163, 184, 0.3);
     background: rgba(15, 23, 42, 0.9);
@@ -489,6 +530,39 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.sessionSaveRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.sessionSaveInfo {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.sessionSaveItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.sessionSaveLabel {
+  color: #475569;
+}
+
+.sessionSaveValue {
+  color: #0f172a;
+  font-weight: 600;
 }
 
 .button {
@@ -609,8 +683,8 @@
 }
 
 .grid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
 }
 
@@ -625,8 +699,93 @@
 }
 
 .playersColumn,
-.sharedColumn {
+.sharedColumn,
+.logColumn {
   width: 100%;
+}
+
+.actionLogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actionLogToggle {
+  border: 1px solid rgba(15, 23, 42, 0.15);
+  background: rgba(255, 255, 255, 0.8);
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actionLogToggle:hover {
+  background: rgba(226, 232, 240, 0.8);
+}
+
+.actionLogList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.actionLogItem {
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 10px 12px;
+}
+
+.actionLogRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.actionLogText {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.actionLogPlayer {
+  font-weight: 600;
+}
+
+.actionLogAction {
+  color: #334155;
+}
+
+.actionLogTime {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.actionLogHint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+@media (min-width: 1200px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.9fr);
+    align-items: start;
+  }
+
+  .logColumn {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    max-height: calc(100vh - 140px);
+    overflow: auto;
+  }
 }
 
 .sectionTitle {
@@ -1933,7 +2092,9 @@
 
 .characterDetailAside {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
 }
 
 .characterPortrait {
@@ -1981,6 +2142,30 @@
 
 .characterPortraitTitle {
   font-size: 11px;
+  color: #475569;
+}
+
+.characterTraitCard {
+  width: 100%;
+  max-width: 260px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 10px 12px;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+.characterTraitTheme {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.characterTraitOverview {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
   color: #475569;
 }
 
@@ -3261,6 +3446,20 @@
     color: #cbd5f5;
   }
 
+  .characterTraitCard {
+    border-color: rgba(148, 163, 184, 0.3);
+    background: rgba(15, 23, 42, 0.7);
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.35);
+  }
+
+  .characterTraitTheme {
+    color: #e2e8f0;
+  }
+
+  .characterTraitOverview {
+    color: #cbd5f5;
+  }
+
   .characterPlayer {
     color: #f8fafc;
   }
@@ -3333,12 +3532,16 @@
   }
 
   .characterDetailAside {
-    justify-content: flex-start;
+    align-items: flex-start;
   }
 
   .characterPortrait {
     max-width: 100%;
     aspect-ratio: 16 / 9;
+  }
+
+  .characterTraitCard {
+    max-width: 100%;
   }
 
   .craftedLensGrid {

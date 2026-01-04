@@ -1,6 +1,7 @@
 import {
   ActionContext,
   ActionResult,
+  ActionLogEntry,
   GamePhase,
   GameSession,
   MutableGameState,
@@ -120,6 +121,9 @@ export class GameSessionImpl implements GameSession {
       mutableState.state.lastActionAt = timestamp;
       mutableState.state.lastActionBy = action.playerId;
       mutableState.state.lastActionType = action.actionType;
+      const logs = Array.isArray(mutableState.state.logs) ? mutableState.state.logs : [];
+      logs.push(buildActionLogEntry(action, ruleset, timestamp, result));
+      mutableState.state.logs = logs;
       if (action.actionType !== 'pass') {
         const nextPlayer = this.deps.turnOrder.nextPlayer();
         if (nextPlayer) {
@@ -153,4 +157,71 @@ export interface ActionResultLogEntry {
   action: PlayerAction;
   timestamp: number;
   result: ActionResult;
+}
+
+function buildActionLogEntry(
+  action: PlayerAction,
+  ruleset: Ruleset,
+  timestamp: number,
+  result: ActionResult,
+): ActionLogEntry {
+  const payload: Record<string, unknown> = {
+    kind: 'action',
+    label: resolveActionLabel(action, ruleset),
+  };
+  if (action.actionType === 'labActivate') {
+    if (typeof action.payload.labId === 'string') {
+      payload.labId = action.payload.labId;
+    }
+  } else if (action.actionType === 'lensActivate' || action.actionType === 'refresh' || action.actionType === 'persuasion') {
+    if (typeof action.payload.lensId === 'string') {
+      payload.lensId = action.payload.lensId;
+    }
+  }
+  return {
+    id: `log-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp,
+    playerId: action.playerId,
+    actionType: action.actionType,
+    payload,
+    result,
+  };
+}
+
+function resolveActionLabel(action: PlayerAction, ruleset: Ruleset): string {
+  switch (action.actionType) {
+    case 'labActivate': {
+      const labId = typeof action.payload.labId === 'string' ? action.payload.labId : undefined;
+      const labName = labId ? ruleset.labs?.[labId]?.name : undefined;
+      return labName ?? 'ラボアクション';
+    }
+    case 'lensActivate':
+      return 'レンズ起動';
+    case 'refresh':
+      return '再起動';
+    case 'collect':
+      return '収集';
+    case 'persuasion':
+      return '説得';
+    case 'will':
+      return '意思';
+    case 'task':
+      return '課題達成';
+    case 'pass':
+      return 'パス';
+    case 'growth':
+      return '成長解放';
+    case 'supplySelect':
+      return '供給ボーナス選択';
+    case 'replenishLobby':
+      return 'ロビー補充';
+    case 'setFinalChainOrder':
+      return '終局連鎖の順番設定';
+    case 'rooting':
+      return '根回し';
+    case 'move':
+      return '再起動';
+    default:
+      return action.actionType;
+  }
 }
