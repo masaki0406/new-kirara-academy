@@ -324,6 +324,81 @@ type SavedSession = {
   savedAt: number;
 };
 
+const EXAMPLE_POLISH_DEV_CARD: CatalogDevelopmentCard = {
+  id: "example-dev",
+  cardId: "EX-DEV",
+  costItem: "光",
+  costNumber: 2,
+  costPosition: 2,
+  costLeftUp: { costa: 1, costb: 0, costc: 0 },
+  costLeftDown: { costa: 0, costb: 1, costc: 0 },
+  extras: {
+    cost_right_up: { costa: 0, costb: 1, costc: 1 },
+    cost_right_down: { costa: 1, costb: 0, costc: 0 },
+  },
+};
+
+const EXAMPLE_POLISH_VP_CARD: CatalogDevelopmentCard = {
+  id: "example-vp",
+  cardId: "EX-VP",
+  costItem: "VP",
+  costNumber: 1,
+  costPosition: 3,
+  costLeftUp: { costa: 0, costb: 1, costc: 0 },
+  costLeftDown: { costa: 0, costb: 0, costc: 1 },
+  extras: {
+    getvp: 1,
+  },
+};
+
+const EXAMPLE_POLISH_LENS: CraftedLens = {
+  lensId: "example-lens",
+  createdAt: 0,
+  foundationCost: 2,
+  leftTotal: 2,
+  rightTotal: 3,
+  vpTotal: 1,
+  leftItems: [
+    {
+      cardId: EXAMPLE_POLISH_DEV_CARD.cardId,
+      cardType: "development",
+      position: 2,
+      item: "光",
+      quantity: 2,
+    },
+  ],
+  rightItems: [
+    {
+      cardId: EXAMPLE_POLISH_DEV_CARD.cardId,
+      cardType: "development",
+      position: 1,
+      item: "虹",
+      quantity: 1,
+    },
+    {
+      cardId: EXAMPLE_POLISH_VP_CARD.cardId,
+      cardType: "vp",
+      position: 3,
+      item: "VP",
+      quantity: 1,
+    },
+  ],
+  sourceCards: [
+    { cardId: EXAMPLE_POLISH_DEV_CARD.cardId, cardType: "development", flipped: false },
+    { cardId: EXAMPLE_POLISH_VP_CARD.cardId, cardType: "vp", flipped: true },
+  ],
+};
+
+function getExamplePolishCard(cardId: string): CatalogDevelopmentCard | null {
+  if (cardId === EXAMPLE_POLISH_DEV_CARD.cardId) {
+    return EXAMPLE_POLISH_DEV_CARD;
+  }
+  if (cardId === EXAMPLE_POLISH_VP_CARD.cardId) {
+    return EXAMPLE_POLISH_VP_CARD;
+  }
+  return null;
+}
+
 function getLabActionText(id: string): { summary: string; description: string } {
   const entry = LAB_ACTION_LOOKUP.get(id);
   if (!entry) {
@@ -4092,6 +4167,7 @@ export default function PlayPage(): JSX.Element {
                   <div className={styles.playerStats}>
                     <span>VP: {player.vp}</span>
                     <span>行動力: {player.actionPoints}</span>
+                    <span>創造力: {player.creativity}</span>
                     <span>
                       資源: 光 {player.resources.light} / 虹 {player.resources.rainbow} / 淀み {player.resources.stagnation}
                     </span>
@@ -6271,6 +6347,36 @@ export default function PlayPage(): JSX.Element {
                         作ったレンズは土台カードのコスト分の行動力＋資源を払えば起動可能。
                       </li>
                     </ul>
+                  </section>
+                  <section className={styles.helpSection}>
+                    <h4>レンズ作成の例</h4>
+                    <p className={styles.helpCaption}>
+                      例として、開発カードとVPカードを研磨すると、左がコスト・右が報酬のレンズになります。
+                    </p>
+                    <div className={styles.polishExample}>
+                      <div className={styles.polishExampleColumn}>
+                        <span className={styles.polishExampleLabel}>使用カード</span>
+                        <div className={styles.polishExampleCards}>
+                          <DevelopmentCardPreview card={EXAMPLE_POLISH_DEV_CARD} />
+                          <DevelopmentCardPreview
+                            card={EXAMPLE_POLISH_VP_CARD}
+                            orientation="right"
+                            cardType="vp"
+                          />
+                        </div>
+                      </div>
+                      <div className={styles.polishExampleArrow} aria-hidden="true">
+                        →
+                      </div>
+                      <div className={styles.polishExampleColumn}>
+                        <span className={styles.polishExampleLabel}>完成レンズ</span>
+                        <CraftedLensPreview
+                          lens={EXAMPLE_POLISH_LENS}
+                          getCard={(cardId, _cardType) => getExamplePolishCard(cardId)}
+                          ownerName="例"
+                        />
+                      </div>
+                    </div>
                   </section>
                   <section className={styles.helpSection}>
                     <h4>レンズ起動</h4>
