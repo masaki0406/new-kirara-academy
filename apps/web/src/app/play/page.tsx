@@ -3076,6 +3076,25 @@ export default function PlayPage(): JSX.Element {
                 </option>
               ))}
             </select>
+            {(() => {
+              const selectedId = selections[index];
+              if (!selectedId) {
+                return (
+                  <p className={styles.growthSelectionDescription}>
+                    自動選択: 解放可能なノードから自動で選択されます。
+                  </p>
+                );
+              }
+              const selectedNode = availableGrowthNodes.find((node) => node.id === selectedId);
+              if (!selectedNode) {
+                return null;
+              }
+              return (
+                <p className={styles.growthSelectionDescription}>
+                  {selectedNode.description}
+                </p>
+              );
+            })()}
           </div>
         ))}
       </div>
@@ -3804,14 +3823,18 @@ export default function PlayPage(): JSX.Element {
                   <p>解放可能な能力がありません</p>
                 ) : (
                   availableGrowthNodes.map(node => (
-                    <button
-                      key={node.id}
-                      className={styles.button}
-                      style={{ display: 'block', width: '100%', marginBottom: '0.5rem' }}
-                      onClick={() => handleSupplySelect('growth', node.id)}
-                    >
-                      {node.name} (コスト: {formatPrerequisites(node.definition)})
-                    </button>
+                    <div key={node.id} className={styles.growthOptionRow}>
+                      <button
+                        className={styles.button}
+                        style={{ display: 'block', width: '100%' }}
+                        onClick={() => handleSupplySelect('growth', node.id)}
+                      >
+                        {node.name} (コスト: {formatPrerequisites(node.definition)})
+                      </button>
+                      <p className={styles.growthSelectionDescription}>
+                        {node.description}
+                      </p>
+                    </div>
                   ))
                 )}
               </div>
