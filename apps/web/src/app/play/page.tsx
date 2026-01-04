@@ -4025,60 +4025,62 @@ export default function PlayPage(): JSX.Element {
         </details>
       </section>
 
-      <section className={styles.grid}>
-        <div className={`${styles.column} ${styles.playersColumn}`}>
+      <section className={styles.card}>
+        <div className={styles.sectionHeaderRow}>
           <h3 className={styles.sectionTitle}>プレイヤー一覧</h3>
-          {players.length === 0 ? (
-            <p className={styles.muted}>プレイヤーが参加していません。</p>
-          ) : (
-            <ul className={styles.playerList}>
-              {players.map((player) => {
-                const isCurrent =
-                  currentPlayer?.playerId === player.playerId;
-                const isLocal = localPlayer?.id === player.playerId;
-                return (
-                  <li
-                    key={player.playerId}
-                    className={`${styles.playerItem} ${isCurrent ? styles.playerItemActive : ""
-                      }`}
-                  >
-                    <div className={styles.playerRow}>
-                      <div className={styles.playerName}>
-                        {player.displayName} {player.isHost ? "(Host)" : ""}
-                        <span style={{ fontSize: "0.8em", opacity: 0.5, marginLeft: "8px" }}>v1.1</span>
-                      </div>
-                      <div className={styles.badgeRow}>
-                        {player.isHost && (
-                          <span className={`${styles.badge} ${styles.badgeHost}`}>
-                            ホスト
-                          </span>
-                        )}
-                        {isLocal && (
-                          <span className={`${styles.badge} ${styles.badgeLocal}`}>
-                            あなた
-                          </span>
-                        )}
-                        {player.characterId && (
-                          <span className={`${styles.badge} ${styles.badgeCharacter}`}>
-                            {player.characterId}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className={styles.playerStats}>
-                      <span>VP: {player.vp}</span>
-                      <span>行動力: {player.actionPoints}</span>
-                      <span>
-                        資源: 光 {player.resources.light} / 虹 {player.resources.rainbow} / 淀み {player.resources.stagnation}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </div>
+        {players.length === 0 ? (
+          <p className={styles.muted}>プレイヤーが参加していません。</p>
+        ) : (
+          <ul className={styles.playerList}>
+            {players.map((player) => {
+              const isCurrent =
+                currentPlayer?.playerId === player.playerId;
+              const isLocal = localPlayer?.id === player.playerId;
+              return (
+                <li
+                  key={player.playerId}
+                  className={`${styles.playerItem} ${isCurrent ? styles.playerItemActive : ""
+                    }`}
+                >
+                  <div className={styles.playerRow}>
+                    <div className={styles.playerName}>
+                      {player.displayName} {player.isHost ? "(Host)" : ""}
+                      <span style={{ fontSize: "0.8em", opacity: 0.5, marginLeft: "8px" }}>v1.1</span>
+                    </div>
+                    <div className={styles.badgeRow}>
+                      {player.isHost && (
+                        <span className={`${styles.badge} ${styles.badgeHost}`}>
+                          ホスト
+                        </span>
+                      )}
+                      {isLocal && (
+                        <span className={`${styles.badge} ${styles.badgeLocal}`}>
+                          あなた
+                        </span>
+                      )}
+                      {player.characterId && (
+                        <span className={`${styles.badge} ${styles.badgeCharacter}`}>
+                          {player.characterId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className={styles.playerStats}>
+                    <span>VP: {player.vp}</span>
+                    <span>行動力: {player.actionPoints}</span>
+                    <span>
+                      資源: 光 {player.resources.light} / 虹 {player.resources.rainbow} / 淀み {player.resources.stagnation}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
+      <section className={styles.grid}>
         <div className={`${styles.column} ${styles.sharedColumn}`}>
           <h3 className={styles.sectionTitle}>共有ボード</h3>
           {gameState ? (

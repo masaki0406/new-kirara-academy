@@ -704,6 +704,13 @@
   width: 100%;
 }
 
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .actionLogHeader {
   display: flex;
   align-items: center;
@@ -775,7 +782,7 @@
 
 @media (min-width: 1200px) {
   .grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 0.9fr);
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.6fr);
     align-items: start;
   }
 
